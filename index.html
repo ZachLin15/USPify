@@ -1186,12 +1186,11 @@ const CLOUD_CONFIG={
   get ENABLED(){ return !!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'); },
 };
 
-let _cloudSyncing=false,_pendingSave=null,_realtimeChannel=null;
+let _cloudSyncing=false,_pendingSave=null;
 
-function _sbHeaders(){
-  return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'return=minimal'};
-}
-function _sbUrl(){ return CLOUD_CONFIG.URL+'/rest/v1/uspify_data?id=eq.main'; }
+function _sbH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'return=minimal'}; }
+function _sbUH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'resolution=merge-duplicates,return=minimal'}; }
+function _sbUrl(table,query){ return CLOUD_CONFIG.URL+'/rest/v1/'+table+(query?'?'+query:''); }
 
 function setSyncStatus(status,msg){
   const el=document.getElementById('sync-status');if(!el)return;
@@ -1204,11 +1203,25 @@ async function cloudLoad(){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
   try{
     setSyncStatus('loading','Loading…');
-    const r=await fetch(_sbUrl(),{headers:_sbHeaders(),cache:'no-store'});
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const rows=await r.json();
-    if(!rows||!rows[0]||!rows[0].data)return null;
-    const data=rows[0].data;
+    const [uR,bR,cR,sR]=await Promise.all([
+      fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store'}),
+      fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store'}),
+      fetch(_sbUrl('uspify_contents'),{headers:_sbH(),cache:'no-store'}),
+      fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store'}),
+    ]);
+    if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP error');
+    const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
+    const settings=sRows[0]?.data||{};
+    const data={
+      users:uRows.map(r=>r.data),
+      brands:bRows.map(r=>r.data),
+      contents:cRows.map(r=>r.data),
+      statuses:settings.statuses||[],
+      scheduleBlocks:settings.scheduleBlocks||[],
+      adMetrics:settings.adMetrics||[],
+      tasks:settings.tasks||[],
+    };
+    if(!data.users.length&&!data.brands.length) return null;
     setSyncStatus('live','Live ✓');
     return data;
   }catch(e){
@@ -1224,13 +1237,24 @@ async function cloudSave(data){
   _cloudSyncing=true;
   setSyncStatus('saving','Saving…');
   try{
-    const payload={id:'main',data:{...data,__savedBy:S.user?.name||'?',__savedAt:new Date().toISOString()},updated_by:S.user?.name||'?',updated_at:new Date().toISOString()};
-    const r=await fetch(CLOUD_CONFIG.URL+'/rest/v1/uspify_data',{
-      method:'POST',
-      headers:{..._sbHeaders(),'Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify(payload)
-    });
-    if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+' '+t.slice(0,80));}
+    const now=new Date().toISOString();
+    const by=S.user?.name||'?';
+    const uPayload=(data.users||[]).map(u=>({id:u.id,data:u,updated_at:now}));
+    const bPayload=(data.brands||[]).map(b=>({id:b.id,data:b,updated_at:now}));
+    const cPayload=(data.contents||[]).map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now}));
+    const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],__savedBy:by,__savedAt:now},updated_at:now}];
+    // Chunk contents into batches of 100
+    const chunks=[];
+    for(let i=0;i<cPayload.length;i+=100) chunks.push(cPayload.slice(i,i+100));
+    const reqs=[
+      fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}),
+      fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}),
+      fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}),
+      ...chunks.map(ch=>fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),body:JSON.stringify(ch)})),
+    ];
+    const results=await Promise.all(reqs);
+    const failed=results.filter(r=>!r.ok);
+    if(failed.length){const t=await failed[0].text();throw new Error('HTTP '+failed[0].status+' '+t.slice(0,80));}
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),2000);
   }catch(e){
@@ -1244,25 +1268,28 @@ async function cloudSave(data){
 
 function initRealtimeSync(){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
-  // Supabase Realtime via WebSocket
   const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
   let ws;
   function connect(){
     try{
       ws=new WebSocket(wsUrl);
       ws.onopen=()=>{
-        ws.send(JSON.stringify({topic:'realtime:public:uspify_data',event:'phx_join',payload:{},ref:'1'}));
+        ws.send(JSON.stringify({topic:'realtime:public:uspify_contents',event:'phx_join',payload:{},ref:'1'}));
+        ws.send(JSON.stringify({topic:'realtime:public:uspify_settings',event:'phx_join',payload:{},ref:'2'}));
         setSyncStatus('live','Live ✓');
       };
       ws.onmessage=async(e)=>{
         try{
           const msg=JSON.parse(e.data);
           if(msg.event==='INSERT'||msg.event==='UPDATE'){
-            const newData=msg.payload?.record?.data;
-            if(newData&&newData.__savedBy!==S.user?.name){
-              localStorage.setItem(KEY,JSON.stringify(newData));
-              render();
-              showAIToast('🔄 Updated by '+newData.__savedBy);
+            const savedBy=msg.payload?.record?.data?.__savedBy;
+            if(savedBy&&savedBy!==S.user?.name){
+              const fresh=await cloudLoad();
+              if(fresh&&fresh.users?.length){
+                localStorage.setItem(KEY,JSON.stringify(fresh));
+                render();
+                showAIToast('🔄 Updated by '+savedBy);
+              }
             }
           }
         }catch(err){}
@@ -1277,9 +1304,9 @@ function initRealtimeSync(){
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
   const cloudData=await cloudLoad();
-  if(cloudData&&cloudData.users){
+  if(cloudData&&cloudData.users?.length){
     localStorage.setItem(KEY,JSON.stringify(cloudData));
-    render();
+    if(typeof render==='function') render();
   }
   initRealtimeSync();
 }
