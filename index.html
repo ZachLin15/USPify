@@ -901,12 +901,25 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
       sessionStorage.setItem('uspify_uid',user.id);
       if(typeof S!=='undefined'&&S!==null){
         try{var raw=localStorage.getItem(LOGIN_KEY);var fullUser=user;if(raw){var d=JSON.parse(raw);var fu=(d.users||[]).find(function(u2){return u2.id===user.id;});if(fu)fullUser=fu;}S.user=fullUser;if(fullUser.role==='client'){S.page='client_approvals';S.brand=null;}}catch(x){S.user=user;}
-        initCloudSync();
       }
       var ls=document.getElementById('login-screen');var app=document.getElementById('app');
       if(ls)ls.style.display='none';if(app)app.style.display='flex';
-      if(typeof render==='function'){try{render();}catch(e){var root=document.getElementById('page-root');if(root)root.innerHTML='<div style="padding:24px;color:#ff5a5a;font-family:monospace">Render error: '+e.message+'</div>';}}
-      if(typeof initAI==='function'){try{initAI();}catch(x){}}
+      // Show loading spinner while fetching from Supabase
+      var root=document.getElementById('page-root');
+      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+      // Wait for Supabase to load before rendering
+      if(typeof initCloudSync==='function'){
+        initCloudSync().then(function(){
+          if(typeof render==='function'){try{render();}catch(e){if(root)root.innerHTML='<div style="padding:24px;color:#ff5a5a;font-family:monospace">Render error: '+e.message+'</div>';}}
+          if(typeof initAI==='function'){try{initAI();}catch(x){}}
+        }).catch(function(){
+          if(typeof render==='function'){try{render();}catch(e){}}
+          if(typeof initAI==='function'){try{initAI();}catch(x){}}
+        });
+      } else {
+        if(typeof render==='function'){try{render();}catch(e){if(root)root.innerHTML='<div style="padding:24px;color:#ff5a5a;font-family:monospace">Render error: '+e.message+'</div>';}}
+        if(typeof initAI==='function'){try{initAI();}catch(x){}}
+      }
     }else{if(errEl)errEl.textContent='Invalid name or password.';}
   };
   window.resetAppData=function(){
@@ -7884,7 +7897,20 @@ window.onload=function(){
   if(liName) liName.addEventListener('keydown',e=>{if(e.key==='Enter')liPass&&liPass.focus();});
   // Auto-login from session
   const savedId=sessionStorage.getItem('uspify_uid');
-  if(savedId){const data=D();const user=data.users.find(u=>u.id===savedId);if(user){S.user=user;if(user.role==='client'){S.page='client_approvals';S.brand=null;}document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';render();initAI();return;}}
+  if(savedId){
+    const data=D();const user=data.users.find(u=>u.id===savedId);
+    if(user){
+      S.user=user;
+      if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      // Show loading while fetching from Supabase
+      const root=document.getElementById('page-root');
+      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+      initCloudSync().then(()=>{render();initAI();}).catch(()=>{render();initAI();});
+      return;
+    }
+  }
 };
 </script>
 </body>
