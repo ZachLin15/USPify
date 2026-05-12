@@ -860,7 +860,6 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
     </div>
     <button class="login-btn" onclick="doLogin()">Sign in</button>
     <div class="login-error" id="li-err"></div>
-    <div class="login-hint">Admins: Caleb / Carmen · Staff: Jack / Hualu / Leonard · Client: Lunox (pw=lunox)<br>Dev: Developer (pw=developer) · Password = name (lowercase)</div>
     <div style="margin-top:14px;text-align:center"><button onclick="resetAppData()" style="background:transparent;border:none;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;cursor:pointer;text-decoration:underline;padding:4px 8px">Reset app data (fix login issues)</button></div>
   </div>
 </div>
@@ -1976,16 +1975,17 @@ function renderPage(){
 
 // ===================== DASHBOARD =====================
 function renderDashboard(){
-  const data=D();const allContents=data.contents;const today=new Date().toISOString().split('T')[0];
+  const data=D();const today=new Date().toISOString().split('T')[0];
   const curMonth=new Date().toISOString().slice(0,7);
+  const isAdmin=S.user.role==='admin';
 
-  // Collect all months from content posting dates
+  // Non-admin: only show content assigned to them
+  const allContents=isAdmin
+    ? data.contents
+    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open'));
+
   const allMonths=[...new Set(allContents.filter(c=>c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
-
-  // Default to current month if not set or set to 'all'
   if(!S.dashMonthFilter||S.dashMonthFilter==='all') S.dashMonthFilter=curMonth;
-
-  // Always filter by selected month
   const contents=allContents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
   const monthLabel=new Date(S.dashMonthFilter+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
 
@@ -2690,12 +2690,17 @@ function renderCalendar(){
   if(!data.scheduleBlocks) data.scheduleBlocks=[];
   const days=getWeekDates(S.calWeek);
   const todayStr=new Date().toISOString().split('T')[0];
+  const calIsAdmin=S.user.role==='admin';
+
+  // Non-admin: lock to their own view, no person selector
+  if(!calIsAdmin) S.calUser=S.user.id;
+
   const persons=[{id:'all',name:'All',init:'All',color:'#888780'},...data.users.filter(u=>u.role!=='admin'&&u.role!=='client')];
 
-  const personSel=`<div class="cal-person-selector">
+  const personSel=calIsAdmin?`<div class="cal-person-selector">
     <span style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-right:4px">View:</span>
     ${persons.map(p=>{const a=S.calUser===p.id;return `<div class="cal-person-chip${a?' active':''}" style="${a?`background:${p.color}22;color:${p.color};border-color:${p.color}44`:''}" onclick="setCalUser('${p.id}')">${p.id!=='all'?`<div style="width:18px;height:18px;border-radius:50%;background:${p.color}22;color:${p.color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${p.init}</div>`:''}${p.name}</div>`;}).join('')}
-  </div>`;
+  </div>`:`<div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:10px">📅 My Calendar — ${S.user.name}</div>`;
 
   const wLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} \u2013 ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
   const calNav=`<div class="cal-nav">
@@ -3315,24 +3320,38 @@ function renderTeam(){
   const staff=data.users.filter(u=>u.role!=='client');
   const isAdmin=S.user.role==='admin';
 
-  // Stage label map
   const STAGE_LABELS={
-    ideation:'💡 Ideation',script:'✍️ Script',design:'🎨 Design',shoot:'🎬 Shooting',
+    ideation:'💡 Ideation',senior_approval_ideation:'✅ Script Review',design:'🎨 Design',
+    senior_approval_video:'✅ Design/Video Review',shoot:'🎬 Shooting',
     video_editing:'✂️ Video Editing',copywriting:'📝 Copywriting',
-    senior_approval:'✅ Senior Approval',client_approval:'🤝 Client Approval',
-    posted:'🚀 Posted',shoot_prep:'🎬 Edit Prep',shoot_edit:'🎬 Edit Footage',
-    script_review:'📋 Script Review',video_review:'🔍 Video Review',
+    senior_approval_copy:'✅ Copy Review',senior_approval:'✅ Senior Approval',
+    client_approval:'🤝 Client Approval',posted:'🚀 Posted',
   };
 
   const cards=staff.map(u=>{
-    // All content pieces this person has open workflow tasks on
-    const myTasks=data.contents.filter(c=>(c.workflowTasks||[]).some(t=>t.assigneeId===u.id&&t.status==='open'));
-    // All content pieces assigned to this person
-    const assigned=data.contents.filter(c=>c.assignees.includes(u.id)&&c.statusId!=='posted');
-    // Merge — union of both
-    const allRelevant=[...new Set([...myTasks,...assigned].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean);
+    // Find all active content for this user:
+    // 1. Has open workflow tasks
+    // 2. Is assigned and content is in a status matching their role
+    // 3. Is assigned and content is not posted
+    const ROLE_STATUSES={
+      content_creator:['ideation','shoot','copywriting','senior_approval_ideation','senior_approval_copy'],
+      designer:['design','video_editing','senior_approval_video'],
+      senior:['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval','client_approval'],
+      admin:MAIN_STATUS_ORDER,
+    };
+    const relevantStatuses=ROLE_STATUSES[u.role]||MAIN_STATUS_ORDER;
 
-    // Group by brand
+    const allRelevant=[...new Set([
+      // Has open workflow task
+      ...data.contents.filter(c=>(c.workflowTasks||[]).some(t=>t.assigneeId===u.id&&t.status==='open')),
+      // Assigned and in relevant status
+      ...data.contents.filter(c=>
+        c.assignees.includes(u.id)&&
+        c.statusId!=='posted'&&
+        relevantStatuses.includes(c.statusId)
+      ),
+    ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted');
+
     const byBrand={};
     allRelevant.forEach(c=>{
       if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
@@ -3341,11 +3360,8 @@ function renderTeam(){
 
     const brandSections=Object.entries(byBrand).map(([brandId,bContents])=>{
       const b=getBrand(data,brandId);
-
-      // Group by stage/job type
       const byStage={};
       bContents.forEach(c=>{
-        // Find the specific open task for this user on this content
         const openTask=(c.workflowTasks||[]).filter(t=>t.assigneeId===u.id&&t.status==='open');
         const stageKey=openTask.length?openTask[0].statusId:c.statusId;
         if(!byStage[stageKey]) byStage[stageKey]=[];
@@ -4330,7 +4346,7 @@ function renderDetailPage(id){
       </div>
     </div>
 
-    ${isAdmin||S.user.role==='senior'?`
+    ${(S.user.id==='caleb'||S.user.id==='carmen'||S.user.id==='developer')?`
     <div class="side-section" style="border-top:2px solid var(--redd)">
       <div class="side-label" style="color:var(--red)">⬅ Reverse Flow</div>
       <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:8px">Step this piece back one stage. Requires confirmation.</div>
@@ -6603,46 +6619,81 @@ function sendWhatsApp(id){
 function openAddContentModal(brandId){
   const data=D();
   const bOpts=data.brands.map(b=>`<option value="${b.id}" ${b.id===brandId?'selected':''}>${b.name}</option>`).join('');
-  const stOpts=data.statuses.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  const userChecks=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<label class="assignee-check" id="ac-${u.id}" onclick="toggleAC('${u.id}','ac-')"><input type="checkbox" value="${u.id}">${u.init} ${u.name}</label>`).join('');
+  const stOpts=data.statuses.filter(s=>!s.isAmendment).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const userChecks=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<label class="assignee-check" id="ac-${u.id}" onclick="toggleAC('${u.id}','ac-')"><input type="checkbox" value="${u.id}">${u.init} ${u.name}<span style="font-size:11px;color:var(--t3);margin-left:4px">(${u.title||u.role})</span></label>`).join('');
   openModal(`<div class="modal-title">Add content piece<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="af-title" type="text" placeholder="e.g. Carousel #3 \u2014 Sleep Tips"></div>
+    <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="af-title" type="text" placeholder="e.g. WP#1 — Product Spotlight"></div>
     <div class="form-row-2">
       <div class="form-row" style="margin:0"><label class="form-label">Brand</label><select class="form-select" id="af-brand" onchange="updateAutoDate()">${bOpts}</select></div>
       <div class="form-row" style="margin:0"><label class="form-label">Type</label><select class="form-select" id="af-type"><option>Carousel</option><option>Video</option></select></div>
     </div>
-    <div class="form-row"><label class="form-label">Assigned to</label><div class="assignee-checks">${userChecks}</div></div>
+    <div class="form-row"><label class="form-label">Assigned to <span style="color:var(--t3);font-size:12px">(click to select — reflects on their Jobs)</span></label><div class="assignee-checks">${userChecks}</div></div>
     <div class="form-row-2">
       <div class="form-row" style="margin:0"><label class="form-label">Status</label><select class="form-select" id="af-status">${stOpts}</select></div>
-      <div class="form-row" style="margin:0"><label class="form-label">Posting date</label><input class="form-input" id="af-due" type="date" onchange="updateAutoDate()"></div>
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Posting date <span style="color:var(--red)">*</span></label>
+        <input class="form-input" id="af-due" type="date" required onchange="updateAutoDate()" style="border-color:var(--red)22">
+      </div>
     </div>
-    <div style="background:var(--s2);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;font-size:14px;color:var(--t2)">
+    <div style="background:var(--s2);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;font-size:14px;color:var(--t2)" id="af-date-preview-wrap" style="display:none">
       Auto due dates: <span id="af-date-preview">Set posting date to see</span>
     </div>
     <div class="form-row"><label class="form-label">Google Drive link (optional)</label><input class="form-input" id="af-drive" type="url" placeholder="https://drive.google.com/..."></div>
-    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveNewContent()">Add content</button></div>`);
-}
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveNewContent()">Add content</button></div>`);}
+
 function updateAutoDate(){
-  const due=document.getElementById('af-due')?.value;if(!due)return;
-  const hDate=addDays(due,-4);const lDate=addDays(due,-7);
+  const due=document.getElementById('af-due')?.value;
+  const dateInp=document.getElementById('af-due');
+  if(dateInp){dateInp.style.borderColor=due?'var(--ac)':'var(--red)';}
+  if(!due) return;
+  const type=document.getElementById('af-type')?.value||'Video';
+  const isVid=type==='Video';
+  const hDate=addWorkingDays(due,isVid?-4:-3);
+  const lDate=addWorkingDays(due,isVid?-7:-5);
   const el=document.getElementById('af-date-preview');
-  if(el)el.innerHTML=`Hualu (design): <strong>${fmt(hDate)}</strong> · Leonard (ideation): <strong>${fmt(lDate)}</strong>`;
+  const wrap=document.getElementById('af-date-preview-wrap');
+  if(wrap)wrap.style.display='block';
+  if(el)el.innerHTML=`Hualu due: <strong style="color:var(--ora)">${fmt(hDate)}</strong> · Leonard due: <strong style="color:var(--tel)">${fmt(lDate)}</strong>`;
 }
 function toggleAC(uid,prefix){const el=document.getElementById(prefix+uid);if(el){el.classList.toggle('selected');el.querySelector('input').checked=el.classList.contains('selected');}}
 function saveNewContent(){
   const title=document.getElementById('af-title').value.trim();
   if(!title){alert('Enter a title');return;}
+  const postingDate=document.getElementById('af-due').value;
+  if(!postingDate){
+    alert('Posting date is required.');
+    document.getElementById('af-due').style.borderColor='var(--red)';
+    document.getElementById('af-due').focus();
+    return;
+  }
   const brandId=document.getElementById('af-brand').value;
   const type=document.getElementById('af-type').value;
   const statusId=document.getElementById('af-status').value;
-  const postingDate=document.getElementById('af-due').value;
   const driveLink=document.getElementById('af-drive').value.trim();
   const assignees=[...document.querySelectorAll('.assignee-check.selected input')].map(i=>i.value);
   const data=D();
-  data.contents.push({id:'ct'+uid(),brandId,title,type,assignees,statusId,postingDate,driveLink,copywriting:'',comments:[],
-    statusHistory:[{statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]}],
-    dueDates:{hualu:postingDate?addDays(postingDate,-4):'',leonard:postingDate?addDays(postingDate,-7):'',jack:''}});
+  const today=new Date().toISOString().split('T')[0];
+  const isVid=type==='Video';
+  const newId='ct'+uid();
+  // Create workflow tasks for each assignee
+  const workflowTasks=assignees.map(aId=>({
+    id:'wt'+uid(),assigneeId:aId,status:'open',
+    statusId,label:getStatus(data,statusId).name,openedAt:today
+  }));
+  data.contents.push({
+    id:newId,brandId,title,type,assignees,statusId,postingDate,driveLink,
+    copywriting:'',comments:[],
+    statusHistory:[{statusId,changedBy:S.user.id,changedAt:today}],
+    dueDates:{
+      hualu:addWorkingDays(postingDate,isVid?-4:-3),
+      leonard:addWorkingDays(postingDate,isVid?-7:-5),
+      jack:''
+    },
+    workflowTasks,
+    pic:{}
+  });
   save(data);closeModal();render();
+  showAIToast(`✅ "${title}" added`);
 }
 
 function openEditDeadlineConfirm(contentId){
