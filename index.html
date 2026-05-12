@@ -877,6 +877,17 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .bpc-collapse-btn:hover{color:var(--ac);background:var(--acd)}
 .bpc-body.collapsed{display:none}
 .bp-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:0 2px}
+
+/* DASHBOARD 3-COL LAYOUT */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:12px;height:calc(100vh - 220px);min-height:420px}
+.dash-col{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.dash-col-hdr{padding:10px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.dash-col-title{font-size:15px;font-weight:700;flex:1}
+.dash-col-sub{font-size:12px;color:var(--t3);font-family:'DM Mono',monospace}
+.dash-col-body{overflow-y:auto;flex:1;min-height:0}
+.dash-col-filters{padding:8px 14px;border-bottom:1px solid var(--b1);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;background:var(--s2)}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr;height:auto}}
+
 </style>
 </head>
 <body>
@@ -2030,6 +2041,15 @@ const ACTIVE_WORK_STAGES={
   admin:MAIN_STATUS_ORDER,
 };
 
+// A content piece is "unstarted" when it has never been assigned and no work has begun.
+// These are Leonard's responsibility by default (first step in the flow).
+function isUnstartedContent(c){
+  return c.statusId==='ideation'
+    && (!c.assignees||c.assignees.length===0)
+    && !(c.workflowTasks||[]).some(t=>t.status==='open')
+    && !c.ideationPendingApproval;
+}
+
 function getActiveJobsForUser(data, userId){
   const u=data.users.find(x=>x.id===userId);
   if(!u) return [];
@@ -2070,80 +2090,117 @@ function getJobStageColor(statusId){
   return map[statusId]||'#888780';
 }
 
+function makeTodoJobRow(c, uid, today){
+  const stageColor=getJobStageColor(c.statusId);
+  const stageLabel=getJobStageLabel(c.statusId);
+  const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
+  const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
+  const taskLabel=openTask?openTask.label:'';
+  return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer">
+    <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0;margin-top:1px"></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.title}">${c.title}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+        <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${stageColor}22;color:${stageColor};font-weight:700">${stageLabel}</span>
+        ${taskLabel?`<span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${taskLabel}</span>`:''}
+      </div>
+    </div>
+    ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLateFlag?'color:var(--red);font-weight:700':'color:var(--t3)'}" title="Post by">📅 ${fmt(c.postingDate)}${isLateFlag?' ⚠':''}</span>`:''}
+    <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
+  </div>`;
+}
+
 function renderJobTodoList(){
   const data=D();
   const uid=S.user.id;
-  const jobs=getActiveJobsForUser(data,uid);
   const today=new Date().toISOString().split('T')[0];
+  const jobs=getActiveJobsForUser(data,uid);
+  const isContentCreator=S.user.role==='content_creator';
 
-  if(!jobs.length){
+  // For Leonard: also gather unstarted content for the selected/current month
+  const targetMonth=S.dashMonthFilter||new Date().toISOString().slice(0,7);
+  const unstartedForMonth=isContentCreator
+    ? data.contents.filter(c=>
+        isUnstartedContent(c)&&
+        c.postingDate&&c.postingDate.startsWith(targetMonth)&&
+        !jobs.some(j=>j.id===c.id)
+      ).sort((a,b)=>(a.postingDate||'').localeCompare(b.postingDate||''))
+    : [];
+
+  if(!jobs.length && !unstartedForMonth.length){
     return `<div class="todo-empty">🎉 No active jobs right now. Check back after the next approval!</div>`;
   }
 
-  // Group by brand
-  const byBrand={};
-  jobs.forEach(c=>{
-    if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
-    byBrand[c.brandId].push(c);
-  });
+  let html='';
 
-  // Sort each brand's jobs: overdue first, then by due date
-  Object.values(byBrand).forEach(arr=>arr.sort((a,b)=>{
-    const ad=a.postingDate||'9999',bd=b.postingDate||'9999';
-    return ad.localeCompare(bd);
-  }));
-
-  return Object.entries(byBrand).map(([brandId,bJobs])=>{
-    const b=getBrand(data,brandId);
-    const jobRows=bJobs.map(c=>{
-      const stageColor=getJobStageColor(c.statusId);
-      const stageLabel=getJobStageLabel(c.statusId);
-      const daysLeft=daysUntil(c.postingDate);
-      const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
-      // Find open task label for this user
-      const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
-      const taskLabel=openTask?openTask.label:'';
-
-      return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer">
-        <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0;margin-top:1px"></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.title}">${c.title}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-            <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${stageColor}22;color:${stageColor};font-weight:700">${stageLabel}</span>
-            ${taskLabel?`<span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${taskLabel}</span>`:''}
-          </div>
+  // ── Active jobs section ──────────────────────────────────────────────────
+  if(jobs.length){
+    const byBrand={};
+    jobs.forEach(c=>{
+      if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
+      byBrand[c.brandId].push(c);
+    });
+    Object.values(byBrand).forEach(arr=>arr.sort((a,b)=>(a.postingDate||'9999').localeCompare(b.postingDate||'9999')));
+    html+=Object.entries(byBrand).map(([brandId,bJobs])=>{
+      const b=getBrand(data,brandId);
+      return `<div style="border-bottom:1px solid var(--b1)">
+        <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s2);position:sticky;top:0">
+          <div style="width:8px;height:8px;border-radius:50%;background:${b.color}"></div>
+          <span style="font-size:13px;font-weight:700;color:${b.color}">${b.name}</span>
+          <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${bJobs.length} active</span>
         </div>
-        ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLateFlag?'color:var(--red);font-weight:700':'color:var(--t3)'}" title="Post by">
-          📅 ${fmt(c.postingDate)}${isLateFlag?' ⚠':''}
-        </span>`:''}
-        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
+        ${bJobs.map(c=>makeTodoJobRow(c,uid,today)).join('')}
       </div>`;
     }).join('');
+  }
 
-    return `<div style="border-bottom:1px solid var(--b1)">
-      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s2);position:sticky;top:0">
-        <div style="width:8px;height:8px;border-radius:50%;background:${b.color}"></div>
-        <span style="font-size:13px;font-weight:700;color:${b.color}">${b.name}</span>
-        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${bJobs.length} job${bJobs.length!==1?'s':''}</span>
+  // ── Unstarted queue section (Leonard only) ──────────────────────────────
+  if(unstartedForMonth.length){
+    const monthLabel=new Date(targetMonth+'-01').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+    html+=`<div>
+      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s3);position:sticky;top:0;border-bottom:1px solid var(--b1)">
+        <span style="font-size:13px;font-weight:700;color:var(--t2)">📋 Not started yet — ${monthLabel}</span>
+        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${unstartedForMonth.length} piece${unstartedForMonth.length!==1?'s':''}</span>
       </div>
-      ${jobRows}
+      ${unstartedForMonth.map(c=>{
+        const b=getBrand(data,c.brandId);
+        const isLate=c.postingDate&&c.postingDate<today;
+        return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer;opacity:0.8">
+          <div style="width:10px;height:10px;border-radius:50%;background:var(--t4);flex-shrink:0;margin-top:1px;border:1.5px dashed var(--t3)"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)" title="${c.title}">${c.title}</div>
+            <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:var(--s3);color:var(--t3)">Not started</span>
+              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${b.color}18;color:${b.color}">${b.name}</span>
+            </div>
+          </div>
+          ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLate?'color:var(--red);font-weight:700':'color:var(--t3)'}">📅 ${fmt(c.postingDate)}${isLate?' ⚠':''}</span>`:''}
+          <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
+        </div>`;
+      }).join('')}
     </div>`;
-  }).join('');
+  }
+
+  return html;
 }
 
 function buildTodoPanelHTML(){
   const data=D();
   const uid=S.user.id;
   const jobs=getActiveJobsForUser(data,uid);
-  const jobCount=jobs.length;
+  const targetMonth=S.dashMonthFilter||new Date().toISOString().slice(0,7);
+  const unstartedCount=S.user.role==='content_creator'
+    ? data.contents.filter(c=>isUnstartedContent(c)&&c.postingDate&&c.postingDate.startsWith(targetMonth)&&!jobs.some(j=>j.id===c.id)).length
+    : 0;
+  const totalCount=jobs.length+unstartedCount;
   return `<div class="todo-panel">
     <div class="todo-header">
       <span style="font-size:18px">📋</span>
       <span class="todo-header-title">My Active Jobs</span>
-      ${jobCount>0?`<span class="todo-count-badge" id="todo-active-badge">${jobCount}</span>`:`<span id="todo-active-badge" style="display:none">0</span>`}
+      ${totalCount>0?`<span class="todo-count-badge" id="todo-active-badge">${totalCount}</span>`:`<span id="todo-active-badge" style="display:none">0</span>`}
       <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;font-weight:500">${S.user.name}</span>
     </div>
-    <div class="todo-list" id="todo-panel-inner" style="max-height:360px">
+    <div class="todo-list" id="todo-panel-inner" style="max-height:400px">
       ${renderJobTodoList()}
     </div>
   </div>`;
@@ -2196,26 +2253,54 @@ function renderDashboard(){
   const inProgress=contents.filter(c=>c.statusId!=='posted').length;
   const posted=contents.filter(c=>c.statusId==='posted').length;
   const overdue=contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
-  const approvalsPending=contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length;
-  const reminders=contents.filter(c=>needsReminder(c));
+
+  // Pending tasks = active jobs for this user right now
+  const pendingTasks=getActiveJobsForUser(data,S.user.id).length;
+
+  // Deadline alerts: user's own tasks due within 5 days (all months, not just selected)
+  const isCalebOrCarmen=S.user.id==='caleb'||S.user.id==='carmen';
+  // deadlineSource scoping:
+  //   admins        → all content (full overview)
+  //   content_creator (Leonard) → assigned content + all unstarted (his responsibility)
+  //   everyone else → only their explicitly assigned content
+  let deadlineSource;
+  if(isAdmin){
+    deadlineSource=data.contents;
+  } else if(S.user.role==='content_creator'){
+    const unstartedAll=data.contents.filter(isUnstartedContent);
+    const combined=[...allContents,...unstartedAll];
+    deadlineSource=[...new Map(combined.map(c=>[c.id,c])).values()];
+  } else {
+    deadlineSource=allContents;
+  }
+  const reminders=deadlineSource.filter(c=>{
+    if(c.statusId==='posted') return false;
+    const d=daysUntil(c.postingDate);
+    return d>=0&&d<=5;
+  }).sort((a,b)=>daysUntil(a.postingDate)-daysUntil(b.postingDate));
 
   const statsHTML=`<div class="four-col">
     <div class="stat-c"><div class="stat-lbl">Total content <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">· ${monthLabel}</span></div><div class="stat-val" style="color:var(--ac)">${totalContent}</div><div class="stat-meta">${inProgress} in progress</div></div>
-    <div class="stat-c"><div class="stat-lbl">Approvals pending</div><div class="stat-val" style="color:var(--amb)">${approvalsPending}</div><div class="stat-meta">awaiting review</div></div>
+    <div class="stat-c"><div class="stat-lbl">Pending tasks</div><div class="stat-val" style="color:var(--amb)">${pendingTasks}</div><div class="stat-meta">active right now</div></div>
     <div class="stat-c"><div class="stat-lbl">Posted</div><div class="stat-val" style="color:var(--tel)">${posted}</div><div class="stat-meta">of ${totalContent} this month</div></div>
     <div class="stat-c"><div class="stat-lbl">Overdue</div><div class="stat-val" style="color:${overdue>0?'var(--red)':'var(--t2)'}">${overdue}</div><div class="stat-meta">${overdue>0?'needs attention':'on track'}</div></div>
   </div>`;
   const remHTML=reminders.length?`<div class="panel" style="border-color:var(--red)">
-    <div class="ph"><div class="ph-title" style="color:var(--red)">⚠ Deadline Alerts</div><div class="ph-sub">${reminders.length} items need attention</div></div>
+    <div class="ph"><div class="ph-title" style="color:var(--red)">⏰ Deadline Alerts</div><div class="ph-sub">${reminders.length} item${reminders.length!==1?'s':''} due within 5 days</div></div>
     <div class="pb">${reminders.map(c=>{
       const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);const days=daysUntil(c.postingDate);
       const prog=getProgressForContent(c);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
-        <span class="reminder">⚠ ${days===0?'TODAY':days+'d left'}</span>
-        <span style="font-size:15px;font-weight:600;flex:1;cursor:pointer" onclick="openContentDetail('${c.id}')">${c.title}</span>
+      const urgColor=days===0?'var(--red)':days<=2?'var(--red)':days<=4?'var(--amb)':'var(--blu)';
+      const countdownLabel=days===0?'TODAY!':days===1?'Tomorrow':days+'d left';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:52px;padding:4px 7px;border-radius:var(--r);background:${urgColor}18;border:1px solid ${urgColor}44">
+          <span style="font-size:15px;font-weight:800;color:${urgColor};line-height:1">${days===0?'0':days}</span>
+          <span style="font-size:10px;color:${urgColor};font-family:'DM Mono',monospace;font-weight:700">${days===0?'TODAY':days===1?'day':'days'}</span>
+        </div>
+        <span style="font-size:15px;font-weight:600;flex:1;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openContentDetail('${c.id}')" title="${c.title}">${c.title}</span>
         ${brandBadge(b)}
         ${progressBar(prog,st.color,80)}
-        <button class="whatsapp-btn btn-sm" onclick="sendWhatsApp('${c.id}')">\uD83D\uDCF1 Remind</button>
+        ${isCalebOrCarmen?`<button class="whatsapp-btn btn-sm" onclick="sendWhatsApp('${c.id}')">\uD83D\uDCF1 Remind</button>`:''}
       </div>`;}).join('')}
     </div>
   </div>`:'' ;
@@ -2240,93 +2325,139 @@ function renderDashboard(){
   else if(S.dashSort==='quota')brandsToShow.sort((a,b)=>(b.quota-allContents.filter(c=>c.brandId===b.id).length)-(a.quota-allContents.filter(c=>c.brandId===a.id).length));
   else brandsToShow.sort((a,b)=>a.name.localeCompare(b.name));
 
-  const todoHTML=buildTodoPanelHTML();
-
-  const brandSectionHeader=`<div class="bp-section-header">
-    <span style="font-size:14px;font-weight:700;color:var(--t2);letter-spacing:.04em">📊 Brand Progress · ${monthLabel}</span>
-    <button onclick="toggleAllBrands()" style="background:transparent;border:1px solid var(--b2);color:var(--t2);border-radius:6px;padding:3px 9px;font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .12s" onmouseenter="this.style.color='var(--ac)';this.style.borderColor='var(--ac)'" onmouseleave="this.style.color='var(--t2)';this.style.borderColor='var(--b2)'" id="bp-toggle-all-btn">Collapse all ▼</button>
-  </div>`;
-
-  return statsHTML+remHTML+todoHTML+monthFilterHTML+brandSectionHeader+`<div class="brand-progress-grid">`+brandsToShow.map(b=>{
+  // ── Build brand cards HTML (single-column inside the column) ───────────
+  const brandCardsInner=brandsToShow.map(b=>{
     let bc=allContents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
-    const total=bc.length;
-    const posted2=bc.filter(c=>c.statusId==='posted').length;
-    const inProg=bc.filter(c=>c.statusId!=='posted').length;
     const overdue2=bc.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
-    const qb=b.quotaBreakdown||{};
-    const ql=b.quotaLabels||{};
+    const qb=b.quotaBreakdown||{};const ql=b.quotaLabels||{};
     const TYPE_ICONS={video:'🎬',wallPost:'🖼',videoAds:'📢',tiktok:'🎵',carousel:'🃏'};
     const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
-      const typeContents=bc.filter(c=>{
-        if(k==='wallPost') return c.title.match(/^WP#/i);
-        if(k==='videoAds') return c.title.match(/^Ad#/i);
-        if(k==='tiktok') return c.title.match(/^TikTok#/i);
-        if(k==='carousel') return c.type==='Carousel'&&!c.title.match(/^Ad#/i);
-        if(k==='video') return c.type==='Video'&&!c.title.match(/^Ad#/i)&&!c.title.match(/^TikTok#/i);
+      const tc=bc.filter(c=>{
+        if(k==='wallPost')return c.title.match(/^WP#/i);
+        if(k==='videoAds')return c.title.match(/^Ad#/i);
+        if(k==='tiktok')return c.title.match(/^TikTok#/i);
+        if(k==='carousel')return c.type==='Carousel'&&!c.title.match(/^Ad#/i);
+        if(k==='video')return c.type==='Video'&&!c.title.match(/^Ad#/i)&&!c.title.match(/^TikTok#/i);
         return false;
       });
-      const postedCount=typeContents.filter(c=>c.statusId==='posted').length;
-      const left=Math.max(0,v-postedCount);
-      const done=postedCount>=v;
-      const pct=v>0?Math.round(postedCount/v*100):0;
-      return {icon:TYPE_ICONS[k]||'📌',label:ql[k],postedCount,v,left,done,pct};
+      const pc=tc.filter(c=>c.statusId==='posted').length;
+      const left=Math.max(0,v-pc);const done=pc>=v;
+      const pct=v>0?Math.round(pc/v*100):0;
+      return {icon:TYPE_ICONS[k]||'📌',label:ql[k],pc,v,left,done,pct};
     });
-    const quotaTypeRows=quotaItems.length?quotaItems.map(item=>`
-      <div style="padding:8px 0;border-bottom:1px solid var(--b1)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-          <span style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace">${item.icon} ${item.label}</span>
-          <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;color:${item.done?'var(--ac)':'var(--t1)'}">
-            ${item.postedCount}<span style="color:var(--t3);font-weight:400"> / ${item.v}</span>
-            <span style="font-size:12px;color:${item.done?'var(--ac)':item.left>0?'var(--red)':'var(--ac)'};margin-left:6px">${item.done?'✓':item.left+' left'}</span>
+    const quotaRows=quotaItems.length?quotaItems.map(item=>`
+      <div style="padding:6px 0;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:12px;color:var(--t2);font-family:'DM Mono',monospace">${item.icon} ${item.label}</span>
+          <span style="font-size:12px;font-family:'DM Mono',monospace;font-weight:700;color:${item.done?'var(--ac)':'var(--t1)'}">
+            ${item.pc}<span style="color:var(--t3);font-weight:400">/${item.v}</span>
+            <span style="font-size:11px;color:${item.done?'var(--ac)':item.left>0?'var(--red)':'var(--ac)'};margin-left:5px">${item.done?'✓':item.left+' left'}</span>
           </span>
         </div>
-        <div style="background:var(--s3);border-radius:3px;height:4px;overflow:hidden">
-          <div style="height:100%;width:${item.pct}%;background:${item.done?'var(--ac)':'var(--blu)'};border-radius:3px;transition:width .3s"></div>
+        <div style="background:var(--s3);border-radius:3px;height:3px;overflow:hidden">
+          <div style="height:100%;width:${item.pct}%;background:${item.done?'var(--ac)':'var(--blu)'};border-radius:3px"></div>
         </div>
-      </div>`).join(''):`<div style="font-size:13px;color:var(--t3);padding:8px 0;font-family:'DM Mono',monospace">No quota breakdown set.</div>`;
-    const metaRow=`<div class="bpc-meta-row" style="flex:1">
-      <span class="bpc-meta-item"><span>Total quota:</span> <strong>${b.quota}</strong></span>
-      ${b.driveLink?`<span class="bpc-meta-item"><a href="${b.driveLink}" target="_blank" onclick="event.stopPropagation()">📁 Drive</a></span>`:''}
-      ${b.brandGuide?`<span class="bpc-meta-item"><a href="${b.brandGuide}" target="_blank" onclick="event.stopPropagation()">📖 Guide</a></span>`:''}
-    </div>`;
-    const totalPosted=bc.filter(c=>c.statusId==='posted').length;
-    const totalInProg=bc.filter(c=>c.statusId!=='posted').length;
-    const totalCreated=bc.length;
-    const totalRemaining=Math.max(0,b.quota-totalCreated);
-    const overallPct=b.quota>0?Math.round(totalPosted/b.quota*100):0;
-    const overallBar=`<div style="padding:10px 0 6px;border-bottom:2px solid var(--b1);margin-bottom:4px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Overall ${overallPct}% posted</span>
-        <div style="display:flex;gap:10px">
-          <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--ac)">✓ ${totalPosted} posted</span>
-          <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--blu)">${totalInProg} active</span>
-          ${totalRemaining>0?`<span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--red)">${totalRemaining} not started</span>`:''}
-        </div>
-      </div>
-      <div class="prog-bar-bg" style="height:6px;border-radius:3px">
-        <div class="prog-bar" style="width:${overallPct}%;background:${b.color};border-radius:3px"></div>
-      </div>
-      ${overdue2>0?`<div style="margin-top:5px;font-size:12px;color:var(--red);font-family:'DM Mono',monospace">⚠ ${overdue2} piece${overdue2>1?'s':''} overdue</div>`:''}
-    </div>`;
+      </div>`).join(''):`<div style="font-size:12px;color:var(--t3);padding:6px 0;font-family:'DM Mono',monospace">No quota set.</div>`;
+    const tp=bc.filter(c=>c.statusId==='posted').length;
+    const tin=bc.filter(c=>c.statusId!=='posted').length;
+    const tr=Math.max(0,b.quota-bc.length);
+    const opct=b.quota>0?Math.round(tp/b.quota*100):0;
     const isCollapsed=!!(S.collapsedBrands&&S.collapsedBrands[b.id]);
-    return `<div class="brand-prog-card">
+    return `<div class="brand-prog-card" style="border-radius:0;border-left:none;border-right:none;border-top:none">
       <div class="bpc-top">
         <div class="bpc-header" style="cursor:pointer" onclick="nav('brand','${b.id}')">
           <div class="bpc-dot" style="background:${b.color}"></div>
-          <span class="bpc-name">${b.name}</span>
-          <span class="bpc-total" style="color:${b.color}">${totalPosted}/${b.quota}</span>
+          <span class="bpc-name" style="font-size:14px">${b.name}</span>
+          <span class="bpc-total" style="color:${b.color};font-size:12px">${tp}/${b.quota}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          ${metaRow}
-          <button id="bpc-toggle-${b.id}" class="bpc-collapse-btn" onclick="event.stopPropagation();toggleBrandCollapse('${b.id}')" title="${isCollapsed?'Expand':'Collapse'}">${isCollapsed?'▶':'▼'}</button>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+          <div class="bpc-meta-row" style="flex:1">
+            ${b.driveLink?`<span class="bpc-meta-item"><a href="${b.driveLink}" target="_blank" onclick="event.stopPropagation()">📁</a></span>`:''}
+            ${b.brandGuide?`<span class="bpc-meta-item"><a href="${b.brandGuide}" target="_blank" onclick="event.stopPropagation()">📖</a></span>`:''}
+            <span class="bpc-meta-item"><span style="color:var(--t3)">quota</span> <strong>${b.quota}</strong></span>
+            <span class="bpc-meta-item" style="color:var(--ac)">✓${tp}</span>
+            <span class="bpc-meta-item" style="color:var(--blu)">${tin} active</span>
+            ${tr>0?`<span class="bpc-meta-item" style="color:var(--red)">${tr} left</span>`:''}
+          </div>
+          <button id="bpc-toggle-${b.id}" class="bpc-collapse-btn" onclick="event.stopPropagation();toggleBrandCollapse('${b.id}')">${isCollapsed?'▶':'▼'}</button>
         </div>
       </div>
-      <div class="bpc-body ${isCollapsed?'collapsed':''}" id="bpc-body-${b.id}">
-        ${overallBar}
-        ${quotaTypeRows}
+      <div class="bpc-body ${isCollapsed?'collapsed':''}" id="bpc-body-${b.id}" style="padding:8px 14px">
+        <div style="height:4px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:8px">
+          <div style="height:100%;width:${opct}%;background:${b.color};border-radius:3px"></div>
+        </div>
+        ${overdue2>0?`<div style="font-size:11px;color:var(--red);font-family:'DM Mono',monospace;margin-bottom:6px">⚠ ${overdue2} overdue</div>`:''}
+        ${quotaRows}
       </div>
     </div>`;
-  }).join('')+`</div>`;
+  }).join('');
+
+  // ── Deadline alerts column content ──────────────────────────────────────
+  const deadlineColContent=reminders.length
+    ? reminders.map(c=>{
+        const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+        const days=daysUntil(c.postingDate);const prog=getProgressForContent(c);
+        const urgColor=days===0?'var(--red)':days<=2?'var(--red)':days<=4?'var(--amb)':'var(--blu)';
+        return `<div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--b1)">
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:42px;padding:3px 5px;border-radius:6px;background:${urgColor}18;border:1px solid ${urgColor}44">
+            <span style="font-size:14px;font-weight:800;color:${urgColor};line-height:1">${days===0?'0':days}</span>
+            <span style="font-size:9px;color:${urgColor};font-family:'DM Mono',monospace;font-weight:700">${days===0?'TODAY':days===1?'day':'days'}</span>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="openContentDetail('${c.id}')" title="${c.title}">${c.title}</div>
+            <div style="display:flex;align-items:center;gap:5px;margin-top:2px">${brandBadge(b)}${progressBar(prog,st.color,60)}</div>
+          </div>
+          ${isCalebOrCarmen?`<button class="whatsapp-btn btn-sm" style="font-size:11px;padding:4px 7px" onclick="sendWhatsApp('${c.id}')">📱</button>`:''}
+        </div>`;
+      }).join('')
+    : `<div class="todo-empty">✅ No deadlines in the next 5 days!</div>`;
+
+  // ── Assemble 3-column dashboard ─────────────────────────────────────────
+  return statsHTML+`
+  <div class="dash-grid">
+
+    <!-- Column 1: Deadline Alerts -->
+    <div class="dash-col">
+      <div class="dash-col-hdr">
+        <span style="font-size:16px">⏰</span>
+        <span class="dash-col-title">Deadline Alerts</span>
+        <span class="dash-col-sub">${reminders.length} within 5d</span>
+      </div>
+      <div class="dash-col-body">${deadlineColContent}</div>
+    </div>
+
+    <!-- Column 2: My Active Jobs -->
+    <div class="dash-col">
+      <div class="dash-col-hdr">
+        <span style="font-size:16px">📋</span>
+        <span class="dash-col-title">My Active Jobs</span>
+        <span class="dash-col-sub">${S.user.name}</span>
+      </div>
+      <div class="dash-col-body" id="todo-panel-inner">${renderJobTodoList()}</div>
+    </div>
+
+    <!-- Column 3: Brand Progress -->
+    <div class="dash-col">
+      <div class="dash-col-hdr">
+        <span style="font-size:16px">📊</span>
+        <span class="dash-col-title">Brand Progress</span>
+        <button onclick="toggleAllBrands()" id="bp-toggle-all-btn" style="background:transparent;border:1px solid var(--b2);color:var(--t3);border-radius:5px;padding:2px 7px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .12s" onmouseenter="this.style.color='var(--ac)';this.style.borderColor='var(--ac)'" onmouseleave="this.style.color='var(--t3)';this.style.borderColor='var(--b2)'">Collapse all ▼</button>
+      </div>
+      <div class="dash-col-filters">
+        <select class="filter-select" style="font-size:12px;padding:3px 7px;flex:1" onchange="S.dashMonthFilter=this.value;renderPage()">
+          ${allMonths.map(m=>{const d=new Date(m+'-01');const label=d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});return`<option value="${m}" ${S.dashMonthFilter===m?'selected':''}>${label}</option>`;}).join('')}
+        </select>
+        <select class="filter-select" style="font-size:12px;padding:3px 7px;flex:1" onchange="S.dashSort=this.value;renderPage()">
+          <option value="name" ${S.dashSort==='name'?'selected':''}>Name</option>
+          <option value="posted" ${S.dashSort==='posted'?'selected':''}>Most posted</option>
+          <option value="progress" ${S.dashSort==='progress'?'selected':''}>In-progress</option>
+          <option value="quota" ${S.dashSort==='quota'?'selected':''}>Quota left</option>
+        </select>
+      </div>
+      <div class="dash-col-body">${brandCardsInner}</div>
+    </div>
+
+  </div>`;
 }
 
 // ===================== CONTENT TRACKER =====================
@@ -4457,7 +4588,7 @@ function renderDetailPage(id){
     <button class="btn btn-ghost btn-sm" id="detail-side-toggle" onclick="toggleDetailSide()" style="display:none" title="Show info panel">\u24D8 Info</button>
     ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openEditContentModal('${id}')">Edit</button>`:''}
     ${isAdmin?`<button class="btn btn-warn btn-sm" onclick="sendWhatsApp('${id}')">\uD83D\uDCF1 Remind</button>`:''}
-    ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="deleteContent('${id}')">Delete</button>`:''}
+    ${(S.user.id==='caleb'||S.user.id==='carmen')?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
   `;
 
   // --- MAIN (left panel) ---
@@ -6834,7 +6965,25 @@ function changeStatus(id,statusId){
   c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   save(data);renderDetailPage(id);renderSidebar();
 }
-function deleteContent(id){if(!confirm('Delete this content?'))return;const data=D();data.contents=data.contents.filter(c=>c.id!==id);save(data);closeDetail();render();}
+function confirmDeleteContent(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const b=getBrand(data,c.brandId);
+  openModal(`<div class="modal-title" style="color:var(--red)">🗑 Remove content piece<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="background:var(--redd);border:1px solid var(--red);border-radius:var(--r);padding:13px 15px;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:700;color:var(--red);margin-bottom:4px">This cannot be undone</div>
+      <div style="font-size:14px;color:var(--t1)">All workflow history, comments, and approvals for this piece will be permanently deleted.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border-radius:var(--r);margin-bottom:16px">
+      <div style="width:9px;height:9px;border-radius:50%;background:${b.color};flex-shrink:0"></div>
+      <span style="font-size:15px;font-weight:700">${c.title}</span>
+      <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${b.name} · ${c.type}</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteContent('${id}')">🗑 Yes, remove it</button>
+    </div>`);
+}
+function deleteContent(id){const data=D();data.contents=data.contents.filter(c=>c.id!==id);save(data);closeModal();closeDetail();render();}
 
 function sendWhatsApp(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
