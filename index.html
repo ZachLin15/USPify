@@ -842,6 +842,41 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   animation:fadeIn .2s ease both;
   font-family:'DM Mono',monospace;
 }
+
+/* ---- TODO LIST ---- */
+.todo-panel{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);margin-bottom:14px;overflow:hidden}
+.todo-header{padding:11px 15px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:9px}
+.todo-header-title{font-size:16px;font-weight:700;flex:1}
+.todo-count-badge{font-size:12px;font-family:'DM Mono',monospace;padding:2px 7px;border-radius:10px;background:var(--acd);color:var(--ac);font-weight:700}
+.todo-add-input{flex:1;background:var(--s1);border:1px solid var(--b2);border-radius:var(--r);padding:7px 11px;font-size:14px;color:var(--t1);font-family:'Syne',sans-serif;outline:none;transition:border .13s}
+.todo-add-input:focus{border-color:var(--ac)}
+.todo-add-btn{background:var(--ac);color:#0c0c0e;border:none;border-radius:var(--r);padding:7px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;transition:background .12s;flex-shrink:0}
+.todo-add-btn:hover{background:var(--ac2)}
+.todo-list{max-height:320px;overflow-y:auto}
+.todo-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--b1);transition:background .1s}
+.todo-item:last-child{border-bottom:none}
+.todo-item:hover{background:var(--s2)}
+.todo-item.done-item{opacity:.55}
+.todo-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--b2);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .13s}
+.todo-check:hover{border-color:var(--ac)}
+.todo-check.checked{background:var(--ac);border-color:var(--ac)}
+.todo-check.checked::after{content:'';display:block;width:5px;height:3px;border-left:2px solid #0c0c0e;border-bottom:2px solid #0c0c0e;transform:rotate(-45deg) translate(0,-1px)}
+.todo-text{flex:1;font-size:14px;line-height:1.4;cursor:pointer;word-break:break-word}
+.todo-text.striked{text-decoration:line-through;color:var(--t3)}
+.todo-prio{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:1px}
+.todo-due{font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;white-space:nowrap}
+.todo-due.overdue{color:var(--red);font-weight:700}
+.todo-del{background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:2px 5px;border-radius:4px;flex-shrink:0;transition:color .12s;line-height:1}
+.todo-del:hover{color:var(--red)}
+.todo-filter-tabs{display:flex;gap:3px;padding:7px 14px;border-bottom:1px solid var(--b1)}
+.todo-filter-tab{font-size:12px;font-family:'DM Mono',monospace;font-weight:700;padding:3px 9px;border-radius:8px;cursor:pointer;color:var(--t3);transition:all .12s;border:none;background:transparent}
+.todo-filter-tab.active{background:var(--s2);color:var(--t1)}
+.todo-empty{text-align:center;padding:24px;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace}
+/* ---- BRAND COLLAPSE ---- */
+.bpc-collapse-btn{background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px;transition:all .12s;line-height:1;font-weight:700;flex-shrink:0}
+.bpc-collapse-btn:hover{color:var(--ac);background:var(--acd)}
+.bpc-body.collapsed{display:none}
+.bp-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:0 2px}
 </style>
 </head>
 <body>
@@ -1402,7 +1437,7 @@ function updateDueDatesFromPosting(c){
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
 const AMENDMENT_IDS=['copy_amendment','design_amendment','ideation_amendment'];
 
-const S={user:null,page:'dashboard',brand:null,calWeek:0,calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date'};
+const S={user:null,page:'dashboard',brand:null,calWeek:0,calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date',collapsedBrands:{},todoFilter:'active',todoPrio:'all'};
 
 // ===================== AI STATE =====================
 const AI = {
@@ -1974,6 +2009,174 @@ function renderPage(){
 }
 
 // ===================== DASHBOARD =====================
+
+
+// ===================== SHARED: ACTIVE JOBS FOR A USER =====================
+// Used by both renderTeam and the todo list on the dashboard.
+// "Active" means the user has explicit work to do RIGHT NOW:
+//   - They have an open workflow task assigned to them, OR
+//   - They are in assignees[] AND the content is at one of THEIR active stages
+//
+// We intentionally exclude:
+//   - senior_approval_* from content_creator (those are Jack's stages)
+//   - designer seeing all design content before being explicitly assigned
+//   - Leonard seeing the entire backlog just because he's first in flow
+
+const ACTIVE_WORK_STAGES={
+  content_creator:['ideation','shoot','copywriting'],      // actual work stages only
+  designer:['design','video_editing'],
+  senior:['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'],
+  client:['client_approval'],
+  admin:MAIN_STATUS_ORDER,
+};
+
+function getActiveJobsForUser(data, userId){
+  const u=data.users.find(x=>x.id===userId);
+  if(!u) return [];
+  const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
+  return [...new Set([
+    // 1. Has an explicit open workflow task → always show
+    ...data.contents.filter(c=>(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')),
+    // 2. Explicitly in assignees AND at one of their active stages
+    ...data.contents.filter(c=>
+      c.assignees.includes(userId)&&
+      c.statusId!=='posted'&&
+      activeStages.includes(c.statusId)
+    ),
+  ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted');
+}
+
+// ===================== JOB-BASED TODO PANEL (dashboard) =====================
+// The todo list mirrors the active jobs exactly — same source, same data.
+// No separate personal task list.  When Jack approves → Hualu's job appears here.
+
+function getJobStageLabel(statusId){
+  const map={
+    ideation:'💡 Ideation',shoot:'🎬 Shoot',copywriting:'✍️ Copy',
+    design:'🎨 Design',video_editing:'✂️ Editing',
+    senior_approval_ideation:'✅ Script Review',senior_approval_video:'✅ Video Review',
+    senior_approval_copy:'✅ Copy Review',senior_approval:'✅ Review',
+    client_approval:'🤝 Client Approval',posted:'🚀 Posted',
+  };
+  return map[statusId]||statusId;
+}
+function getJobStageColor(statusId){
+  const map={
+    ideation:'#888780',shoot:'#9a7aff',copywriting:'#3acca0',design:'#5a9fff',
+    video_editing:'#ff9f43',senior_approval_ideation:'#f0a030',
+    senior_approval_video:'#f0a030',senior_approval_copy:'#f0a030',
+    senior_approval:'#f0a030',client_approval:'#e06aaa',posted:'#c8f04a',
+  };
+  return map[statusId]||'#888780';
+}
+
+function renderJobTodoList(){
+  const data=D();
+  const uid=S.user.id;
+  const jobs=getActiveJobsForUser(data,uid);
+  const today=new Date().toISOString().split('T')[0];
+
+  if(!jobs.length){
+    return `<div class="todo-empty">🎉 No active jobs right now. Check back after the next approval!</div>`;
+  }
+
+  // Group by brand
+  const byBrand={};
+  jobs.forEach(c=>{
+    if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
+    byBrand[c.brandId].push(c);
+  });
+
+  // Sort each brand's jobs: overdue first, then by due date
+  Object.values(byBrand).forEach(arr=>arr.sort((a,b)=>{
+    const ad=a.postingDate||'9999',bd=b.postingDate||'9999';
+    return ad.localeCompare(bd);
+  }));
+
+  return Object.entries(byBrand).map(([brandId,bJobs])=>{
+    const b=getBrand(data,brandId);
+    const jobRows=bJobs.map(c=>{
+      const stageColor=getJobStageColor(c.statusId);
+      const stageLabel=getJobStageLabel(c.statusId);
+      const daysLeft=daysUntil(c.postingDate);
+      const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
+      // Find open task label for this user
+      const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
+      const taskLabel=openTask?openTask.label:'';
+
+      return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer">
+        <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0;margin-top:1px"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.title}">${c.title}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+            <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${stageColor}22;color:${stageColor};font-weight:700">${stageLabel}</span>
+            ${taskLabel?`<span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${taskLabel}</span>`:''}
+          </div>
+        </div>
+        ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLateFlag?'color:var(--red);font-weight:700':'color:var(--t3)'}" title="Post by">
+          📅 ${fmt(c.postingDate)}${isLateFlag?' ⚠':''}
+        </span>`:''}
+        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
+      </div>`;
+    }).join('');
+
+    return `<div style="border-bottom:1px solid var(--b1)">
+      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s2);position:sticky;top:0">
+        <div style="width:8px;height:8px;border-radius:50%;background:${b.color}"></div>
+        <span style="font-size:13px;font-weight:700;color:${b.color}">${b.name}</span>
+        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${bJobs.length} job${bJobs.length!==1?'s':''}</span>
+      </div>
+      ${jobRows}
+    </div>`;
+  }).join('');
+}
+
+function buildTodoPanelHTML(){
+  const data=D();
+  const uid=S.user.id;
+  const jobs=getActiveJobsForUser(data,uid);
+  const jobCount=jobs.length;
+  return `<div class="todo-panel">
+    <div class="todo-header">
+      <span style="font-size:18px">📋</span>
+      <span class="todo-header-title">My Active Jobs</span>
+      ${jobCount>0?`<span class="todo-count-badge" id="todo-active-badge">${jobCount}</span>`:`<span id="todo-active-badge" style="display:none">0</span>`}
+      <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;font-weight:500">${S.user.name}</span>
+    </div>
+    <div class="todo-list" id="todo-panel-inner" style="max-height:360px">
+      ${renderJobTodoList()}
+    </div>
+  </div>`;
+}
+
+
+function toggleAllBrands(){
+  const data=D();
+  if(!S.collapsedBrands) S.collapsedBrands={};
+  const allCollapsed=data.brands.every(b=>S.collapsedBrands[b.id]);
+  data.brands.forEach(b=>{S.collapsedBrands[b.id]=!allCollapsed;});
+  // Update DOM
+  data.brands.forEach(b=>{
+    const body=document.getElementById('bpc-body-'+b.id);
+    const btn=document.getElementById('bpc-toggle-'+b.id);
+    if(body) body.classList.toggle('collapsed',S.collapsedBrands[b.id]);
+    if(btn) btn.textContent=S.collapsedBrands[b.id]?'▶':'▼';
+  });
+  const allBtn=document.getElementById('bp-toggle-all-btn');
+  if(allBtn) allBtn.textContent=allCollapsed?'Collapse all ▼':'Expand all ▶';
+}
+
+// ===================== BRAND PROGRESS COLLAPSE =====================
+function toggleBrandCollapse(brandId){
+  if(!S.collapsedBrands) S.collapsedBrands={};
+  S.collapsedBrands[brandId]=!S.collapsedBrands[brandId];
+  // Toggle DOM directly for speed (no full re-render)
+  const body=document.getElementById('bpc-body-'+brandId);
+  const btn=document.getElementById('bpc-toggle-'+brandId);
+  if(body){body.classList.toggle('collapsed',S.collapsedBrands[brandId]);}
+  if(btn){btn.textContent=S.collapsedBrands[brandId]?'▶':'▼';}
+}
+
 function renderDashboard(){
   const data=D();const today=new Date().toISOString().split('T')[0];
   const curMonth=new Date().toISOString().slice(0,7);
@@ -2036,19 +2239,23 @@ function renderDashboard(){
   else if(S.dashSort==='progress')brandsToShow.sort((a,b)=>(allContents.filter(c=>c.brandId===b.id&&c.statusId!=='posted').length)-(allContents.filter(c=>c.brandId===a.id&&c.statusId!=='posted').length));
   else if(S.dashSort==='quota')brandsToShow.sort((a,b)=>(b.quota-allContents.filter(c=>c.brandId===b.id).length)-(a.quota-allContents.filter(c=>c.brandId===a.id).length));
   else brandsToShow.sort((a,b)=>a.name.localeCompare(b.name));
-  const brandCardsHTML=monthFilterHTML+`<div style="margin-bottom:6px;font-size:14px;font-weight:700;color:var(--t2);letter-spacing:.04em">Brand Progress · ${monthLabel}</div>
-  <div class="brand-progress-grid">${brandsToShow.map(b=>{
+
+  const todoHTML=buildTodoPanelHTML();
+
+  const brandSectionHeader=`<div class="bp-section-header">
+    <span style="font-size:14px;font-weight:700;color:var(--t2);letter-spacing:.04em">📊 Brand Progress · ${monthLabel}</span>
+    <button onclick="toggleAllBrands()" style="background:transparent;border:1px solid var(--b2);color:var(--t2);border-radius:6px;padding:3px 9px;font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .12s" onmouseenter="this.style.color='var(--ac)';this.style.borderColor='var(--ac)'" onmouseleave="this.style.color='var(--t2)';this.style.borderColor='var(--b2)'" id="bp-toggle-all-btn">Collapse all ▼</button>
+  </div>`;
+
+  return statsHTML+remHTML+todoHTML+monthFilterHTML+brandSectionHeader+`<div class="brand-progress-grid">`+brandsToShow.map(b=>{
     let bc=allContents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
     const total=bc.length;
     const posted2=bc.filter(c=>c.statusId==='posted').length;
     const inProg=bc.filter(c=>c.statusId!=='posted').length;
     const overdue2=bc.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
-
-    // Quota breakdown — vertical stacked sections, one per type
     const qb=b.quotaBreakdown||{};
     const ql=b.quotaLabels||{};
     const TYPE_ICONS={video:'🎬',wallPost:'🖼',videoAds:'📢',tiktok:'🎵',carousel:'🃏'};
-
     const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
       const typeContents=bc.filter(c=>{
         if(k==='wallPost') return c.title.match(/^WP#/i);
@@ -2064,36 +2271,29 @@ function renderDashboard(){
       const pct=v>0?Math.round(postedCount/v*100):0;
       return {icon:TYPE_ICONS[k]||'📌',label:ql[k],postedCount,v,left,done,pct};
     });
-
-    const quotaTypeRows=quotaItems.length
-      ? quotaItems.map(item=>`
-        <div style="padding:8px 0;border-bottom:1px solid var(--b1)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-            <span style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace">${item.icon} ${item.label}</span>
-            <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;color:${item.done?'var(--ac)':'var(--t1)'}">
-              ${item.postedCount}<span style="color:var(--t3);font-weight:400"> / ${item.v}</span>
-              <span style="font-size:12px;color:${item.done?'var(--ac)':item.left>0?'var(--red)':'var(--ac)'};margin-left:6px">${item.done?'✓':item.left+' left'}</span>
-            </span>
-          </div>
-          <div style="background:var(--s3);border-radius:3px;height:4px;overflow:hidden">
-            <div style="height:100%;width:${item.pct}%;background:${item.done?'var(--ac)':'var(--blu)'};border-radius:3px;transition:width .3s"></div>
-          </div>
-        </div>`).join('')
-      : `<div style="font-size:13px;color:var(--t3);padding:8px 0;font-family:'DM Mono',monospace">No quota breakdown set.</div>`;
-
-    const metaRow=`<div class="bpc-meta-row">
+    const quotaTypeRows=quotaItems.length?quotaItems.map(item=>`
+      <div style="padding:8px 0;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace">${item.icon} ${item.label}</span>
+          <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;color:${item.done?'var(--ac)':'var(--t1)'}">
+            ${item.postedCount}<span style="color:var(--t3);font-weight:400"> / ${item.v}</span>
+            <span style="font-size:12px;color:${item.done?'var(--ac)':item.left>0?'var(--red)':'var(--ac)'};margin-left:6px">${item.done?'✓':item.left+' left'}</span>
+          </span>
+        </div>
+        <div style="background:var(--s3);border-radius:3px;height:4px;overflow:hidden">
+          <div style="height:100%;width:${item.pct}%;background:${item.done?'var(--ac)':'var(--blu)'};border-radius:3px;transition:width .3s"></div>
+        </div>
+      </div>`).join(''):`<div style="font-size:13px;color:var(--t3);padding:8px 0;font-family:'DM Mono',monospace">No quota breakdown set.</div>`;
+    const metaRow=`<div class="bpc-meta-row" style="flex:1">
       <span class="bpc-meta-item"><span>Total quota:</span> <strong>${b.quota}</strong></span>
       ${b.driveLink?`<span class="bpc-meta-item"><a href="${b.driveLink}" target="_blank" onclick="event.stopPropagation()">📁 Drive</a></span>`:''}
       ${b.brandGuide?`<span class="bpc-meta-item"><a href="${b.brandGuide}" target="_blank" onclick="event.stopPropagation()">📖 Guide</a></span>`:''}
     </div>`;
-
-    // Compact overall summary: total posted, in progress, remaining
     const totalPosted=bc.filter(c=>c.statusId==='posted').length;
     const totalInProg=bc.filter(c=>c.statusId!=='posted').length;
     const totalCreated=bc.length;
     const totalRemaining=Math.max(0,b.quota-totalCreated);
     const overallPct=b.quota>0?Math.round(totalPosted/b.quota*100):0;
-
     const overallBar=`<div style="padding:10px 0 6px;border-bottom:2px solid var(--b1);margin-bottom:4px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Overall ${overallPct}% posted</span>
@@ -2108,23 +2308,25 @@ function renderDashboard(){
       </div>
       ${overdue2>0?`<div style="margin-top:5px;font-size:12px;color:var(--red);font-family:'DM Mono',monospace">⚠ ${overdue2} piece${overdue2>1?'s':''} overdue</div>`:''}
     </div>`;
-
+    const isCollapsed=!!(S.collapsedBrands&&S.collapsedBrands[b.id]);
     return `<div class="brand-prog-card">
-      <div class="bpc-top" onclick="nav('brand','${b.id}')">
-        <div class="bpc-header">
+      <div class="bpc-top">
+        <div class="bpc-header" style="cursor:pointer" onclick="nav('brand','${b.id}')">
           <div class="bpc-dot" style="background:${b.color}"></div>
           <span class="bpc-name">${b.name}</span>
           <span class="bpc-total" style="color:${b.color}">${totalPosted}/${b.quota}</span>
         </div>
-        ${metaRow}
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          ${metaRow}
+          <button id="bpc-toggle-${b.id}" class="bpc-collapse-btn" onclick="event.stopPropagation();toggleBrandCollapse('${b.id}')" title="${isCollapsed?'Expand':'Collapse'}">${isCollapsed?'▶':'▼'}</button>
+        </div>
       </div>
-      <div class="bpc-body">
+      <div class="bpc-body ${isCollapsed?'collapsed':''}" id="bpc-body-${b.id}">
         ${overallBar}
         ${quotaTypeRows}
       </div>
     </div>`;
-  }).join('')}</div>`;
-  return statsHTML+remHTML+brandCardsHTML;
+  }).join('')+`</div>`;
 }
 
 // ===================== CONTENT TRACKER =====================
@@ -3330,27 +3532,7 @@ function renderTeam(){
 
   const cards=staff.map(u=>{
     // Find all active content for this user:
-    // 1. Has open workflow tasks
-    // 2. Is assigned and content is in a status matching their role
-    // 3. Is assigned and content is not posted
-    const ROLE_STATUSES={
-      content_creator:['ideation','shoot','copywriting','senior_approval_ideation','senior_approval_copy'],
-      designer:['design','video_editing','senior_approval_video'],
-      senior:['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval','client_approval'],
-      admin:MAIN_STATUS_ORDER,
-    };
-    const relevantStatuses=ROLE_STATUSES[u.role]||MAIN_STATUS_ORDER;
-
-    const allRelevant=[...new Set([
-      // Has open workflow task
-      ...data.contents.filter(c=>(c.workflowTasks||[]).some(t=>t.assigneeId===u.id&&t.status==='open')),
-      // Assigned and in relevant status
-      ...data.contents.filter(c=>
-        c.assignees.includes(u.id)&&
-        c.statusId!=='posted'&&
-        relevantStatuses.includes(c.statusId)
-      ),
-    ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted');
+    const allRelevant=getActiveJobsForUser(data,u.id);
 
     const byBrand={};
     allRelevant.forEach(c=>{
@@ -4198,6 +4380,39 @@ function flowNodeClick(id, tabId){
   });
 }
 
+function startEditTitle(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const titleEl=document.getElementById('detail-title');
+  if(!titleEl)return;
+  titleEl.innerHTML='';
+  const inp=document.createElement('input');
+  inp.value=c.title;
+  inp.style.cssText='background:var(--s2);border:1.5px solid var(--ac);border-radius:var(--r);padding:4px 10px;font-size:17px;font-weight:700;color:var(--t1);font-family:Syne,sans-serif;width:100%;max-width:480px;outline:none';
+  inp.onkeydown=e=>{
+    if(e.key==='Enter'){e.preventDefault();saveContentTitle(id,inp.value);}
+    if(e.key==='Escape'){renderDetailPage(id);}
+  };
+  inp.onblur=()=>saveContentTitle(id,inp.value);
+  titleEl.appendChild(inp);
+  inp.focus();inp.select();
+}
+function saveContentTitle(id, newTitle){
+  newTitle=(newTitle||'').trim();
+  if(!newTitle){renderDetailPage(id);return;}
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  if(newTitle===c.title){renderDetailPage(id);return;}
+  const oldTitle=c.title;
+  c.title=newTitle;
+  if(!c.comments)c.comments=[];
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text:'✏ Renamed: +oldTitle+ → +newTitle+',type:'general',createdAt:new Date().toISOString().split('T')[0]});
+  save(data);
+  renderDetailPage(id);  // refresh the open detail overlay title
+  renderPage();          // refresh tracker / dashboard / brand view underneath
+  renderSidebar();       // refresh sidebar brand counts
+  renderTopbar();        // refresh topbar if name appears there
+  showAIToast('✓ Renamed to "'+newTitle+'"');
+}
+
 function openContentDetail(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const isClient=S.user.role==='client';
@@ -4216,7 +4431,24 @@ function renderDetailPage(id){
   const flow = c.type==='Video' ? VIDEO_FLOW : CAROUSEL_FLOW;
 
   // --- TOPBAR ---
-  document.getElementById('detail-title').textContent=c.title;
+  document.getElementById('detail-title').innerHTML='';
+  const _titleSpan=document.createElement('span');
+  _titleSpan.id='detail-title-text';
+  _titleSpan.textContent=c.title;
+  _titleSpan.title='Click to rename';
+  _titleSpan.style.cssText='cursor:pointer;border-bottom:1px dashed var(--t4);transition:border-color .12s';
+  _titleSpan.onmouseenter=()=>_titleSpan.style.borderColor='var(--ac)';
+  _titleSpan.onmouseleave=()=>_titleSpan.style.borderColor='var(--t4)';
+  _titleSpan.onclick=()=>startEditTitle(id);
+  const _titlePen=document.createElement('span');
+  _titlePen.textContent=' ✏';
+  _titlePen.title='Rename';
+  _titlePen.style.cssText='font-size:13px;cursor:pointer;color:var(--t3);margin-left:4px';
+  _titlePen.onmouseenter=()=>_titlePen.style.color='var(--ac)';
+  _titlePen.onmouseleave=()=>_titlePen.style.color='var(--t3)';
+  _titlePen.onclick=()=>startEditTitle(id);
+  document.getElementById('detail-title').appendChild(_titleSpan);
+  document.getElementById('detail-title').appendChild(_titlePen);
   document.getElementById('detail-topbar-actions').innerHTML=`
     <span class="autosave-indicator idle" id="autosave-status">auto-save on</span>
     ${brandBadge(b)}
@@ -6616,18 +6848,55 @@ function sendWhatsApp(id){
 }
 
 // ===================== ADD CONTENT MODAL =====================
+function onAddCategoryChange(){
+  const cat=document.getElementById('af-category')?.value;
+  const typeRow=document.getElementById('af-type-row');
+  const typeSelect=document.getElementById('af-type');
+  if(!typeRow||!typeSelect)return;
+  if(cat==='videoAds'){
+    // Video Ads → always Video
+    typeSelect.innerHTML='<option value="Video">Video</option>';
+    typeRow.style.opacity='0.5';
+    typeRow.title='Video Ads are always Video type';
+  } else {
+    // Wall Post → Video or Carousel
+    typeSelect.innerHTML='<option value="Video">Video</option><option value="Carousel">Carousel</option>';
+    typeRow.style.opacity='1';
+    typeRow.title='';
+  }
+  updateAutoDate();
+}
+
 function openAddContentModal(brandId){
   const data=D();
   const bOpts=data.brands.map(b=>`<option value="${b.id}" ${b.id===brandId?'selected':''}>${b.name}</option>`).join('');
   const stOpts=data.statuses.filter(s=>!s.isAmendment).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  const userChecks=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<label class="assignee-check" id="ac-${u.id}" onclick="toggleAC('${u.id}','ac-')"><input type="checkbox" value="${u.id}">${u.init} ${u.name}<span style="font-size:11px;color:var(--t3);margin-left:4px">(${u.title||u.role})</span></label>`).join('');
+  const userBtns=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`
+    <button type="button" id="ac-btn-${u.id}" onclick="toggleACBtn('${u.id}')"
+      style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:20px;border:1.5px solid var(--b2);background:var(--s2);color:var(--t2);font-size:13px;font-family:'Syne',sans-serif;font-weight:600;cursor:pointer;transition:all .12s;margin:3px">
+      <span style="width:22px;height:22px;border-radius:50%;background:${u.color}22;color:${u.color};display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${u.init}</span>
+      ${u.name}
+    </button>`).join('');
   openModal(`<div class="modal-title">Add content piece<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="af-title" type="text" placeholder="e.g. WP#1 — Product Spotlight"></div>
     <div class="form-row-2">
       <div class="form-row" style="margin:0"><label class="form-label">Brand</label><select class="form-select" id="af-brand" onchange="updateAutoDate()">${bOpts}</select></div>
-      <div class="form-row" style="margin:0"><label class="form-label">Type</label><select class="form-select" id="af-type"><option>Carousel</option><option>Video</option></select></div>
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Category</label>
+        <select class="form-select" id="af-category" onchange="onAddCategoryChange()">
+          <option value="wallPost">🖼 Wall Post</option>
+          <option value="videoAds">📢 Video Ads</option>
+        </select>
+      </div>
     </div>
-    <div class="form-row"><label class="form-label">Assigned to <span style="color:var(--t3);font-size:12px">(click to select — reflects on their Jobs)</span></label><div class="assignee-checks">${userChecks}</div></div>
+    <div class="form-row" id="af-type-row" style="margin-bottom:14px">
+      <label class="form-label">Type <span style="color:var(--t3);font-size:12px">(auto-locked for Video Ads)</span></label>
+      <select class="form-select" id="af-type" onchange="updateAutoDate()"><option value="Video">Video</option><option value="Carousel">Carousel</option></select>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Assigned to <span style="color:var(--t3);font-size:12px">(tap to assign)</span></label>
+      <div id="af-user-btns" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px">${userBtns}</div>
+    </div>
     <div class="form-row-2">
       <div class="form-row" style="margin:0"><label class="form-label">Status</label><select class="form-select" id="af-status">${stOpts}</select></div>
       <div class="form-row" style="margin:0">
@@ -6635,11 +6904,24 @@ function openAddContentModal(brandId){
         <input class="form-input" id="af-due" type="date" required onchange="updateAutoDate()" style="border-color:var(--red)22">
       </div>
     </div>
-    <div style="background:var(--s2);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;font-size:14px;color:var(--t2)" id="af-date-preview-wrap" style="display:none">
+    <div style="background:var(--s2);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;font-size:14px;color:var(--t2);display:none" id="af-date-preview-wrap">
       Auto due dates: <span id="af-date-preview">Set posting date to see</span>
     </div>
     <div class="form-row"><label class="form-label">Google Drive link (optional)</label><input class="form-input" id="af-drive" type="url" placeholder="https://drive.google.com/..."></div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveNewContent()">Add content</button></div>`);}
+
+function toggleACBtn(userId){
+  const btn=document.getElementById('ac-btn-'+userId);
+  if(!btn)return;
+  const isOn=btn.getAttribute('data-selected')==='1';
+  if(isOn){
+    btn.removeAttribute('data-selected');
+    btn.style.borderColor='var(--b2)';btn.style.background='var(--s2)';btn.style.color='var(--t2)';
+  } else {
+    btn.setAttribute('data-selected','1');
+    btn.style.borderColor='var(--ac)';btn.style.background='var(--acd)';btn.style.color='var(--ac)';
+  }
+}
 
 function updateAutoDate(){
   const due=document.getElementById('af-due')?.value;
@@ -6668,10 +6950,12 @@ function saveNewContent(){
   }
   const brandId=document.getElementById('af-brand').value;
   const type=document.getElementById('af-type').value;
+  const cat=document.getElementById('af-category')?.value||'wallPost';
   const statusId=document.getElementById('af-status').value;
   const driveLink=document.getElementById('af-drive').value.trim();
-  const assignees=[...document.querySelectorAll('.assignee-check.selected input')].map(i=>i.value);
   const data=D();
+  const nonAdminUsers=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
+  const assignees=nonAdminUsers.filter(u=>document.getElementById('ac-btn-'+u.id)?.getAttribute('data-selected')==='1').map(u=>u.id);
   const today=new Date().toISOString().split('T')[0];
   const isVid=type==='Video';
   const newId='ct'+uid();
@@ -6681,7 +6965,7 @@ function saveNewContent(){
     statusId,label:getStatus(data,statusId).name,openedAt:today
   }));
   data.contents.push({
-    id:newId,brandId,title,type,assignees,statusId,postingDate,driveLink,
+    id:newId,brandId,title,type,cat,assignees,statusId,postingDate,driveLink,
     copywriting:'',comments:[],
     statusHistory:[{statusId,changedBy:S.user.id,changedAt:today}],
     dueDates:{
@@ -7900,6 +8184,12 @@ function getAlertItems(data){
     ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
   }
 
+  // Amendment notifications — for anyone whose work was rejected
+  data.contents.filter(c=>{
+    if((c.amendNotifDismissed||{})[uid])return false;
+    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
+  }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+
   // Deadline alerts for everyone
   data.contents.filter(c=>{
     if(c.statusId==='posted')return false;
@@ -8012,7 +8302,51 @@ function renderNotifPanel(){
     }
   }
 
-  // ── 4. DEADLINE ALERTS ───────────────────────────────────────────────────
+  // ── 3.5. AMENDMENT NOTIFICATIONS — anyone whose work was rejected ────────
+  const amendAlerts=data.contents.filter(c=>{
+    if((c.amendNotifDismissed||{})[uid]) return false;
+    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
+  });
+  if(amendAlerts.length){
+    const amendItems=amendAlerts.map(c=>{
+      const b=getBrand(data,c.brandId);
+      const rejectedBy=c.amendNotifiedBy||'Senior';
+      const amendNote=c.amendNote||'Please revise and resubmit.';
+      const recentComments=(c.comments||[]).filter(cm=>cm.text&&(cm.text.includes('Amendment')||cm.text.includes('amendment')||cm.text.includes('🔄'))).slice(-3);
+      let commentsHTML='';
+      if(recentComments.length){
+        commentsHTML=recentComments.map(cm=>{
+          const cu=getUser(data,cm.userId);
+          return '<div style="margin-top:5px;padding:5px 8px;background:var(--s1);border-radius:5px;border-left:2px solid var(--red)">'
+            +'<span style="font-size:11px;font-weight:700;color:'+cu.color+'">'+cu.init+' '+cu.name+'</span>'
+            +'<span style="font-size:11px;color:var(--t3);margin-left:6px">'+fmt(cm.createdAt)+'</span>'
+            +'<div style="font-size:12px;color:var(--t1);margin-top:2px">'+cm.text.replace(/^[🔄✅📤]\s*/,'')+'</div>'
+            +'</div>';
+        }).join('');
+      } else {
+        commentsHTML='<div style="margin-top:4px;padding:5px 8px;background:var(--redd);border-radius:5px">'
+          +'<span style="font-size:12px;color:var(--red)">'+amendNote+'</span>'
+          +'</div>';
+      }
+      return '<div class="np-item" style="border-left:3px solid var(--red);flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px">'
+        +'<div style="display:flex;align-items:center;gap:10px;width:100%">'
+          +'<div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;cursor:pointer;flex-shrink:0" onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')">🔄</div>'
+          +'<div class="np-info" style="cursor:pointer;flex:1" onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')">'
+            +'<div class="np-name" style="color:var(--red)">'+c.title+'</div>'
+            +'<div class="np-meta"><span style="color:'+b.color+';font-weight:700">'+b.name+'</span> &middot; <span style="color:var(--red);font-weight:700">Amendment by '+rejectedBy+'</span></div>'
+          +'</div>'
+          +'<button onclick="dismissAmendNotif(\'' +c.id+ '\')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0">×</button>'
+        +'</div>'
+        +'<div style="width:100%;padding:0 4px">'+commentsHTML+'</div>'
+        +'<div style="margin-top:5px;width:100%;text-align:right">'
+          +'<span onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')" style="font-size:12px;color:var(--blu);cursor:pointer;text-decoration:underline">View all comments →</span>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+    sections.push('<div class="np-section-header" style="background:var(--redd);color:var(--red)">🔄 AMENDMENT REQUIRED ('+amendAlerts.length+')</div>'+amendItems);
+  }
+
+    // ── 4. DEADLINE ALERTS ───────────────────────────────────────────────────
   const todayStr=new Date().toISOString().split('T')[0];
   const deadlineAlerts=data.contents.filter(c=>{
     if(c.statusId==='posted')return false;
@@ -8056,6 +8390,12 @@ function dismissSeniorNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.seniorNotifDismissed)c.seniorNotifDismissed={};
   c.seniorNotifDismissed[S.user.id]=true;
+  save(data);renderNotifPanel();renderTopbar();
+}
+function dismissAmendNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.amendNotifDismissed)c.amendNotifDismissed={};
+  c.amendNotifDismissed[S.user.id]=true;
   save(data);renderNotifPanel();renderTopbar();
 }
 function dismissCopyNotif(contentId){
