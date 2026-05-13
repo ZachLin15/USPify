@@ -90,7 +90,8 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .logout-btn:hover{color:var(--red);border-color:var(--redd)}
 
 .main-area{margin-left:var(--sb);min-height:100vh;display:flex;flex-direction:column}
-.topbar{padding:12px 22px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;background:var(--s1);position:sticky;top:0;z-index:100;flex-shrink:0}
+.topbar{padding:12px 22px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;background:var(--s1);position:fixed;top:0;left:var(--sb);right:0;z-index:150;flex-shrink:0}
+.content{padding:18px 22px;padding-top:72px}
 .tb-title{font-size:18px;font-weight:700}.tb-sub{font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;font-weight:500}
 .tb-actions{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;border:none;font-family:'Syne',sans-serif;transition:all .12s;white-space:nowrap}
@@ -100,7 +101,6 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .btn-info{background:var(--blud);color:var(--blu);border:1px solid transparent}.btn-info:hover{background:var(--blu);color:#fff}
 .btn-warn{background:var(--ambd);color:var(--amb);border:1px solid transparent}
 .btn-sm{padding:4px 9px;font-size:13px;border-radius:6px}
-.content{padding:18px 22px}
 
 .panel{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;margin-bottom:14px}
 .ph{padding:11px 15px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
@@ -253,6 +253,16 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .cal-nav-btn:hover{background:var(--s2)}
 .cal-week-label{font-size:16px;font-weight:700;flex:1;text-align:center}
 .cal-today-btn{background:var(--acd);color:var(--ac);border:none;border-radius:var(--r);padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif}
+/* Cal todo sidebar */
+.cal-layout{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start}
+.cal-todo-panel{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;position:sticky;top:72px;max-height:calc(100vh - 120px);overflow-y:auto}
+.cal-todo-header{padding:10px 14px;border-bottom:1px solid var(--b1);font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace}
+.cal-todo-item{padding:8px 12px;border-bottom:1px solid var(--b1);cursor:grab;font-size:13px;font-weight:600;display:flex;align-items:flex-start;gap:8px;transition:background .1s;user-select:none}
+.cal-todo-item:last-child{border-bottom:none}
+.cal-todo-item:hover{background:var(--s2)}
+.cal-todo-item.dragging{opacity:.4}
+.cal-drop-highlight{background:var(--acd)!important;outline:2px dashed var(--ac)}
+@media(max-width:900px){.cal-layout{grid-template-columns:1fr}.cal-todo-panel{position:static;max-height:200px}}
 .cal-container{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;margin-bottom:14px}
 .cal-header-row{display:grid;grid-template-columns:64px repeat(7,1fr);border-bottom:1px solid var(--b1)}
 .cal-gutter-head{border-right:1px solid var(--b1)}
@@ -380,12 +390,15 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   .sidebar{width:260px;transform:translateX(-100%);transition:transform .22s ease;z-index:300;box-shadow:4px 0 24px rgba(0,0,0,.5)}
   .sidebar.open{transform:translateX(0)}
   .main-area{margin-left:0!important}
+  .topbar{left:0!important;padding:10px 14px!important}
   #sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:299;display:none}
   #sidebar-overlay.show{display:block}
   #menu-btn{display:flex!important}
   .detail-body{grid-template-columns:1fr!important}
-  .detail-side{display:none}
+  .detail-side{position:fixed!important;top:0;right:0;bottom:0;width:300px;transform:translateX(100%);transition:transform .22s ease;z-index:2100;overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,.6)}
+  .detail-side.open{transform:translateX(0)!important;display:flex!important;flex-direction:column}
   .detail-main{border-right:none!important}
+  #detail-side-toggle{display:flex!important}
   .three-col{grid-template-columns:1fr 1fr!important}
   .four-col{grid-template-columns:1fr 1fr!important}
   .brand-progress-grid{grid-template-columns:1fr!important}
@@ -395,8 +408,8 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 
 /* Mobile (≤ 640px) */
 @media (max-width:640px){
-  .content{padding:12px 14px!important}
-  .topbar{padding:10px 14px!important}
+  .content{padding:12px 14px!important;padding-top:68px!important}
+  .topbar{left:0!important;padding:10px 14px!important}
   .three-col{grid-template-columns:1fr!important}
   .two-col{grid-template-columns:1fr!important}
   .four-col{grid-template-columns:1fr 1fr!important}
@@ -420,8 +433,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   #detail-side-toggle{display:flex!important}
   .detail-side{position:fixed!important;top:0;right:0;bottom:0;width:300px;transform:translateX(100%);transition:transform .22s ease;z-index:2100;overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,.6)}
   .detail-side.open{transform:translateX(0)!important;display:flex!important;flex-direction:column}
-  #detail-side-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2099;display:none}
-  #detail-side-overlay.show{display:block}
+  #detail-side-overlay{display:none!important}
 }
 #ai-fab{
   position:fixed;
@@ -718,6 +730,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .ref-img-card:hover .ref-img-del{opacity:1}
 .ref-img-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed var(--b2);border-radius:var(--r);aspect-ratio:1;cursor:pointer;transition:all .12s;background:transparent;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace}
 .ref-img-add:hover{border-color:var(--ac);color:var(--ac)}
+.ref-images-grid.drag-over{outline:2px dashed var(--ac);outline-offset:4px;background:var(--acd)}
 
 .mgmt-comment-list{margin-bottom:14px}
 .mgmt-comment-item{display:flex;gap:10px;padding:11px 13px;background:var(--s2);border-radius:var(--r);margin-bottom:8px;border-left:3px solid var(--amb)}
@@ -1614,6 +1627,7 @@ function D(){
   if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=getDefault().scheduleBlocks;
   if(!Array.isArray(data.adMetrics)) data.adMetrics=getDefault().adMetrics;
   if(!Array.isArray(data.tasks)) data.tasks=[];
+  if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
 
   // Migration: ensure 'copywriting' status exists
   if(!data.statuses.find(s=>s.id==='copywriting')){
@@ -1636,8 +1650,11 @@ function D(){
 
   // Migration: sync brand fields from defaults — force full refresh of quota/templates
   const defaultBrands=getDefault().brands;
-  // Add any new brands from defaults that don't exist yet (e.g. Carmen)
+  // Only add missing default brands if they haven't been explicitly deleted by the user.
+  // We track deleted brand IDs in data.deletedBrandIds to prevent them from being re-added.
+  if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
   defaultBrands.forEach(db=>{
+    if(data.deletedBrandIds.includes(db.id)) return; // user deleted this — don't re-add
     const eb=data.brands.find(b=>b.id===db.id);
     if(!eb){
       data.brands.push(db);
@@ -1703,9 +1720,17 @@ function D(){
         const isVid=(t.type==='Video')||(t.cat==='videoAds')||(t.cat==='tiktok');
         const hualuDueStr=addWorkingDays(postingDate,isVid?-4:-3);
         const leonardDueStr=addWorkingDays(postingDate,isVid?-7:-5);
+        // Derive category from template prefix/cat — locked permanently so renaming doesn't change it
+        const inferredCat=t.cat||(
+          t.title.match(/^WP#/i)?'wallPost':
+          t.title.match(/^Ad#/i)?'videoAds':
+          t.title.match(/^TikTok#/i)?'tiktok':
+          t.title.match(/^Carousel#/i)?'carousel':
+          t.type==='Video'?'video':'carousel'
+        );
         data.contents.push({
           id:'ct'+Math.random().toString(36).slice(2,9),
-          brandId:b.id,title:pieceTitle,type:t.type,
+          brandId:b.id,title:pieceTitle,type:t.type,cat:inferredCat,
           assignees:[],statusId:'ideation',postingDate,
           driveLink:'',copywriting:'',comments:[],
           statusHistory:[{statusId:'ideation',changedBy:'system',changedAt:today2}],
@@ -1725,6 +1750,14 @@ function D(){
     if(!Array.isArray(c.assignees)) c.assignees=[];
     if(!c.dueDates) c.dueDates={};
     if(!c.pic) c.pic={};
+    // Backfill cat from title pattern for old content that doesn't have it stored
+    if(!c.cat){
+      if(c.title.match(/^WP#/i)) c.cat='wallPost';
+      else if(c.title.match(/^Ad#/i)) c.cat='videoAds';
+      else if(c.title.match(/^TikTok#/i)) c.cat='tiktok';
+      else if(c.type==='Carousel') c.cat='carousel';
+      else c.cat='video';
+    }
   });
 
   return data;
@@ -1877,17 +1910,26 @@ function closeSidebar(){
 }
 function toggleDetailSide(){
   const side=document.getElementById('detail-side');
-  const ov=document.getElementById('detail-side-overlay');
   if(!side)return;
   const isOpen=side.classList.contains('open');
-  side.classList.toggle('open',!isOpen);
-  if(ov)ov.classList.toggle('show',!isOpen);
+  if(isOpen){
+    side.classList.remove('open');
+  } else {
+    side.classList.add('open');
+    // Dismiss when clicking outside the panel
+    setTimeout(()=>document.addEventListener('click',outsideDetailSideClick,{once:true}),10);
+  }
+}
+function outsideDetailSideClick(e){
+  const side=document.getElementById('detail-side');
+  const btn=document.getElementById('detail-side-toggle');
+  if(side&&!side.contains(e.target)&&btn&&!btn.contains(e.target)){
+    side.classList.remove('open');
+  }
 }
 function closeDetailSide(){
   const side=document.getElementById('detail-side');
-  const ov=document.getElementById('detail-side-overlay');
   if(side)side.classList.remove('open');
-  if(ov)ov.classList.remove('show');
 }
 
 // ===================== NAVIGATION =====================
@@ -1939,6 +1981,7 @@ function renderSidebar(){
     {id:'team',label:'Team',icon:'<circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5"/><circle cx="12" cy="5" r="2"/><path d="M14 13c0-2-1-3.5-2-4"/>'},
     ...(isAdmin?[{id:'analytics',label:'Time Analytics',icon:'<polyline points="2 12 6 6 10 10 14 4"/><line x1="2" y1="14" x2="15" y2="14"/>'}]:[]),
     ...(isAdmin?[{id:'settings',label:'Settings',icon:'<circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M9.54 9.54l1.41 1.41M3.05 12.95l1.41-1.41M9.54 6.46l1.41-1.41"/>'}]:[]),
+    {id:'set_password',label:'Set Password',icon:'<rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/>'},
   ];
   const navHTML=pages.map(p=>{
     const active=S.page===p.id&&!S.brand;
@@ -1958,7 +2001,7 @@ function renderSidebar(){
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     ${isAdmin?`<div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>`:''}
     </div>
-    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${u.color}22;color:${u.color}">${u.init}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
+    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${u.color}22;color:${u.color}">${u.init}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
 
 function renderTopbar(){
@@ -1978,18 +2021,17 @@ function renderTopbar(){
     <button class="btn btn-ac btn-sm" onclick="openAddContentModal('${b.id}')">+ Add content</button>`;
   }else if(S.page==='dashboard'){
     const h=new Date().getHours();title=`${h<12?'Good morning':'Good afternoon'}, ${S.user.name}`;sub=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
-    actions=`${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:''}
-    <button class="btn btn-ac btn-sm" onclick="openAddContentModal(null)">+ Add content</button>`;
+    actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
   }else if(S.page==='tracker'){
     title='Content Tracker';sub=`${data.contents.length} pieces · sorted by brand & posting date`;
-    actions=`${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:''}
-    <button class="btn btn-ac btn-sm" onclick="openAddContentModal(null)">+ Add</button>`;
+    actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
   }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
   else if(S.page==='calendar'){title='Calendar';sub='Team timetable · deadlines · productivity';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button><button class="btn btn-info btn-sm" onclick="showProductivityReport()">Productivity Report</button>`;}
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
   else if(S.page==='clientpost'){const cpCount=data.contents.filter(c=>c.statusId==='client_approval').length;title='Client Post';sub=cpCount>0?`${cpCount} item${cpCount>1?'s':''} ready to post to Facebook`:'No items awaiting posting';}
   else if(S.page==='responsibilities'){title='Responsibilities';sub='Assign PIC to each workflow stage per employee';}
   else if(S.page==='team'){title='Team';sub='Workload, tasks & auto-progress';}
+  else if(S.page==='set_password'){title='Set Password';sub='Change your login password';}
   document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
 }
 
@@ -2005,7 +2047,7 @@ function renderPage(){
   try{
     if(S.user.role==='client'){root.innerHTML=S.page==='client_dashboard'?renderClientDashboard():renderClientApprovals();return;}
     if(S.brand){root.innerHTML=renderBrandPage();return;}
-    const pages={dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings};
+    const pages={dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings,set_password:renderSetPassword};
     const fn=pages[S.page];root.innerHTML=fn?fn():`<div class="empty-msg">Page not found</div>`;
     if(S.page==='calendar')initCalendarInteractions();
   }catch(e){
@@ -2091,17 +2133,19 @@ function getJobStageColor(statusId){
 }
 
 function makeTodoJobRow(c, uid, today){
-  const stageColor=getJobStageColor(c.statusId);
-  const stageLabel=getJobStageLabel(c.statusId);
-  const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
   const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
-  const taskLabel=openTask?openTask.label:'';
-  return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer">
+  const isAmendTask=openTask&&openTask.label&&(openTask.label.includes('Amendment')||openTask.label.includes('amendment'));
+  const stageColor=isAmendTask?'var(--red)':getJobStageColor(c.statusId);
+  const stageLabel=isAmendTask?'🔄 Amendment':getJobStageLabel(c.statusId);
+  const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
+  const taskLabel=openTask&&!isAmendTask?openTask.label:'';
+  const tabTarget=getDefaultTabForContent(c);
+  return `<div class="todo-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer">
     <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0;margin-top:1px"></div>
     <div style="flex:1;min-width:0">
       <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.title}">${c.title}</div>
       <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-        <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${stageColor}22;color:${stageColor};font-weight:700">${stageLabel}</span>
+        <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${isAmendTask?'var(--redd)':stageColor+'22'};color:${stageColor};font-weight:700">${stageLabel}</span>
         ${taskLabel?`<span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${taskLabel}</span>`:''}
       </div>
     </div>
@@ -2159,18 +2203,18 @@ function renderJobTodoList(){
     const monthLabel=new Date(targetMonth+'-01').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
     html+=`<div>
       <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s3);position:sticky;top:0;border-bottom:1px solid var(--b1)">
-        <span style="font-size:13px;font-weight:700;color:var(--t2)">📋 Not started yet — ${monthLabel}</span>
+        <span style="font-size:13px;font-weight:700;color:var(--t2)">💡 Ideation Queue — ${monthLabel}</span>
         <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${unstartedForMonth.length} piece${unstartedForMonth.length!==1?'s':''}</span>
       </div>
       ${unstartedForMonth.map(c=>{
         const b=getBrand(data,c.brandId);
         const isLate=c.postingDate&&c.postingDate<today;
         return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer;opacity:0.8">
-          <div style="width:10px;height:10px;border-radius:50%;background:var(--t4);flex-shrink:0;margin-top:1px;border:1.5px dashed var(--t3)"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#88878044;flex-shrink:0;margin-top:1px;border:1.5px dashed var(--t3)"></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)" title="${c.title}">${c.title}</div>
             <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
-              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:var(--s3);color:var(--t3)">Not started</span>
+              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:#88878022;color:#888780;font-weight:700">💡 Ideation</span>
               <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${b.color}18;color:${b.color}">${b.name}</span>
             </div>
           </div>
@@ -2333,11 +2377,11 @@ function renderDashboard(){
     const TYPE_ICONS={video:'🎬',wallPost:'🖼',videoAds:'📢',tiktok:'🎵',carousel:'🃏'};
     const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
       const tc=bc.filter(c=>{
-        if(k==='wallPost')return c.title.match(/^WP#/i);
-        if(k==='videoAds')return c.title.match(/^Ad#/i);
-        if(k==='tiktok')return c.title.match(/^TikTok#/i);
-        if(k==='carousel')return c.type==='Carousel'&&!c.title.match(/^Ad#/i);
-        if(k==='video')return c.type==='Video'&&!c.title.match(/^Ad#/i)&&!c.title.match(/^TikTok#/i);
+        if(k==='wallPost')return c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i));
+        if(k==='videoAds')return c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i));
+        if(k==='tiktok')return c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i));
+        if(k==='carousel')return (c.cat==='carousel')||((!c.cat)&&c.type==='Carousel'&&!c.title.match(/^Ad#/i));
+        if(k==='video')return (c.cat==='video')||((!c.cat)&&c.type==='Video'&&!c.title.match(/^Ad#/i)&&!c.title.match(/^TikTok#/i));
         return false;
       });
       const pc=tc.filter(c=>c.statusId==='posted').length;
@@ -2565,10 +2609,10 @@ function renderTracker(){
 
   // Extended type order — split Video into sub-categories by title prefix
   const QUOTA_SECTIONS=[
-    {key:'wallPost',  label:'Wall Posts',   icon:'🖼', type:'Video',   match:c=>c.title.match(/^WP#/i)},
-    {key:'videoAds',  label:'Video Ads',    icon:'📢', type:'Video',   match:c=>c.title.match(/^Ad#/i)},
-    {key:'tiktok',    label:'TikTok',       icon:'🎵', type:'Video',   match:c=>c.title.match(/^TikTok#/i)},
-    {key:'video',     label:'Videos',       icon:'🎬', type:'Video',   match:c=>c.type==='Video'&&!c.title.match(/^WP#|^Ad#|^TikTok#/i)},
+    {key:'wallPost',  label:'Wall Posts',   icon:'🖼', type:'Video',   match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i))},
+    {key:'videoAds',  label:'Video Ads',    icon:'📢', type:'Video',   match:c=>c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))},
+    {key:'tiktok',    label:'TikTok',       icon:'🎵', type:'Video',   match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))},
+    {key:'video',     label:'Videos',       icon:'🎬', type:'Video',   match:c=>(c.cat==='video')||((!c.cat)&&c.type==='Video'&&!c.title.match(/^WP#|^Ad#|^TikTok#/i))},
     {key:'carousel',  label:'Carousel',     icon:'🃏', type:'Carousel',match:c=>c.type==='Carousel'},
   ];
 
@@ -2854,8 +2898,8 @@ function renderBrandPage(){
   }
 
   // Group by category: Wall Posts (WP#) and Video Ads (Ad#, TikTok#, others)
-  const wallPosts=contents.filter(c=>c.title.match(/^WP#/i)||c.cat==='wallPost');
-  const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.title.match(/^Ad#/i)||c.title.match(/^TikTok#/i)||c.cat==='videoAds'||c.cat==='tiktok'));
+  const wallPosts=contents.filter(c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)));
+  const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.cat==='videoAds'||c.cat==='tiktok'||((!c.cat)&&(c.title.match(/^Ad#/i)||c.title.match(/^TikTok#/i)))));
   const other=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c));
 
   const stats=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-bottom:16px">
@@ -3024,91 +3068,207 @@ function renderCalendar(){
   const days=getWeekDates(S.calWeek);
   const todayStr=new Date().toISOString().split('T')[0];
   const calIsAdmin=S.user.role==='admin';
+  // Everyone only sees their own calendar
+  S.calUser=S.user.id;
 
-  // Non-admin: lock to their own view, no person selector
-  if(!calIsAdmin) S.calUser=S.user.id;
+  const HOURS_START=7, HOURS_END=22; // 7am–10pm
+  const SLOT_H=64; // px per hour
+  const totalH=(HOURS_END-HOURS_START)*SLOT_H;
 
-  const persons=[{id:'all',name:'All',init:'All',color:'#888780'},...data.users.filter(u=>u.role!=='admin'&&u.role!=='client')];
+  const personSel=`<div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:10px">📅 My Calendar — ${S.user.name}</div>`;
 
-  const personSel=calIsAdmin?`<div class="cal-person-selector">
-    <span style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-right:4px">View:</span>
-    ${persons.map(p=>{const a=S.calUser===p.id;return `<div class="cal-person-chip${a?' active':''}" style="${a?`background:${p.color}22;color:${p.color};border-color:${p.color}44`:''}" onclick="setCalUser('${p.id}')">${p.id!=='all'?`<div style="width:18px;height:18px;border-radius:50%;background:${p.color}22;color:${p.color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${p.init}</div>`:''}${p.name}</div>`;}).join('')}
-  </div>`:`<div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:10px">📅 My Calendar — ${S.user.name}</div>`;
-
-  const wLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} \u2013 ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
-  const calNav=`<div class="cal-nav">
-    <button class="cal-nav-btn" onclick="calNavWeek(-1)">\u25C0</button>
+  const wLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+  const calNav=`<div class="cal-nav" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <button class="cal-nav-btn" onclick="calNavWeek(-1)">◀</button>
     <span class="cal-week-label">${wLabel}</span>
-    <button class="cal-nav-btn" onclick="calNavWeek(1)">\u25B6</button>
+    <button class="cal-nav-btn" onclick="calNavWeek(1)">▶</button>
     <button class="cal-today-btn" onclick="calNavToday()">Today</button>
   </div>`;
 
-  const visibleUserIds=S.calUser==='all'
-    ?data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>u.id)
-    :[S.calUser];
-  const visBlocks=data.scheduleBlocks.filter(b=>S.calUser==='all'||b.userId===S.calUser);
+  const visibleUserIds=[S.calUser];
+  const visBlocks=data.scheduleBlocks.filter(b=>b.userId===S.calUser);
 
-  // Build 7-column card layout — one column per day, events stacked as readable cards
+  // ── LEONARD'S FIXED RECURRING BLOCKS ──────────────────────────────────────
+  // Generate for current week
+  const leonardUser=data.users.find(u=>u.id==='leonard');
+  const fixedBlocks=[];
+  if(visibleUserIds.includes('leonard')&&leonardUser){
+    const lc=leonardUser.color||'#3acca0';
+    days.forEach((d,di)=>{
+      const ds=d.toISOString().split('T')[0];
+      const dom=d.getDate();
+      const dow=di; // 0=Mon … 6=Sun
+      // Ads receipt — 1st of month
+      if(dom===1){
+        fixedBlocks.push({id:'fx-receipt-'+ds,userId:'leonard',date:ds,startHour:9,endHour:10,label:'📋 Ads Receipt',color:'#ff9f43',fixed:true});
+      }
+      // Customer ads report — 2nd of month
+      if(dom===2){
+        fixedBlocks.push({id:'fx-report-'+ds,userId:'leonard',date:ds,startHour:9,endHour:11,label:'📊 Customer Ads Report',color:'#5a9fff',fixed:true});
+      }
+      // Daily ads optimization — 1 hour every working day (Mon–Fri)
+      if(dow>=0&&dow<=4){
+        fixedBlocks.push({id:'fx-adsopt-'+ds,userId:'leonard',date:ds,startHour:8,endHour:9,label:'⚡ Daily Ads Optimization',color:lc,fixed:true});
+      }
+      // Work hours block Friday 8:30–17:30
+      if(dow===4){
+        fixedBlocks.push({id:'fx-work-'+ds,userId:'leonard',date:ds,startHour:8,endHour:18,label:'🏢 Work Day (8:30–5:30)',color:'#888780',fixed:true,isBackground:true});
+      }
+      // Shooting block — show if brand has a shooting date matching this week
+      data.brands.forEach(b=>{
+        (b.shootingDates||[]).forEach(sd=>{
+          if(sd===ds){
+            fixedBlocks.push({id:'fx-shoot-'+ds+'-'+b.id,userId:'leonard',date:ds,startHour:9,endHour:18,label:`🎬 Shooting — ${b.name}`,color:'#9a7aff',fixed:true});
+          }
+        });
+      });
+    });
+    // Add upcoming shooting on 18/5 if in range
+    const mayShoot='2026-05-18';
+    if(days.some(d=>d.toISOString().split('T')[0]===mayShoot)){
+      if(!fixedBlocks.find(b=>b.date===mayShoot&&b.label.includes('Shooting'))){
+        fixedBlocks.push({id:'fx-shoot-'+mayShoot,userId:'leonard',date:mayShoot,startHour:9,endHour:18,label:'🎬 Shooting Day',color:'#9a7aff',fixed:true});
+      }
+    }
+  }
+
+  // ── ALL-DAY EVENTS (posting deadlines, due dates) ──────────────────────────
+  const allDayByDay=days.map((d,di)=>{
+    const ds=d.toISOString().split('T')[0];
+    const pills=[];
+    data.contents.forEach(c=>{
+      visibleUserIds.forEach(uid=>{
+        const key=uid==='hualu'?'hualu':uid==='leonard'?'leonard':'jack';
+        if(c.dueDates&&c.dueDates[key]===ds){
+          const u=getUser(data,uid);const st=getStatus(data,c.statusId);
+          pills.push(`<div class="cal-event-pill" style="background:${st.color}22;color:${st.color}" onclick="openContentDetail('${c.id}')" title="${u.name}: ${c.title}">${u.init}: ${c.title.slice(0,18)}…</div>`);
+        }
+      });
+      if(c.postingDate===ds){
+        const b=getBrand(data,c.brandId);
+        pills.push(`<div class="cal-event-pill" style="background:${b.color}22;color:${b.color}" onclick="openContentDetail('${c.id}')" title="Post: ${c.title}">📅 ${c.title.slice(0,16)}…</div>`);
+      }
+    });
+    return pills;
+  });
+  const allDayRow=`<div class="cal-allday-row">
+    <div class="cal-allday-gutter">all-day</div>
+    ${allDayByDay.map((pills,di)=>`<div class="cal-allday-cell">${pills.join('')}</div>`).join('')}
+  </div>`;
+
+  // ── TIME GRID ─────────────────────────────────────────────────────────────
+  const timeLabels=Array.from({length:HOURS_END-HOURS_START},(_,i)=>{
+    const h=HOURS_START+i;
+    const l=h===0?'12 AM':h<12?`${h} AM`:h===12?'12 PM':`${h-12} PM`;
+    return `<div class="cal-time-slot"><span class="cal-time-label">${l}</span></div>`;
+  }).join('');
+
   const dayCols=days.map((d,di)=>{
     const ds=d.toISOString().split('T')[0];
     const isToday=ds===todayStr;
-
-    // Due/posting content pills
-    const pills=[];
-    data.contents.forEach(c=>{
-      if(c.dueDates){
-        visibleUserIds.forEach(uid=>{
-          const key=uid==='hualu'?'hualu':uid==='leonard'?'leonard':'jack';
-          if(c.dueDates[key]===ds){
-            const u=getUser(data,uid);const st=getStatus(data,c.statusId);
-            pills.push(`<div onclick="openContentDetail('${c.id}')" title="${u.name}: ${c.title}" style="cursor:pointer;font-size:13px;font-weight:600;padding:5px 9px;border-radius:5px;background:${st.color}22;color:${st.color};border-left:3px solid ${st.color};margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.init}: ${c.title.slice(0,22)}${c.title.length>22?'\u2026':''}</div>`);
-          }
-        });
-      }
-      if(c.postingDate===ds){
-        const b=getBrand(data,c.brandId);
-        pills.push(`<div onclick="openContentDetail('${c.id}')" style="cursor:pointer;font-size:13px;font-weight:600;padding:5px 9px;border-radius:5px;background:${b.color}22;color:${b.color};border-left:3px solid ${b.color};margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\uD83D\uDCC5 ${c.title.slice(0,22)}${c.title.length>22?'\u2026':''}</div>`);
-      }
-    });
-
-    // Schedule block cards — fully readable, vertically stacked
-    const dayBlocks=visBlocks.filter(b=>b.dayOfWeek===di).sort((a,b)=>a.startHour-b.startHour);
-    const blockCards=dayBlocks.map(b=>{
-      const u=getUser(data,b.userId);
-      const sl=b.startHour<12?`${b.startHour}am`:b.startHour===12?'12pm':`${b.startHour-12}pm`;
-      const el=b.endHour<12?`${b.endHour}am`:b.endHour===12?'12pm':`${b.endHour-12}pm`;
-      const dur=b.endHour-b.startHour;
-      return `<div onclick="openBlockDetail('${b.id}')" style="cursor:pointer;padding:11px 13px;border-radius:8px;background:${b.color}22;border-left:4px solid ${b.color};margin-bottom:8px;transition:opacity .12s" onmouseenter="this.style.opacity='.72'" onmouseleave="this.style.opacity='1'">
-        <div style="font-size:15px;font-weight:700;color:${b.color};margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.label}</div>
-        <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:5px">${sl}\u2013${el} (${dur}h)</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div style="width:18px;height:18px;border-radius:50%;background:${u.color}22;color:${u.color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${u.init}</div>
-          <span style="font-size:13px;color:var(--t2)">${u.name}</span>
-        </div>
-      </div>`;
+    // bg click slots
+    const bgSlots=Array.from({length:HOURS_END-HOURS_START},(_,i)=>{
+      const h=HOURS_START+i;
+      return `<div class="cal-day-bg-slot" style="height:${SLOT_H}px"
+        ondragover="event.preventDefault();this.classList.add('cal-drop-highlight')"
+        ondragleave="this.classList.remove('cal-drop-highlight')"
+        ondrop="calDropTodo(event,'${ds}',${h},this)"
+        onclick="openAddBlockModalDate('${ds}',${h})"></div>`;
     }).join('');
 
-    const addBtn=`<button onclick="openAddBlockModal(${di},9)" style="width:100%;padding:8px;background:transparent;border:1px dashed var(--b2);border-radius:6px;color:var(--t4);font-size:13px;font-family:'Syne',sans-serif;cursor:pointer;transition:all .12s;margin-top:4px" onmouseenter="this.style.borderColor='var(--ac)';this.style.color='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t4)'">+ Add block</button>`;
+    // Timed blocks from scheduleBlocks — recurring (dayOfWeek) or date-specific
+    const recurBlocks=visBlocks.filter(b=>b.dayOfWeek===di&&!b.date);
+    const dateSpecificBlocks=data.scheduleBlocks.filter(b=>b.date===ds&&visibleUserIds.includes(b.userId));
+    // Fixed blocks for this specific date
+    const dateFixed=fixedBlocks.filter(b=>b.date===ds);
 
-    return `<div style="background:${isToday?'rgba(200,240,74,0.04)':'var(--s1)'};border-right:1px solid var(--b1);display:flex;flex-direction:column">
-      <div style="padding:12px 10px 10px;border-bottom:1px solid var(--b1);background:${isToday?'rgba(200,240,74,0.08)':'var(--s2)'};flex-shrink:0">
-        <div style="font-size:12px;color:${isToday?'var(--ac)':'var(--t3)'};font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${DAY_NAMES[di]}</div>
-        <div style="font-size:22px;font-weight:700;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;${isToday?'background:var(--ac);color:#0c0c0e':'color:var(--t1)'}">${d.getDate()}</div>
-      </div>
-      ${pills.length?`<div style="padding:8px 10px 4px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2)">${pills.join('')}</div>`:''}
-      <div style="padding:10px;flex:1;overflow-y:auto;min-height:120px">
-        ${blockCards}
-        ${!dayBlocks.length&&!pills.length?`<div style="font-size:13px;color:var(--t4);font-family:'DM Mono',monospace;text-align:center;padding:24px 8px">—</div>`:''}
-        ${addBtn}
-      </div>
+    // All blocks for this day combined
+    const allDayBlocks=[
+      ...recurBlocks.map(b=>({...b,_fixed:false})),
+      ...dateSpecificBlocks.map(b=>({...b,_fixed:false})),
+      ...dateFixed.map(b=>({...b,_fixed:true}))
+    ].sort((a,b)=>a.startHour-b.startHour);
+
+    // Overlap column assignment — greedy algorithm
+    // Each block gets a column index so overlapping blocks sit side-by-side
+    const cols=[]; // cols[i] = endHour of last block in that column
+    const blockCols=allDayBlocks.map(b=>{
+      let col=cols.findIndex(endH=>endH<=b.startHour);
+      if(col===-1){col=cols.length;cols.push(0);}
+      cols[col]=b.endHour;
+      return col;
+    });
+    const totalCols=Math.max(1,cols.length);
+
+    const renderBlock=(b,isFixed,colIdx,numCols)=>{
+      const u=getUser(data,b.userId);
+      const top=(b.startHour-HOURS_START)*SLOT_H;
+      const h=Math.max(0.5,b.endHour-b.startHour)*SLOT_H;
+      const tLabel=`${b.startHour<12?b.startHour+'am':b.startHour===12?'12pm':(b.startHour-12)+'pm'}–${b.endHour<12?b.endHour+'am':b.endHour===12?'12pm':(b.endHour-12)+'pm'}`;
+      const isContentBlock=!!b.contentId;
+      // Side-by-side columns: divide width equally, leave 2px gap
+      const gutter=2;
+      const pct=100/numCols;
+      const leftPct=colIdx*pct;
+      return `<div class="cal-block" style="top:${top}px;height:${h}px;left:calc(${leftPct}% + ${colIdx===0?4:gutter}px);right:calc(${100-(leftPct+pct)}% + ${colIdx===numCols-1?4:gutter}px);background:${b.color}22;border-left:3px solid ${b.color};${isFixed?'opacity:.88':''}${isContentBlock?';border-style:solid;border-width:1px 1px 1px 3px;border-color:'+b.color+'44 '+b.color+'44 '+b.color+'44 '+b.color:''}"
+        onclick="${isFixed?`showFixedBlockInfo('${b.label.replace(/'/g,'\\\'').replace(/"/g,'')}','${tLabel}','${b.userId}')`:('openBlockDetail(\''+b.id+'\')')}" title="${b.label} (${tLabel})">
+        <div class="cal-block-label" style="color:${b.color};font-size:12px">${isFixed?'🔒 ':isContentBlock?'📋 ':''} ${b.label}</div>
+        <div class="cal-block-time" style="color:${b.color}99;font-size:11px">${tLabel}</div>
+      </div>`;
+    };
+
+    const blockHtml=allDayBlocks.map((b,i)=>renderBlock(b,b._fixed,blockCols[i],totalCols)).join('');
+
+    return `<div class="cal-day-col" id="cal-col-${di}" style="height:${totalH}px;background:${isToday?'rgba(200,240,74,0.03)':'transparent'}">
+      ${bgSlots}
+      ${blockHtml}
     </div>`;
   }).join('');
 
-  const weekGrid=`<div style="display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
-    ${dayCols}
+  const grid=`<div class="cal-container" id="cal-main">
+    <div class="cal-header-row">
+      <div class="cal-gutter-head"></div>
+      ${days.map((d,di)=>{const ds=d.toISOString().split('T')[0];const isT=ds===todayStr;return`<div class="cal-day-head" style="${isT?'background:rgba(200,240,74,0.06)':''}"><div class="cal-day-name">${DAY_NAMES[di]}</div><div class="cal-day-num${isT?' today':''}">${d.getDate()}</div></div>`;}).join('')}
+    </div>
+    ${allDayRow}
+    <div class="cal-body" id="cal-body">
+      <div class="cal-time-col">${timeLabels}</div>
+      ${dayCols}
+    </div>
   </div>`;
 
-  return personSel+calNav+weekGrid;
+  // ── TODO LIST SIDEBAR ──────────────────────────────────────────────────────
+  const myJobs=getActiveJobsForUser(data,S.user.id);
+  const unstarted=S.user.id==='leonard'
+    ? data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10)
+    : [];
+  const todoItems=[...myJobs,...unstarted].slice(0,20);
+  const todoListHTML=todoItems.length
+    ? todoItems.map(c=>{
+        const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+        return `<div class="cal-todo-item" draggable="true" data-cid="${c.id}"
+          ondragstart="calTodoDragStart(event,'${c.id}')"
+          ondragend="this.classList.remove('dragging')"
+          onclick="openContentDetail('${c.id}')">
+          <div style="width:8px;height:8px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:3px"></div>
+          <div style="min-width:0">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1)">${c.title.slice(0,22)}${c.title.length>22?'…':''}</div>
+            <div style="font-size:11px;color:${b.color};font-family:'DM Mono',monospace">${b.name}</div>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div style="padding:14px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;text-align:center">🎉 All clear!</div>`;
+
+  const todoPanel=`<div class="cal-todo-panel">
+    <div class="cal-todo-header">📋 To-Do — drag to calendar</div>
+    ${todoListHTML}
+  </div>`;
+
+  return `${personSel}${calNav}
+  <div class="cal-layout">
+    ${todoPanel}
+    <div>${grid}</div>
+  </div>`;
 }
 function initCalendarInteractions(){
   try{
@@ -3120,6 +3280,101 @@ function initCalendarInteractions(){
   }catch(e){console.warn('Calendar init error:',e);}
 }
 function getWeekDates(offset){const today=new Date();const dow=today.getDay();const mon=new Date(today);mon.setDate(today.getDate()-(dow===0?6:dow-1)+offset*7);return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});}
+function calTodoDragStart(e, contentId){
+  e.dataTransfer.setData('text/plain', contentId);
+  e.currentTarget.classList.add('dragging');
+}
+
+function calDropTodo(e, dateStr, hour, slotEl){
+  e.preventDefault();
+  slotEl.classList.remove('cal-drop-highlight');
+  const contentId=e.dataTransfer.getData('text/plain');
+  if(!contentId) return;
+  const data=D();
+  const c=data.contents.find(x=>x.id===contentId);
+  if(!c) return;
+  const b=getBrand(data,c.brandId);
+  const st=getStatus(data,c.statusId);
+  const endHour=Math.min(hour+2, HOURS_RANGE_END);
+  const hourFmt=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+  const hourOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;return`<option value="${h}" ${h===hour?'selected':''}>${hourFmt(h)}</option>`;}).join('');
+  const endOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;return`<option value="${h}" ${h===endHour?'selected':''}>${hourFmt(h)}</option>`;}).join('');
+  openModal(`<div class="modal-title">📌 Add to Calendar<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:${st.color}18;border-radius:var(--r);margin-bottom:14px;border-left:3px solid ${st.color}">
+      <div style="width:8px;height:8px;border-radius:50%;background:${b.color};flex-shrink:0"></div>
+      <div>
+        <div style="font-size:15px;font-weight:700">${c.title}</div>
+        <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${b.name} · ${st.name}</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:12px">📅 ${dateStr}</div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start time</label><select class="form-select" id="cdrop-start">${hourOpts}</select></div>
+      <div><label class="form-label">End time</label><select class="form-select" id="cdrop-end">${endOpts}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="calDropConfirm('${contentId}','${dateStr}')">📌 Add to Calendar</button>
+    </div>`);
+}
+
+function calDropConfirm(contentId, dateStr){
+  const data=D();
+  const c=data.contents.find(x=>x.id===contentId);
+  if(!c) return;
+  const startHour=parseInt(document.getElementById('cdrop-start').value);
+  const endHour=parseInt(document.getElementById('cdrop-end').value);
+  if(endHour<=startHour){alert('End must be after start');return;}
+  const b=getBrand(data,c.brandId);
+  const st=getStatus(data,c.statusId);
+  // Create a schedule block for this time slot
+  if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=[];
+  data.scheduleBlocks.push({
+    id:'sb'+uid(),
+    userId:S.user.id,
+    date:dateStr,
+    startHour,
+    endHour,
+    label:c.title,
+    color:st.color||b.color,
+    contentId:c.id  // link back to the content piece
+  });
+  save(data);closeModal();renderPage();
+  showAIToast(`📌 "${c.title}" added to calendar at ${startHour<12?startHour+'am':startHour===12?'12pm':(startHour-12)+'pm'}`);
+}
+
+function openAddBlockModalDate(dateStr, startH){
+  const data=D();
+  const hourOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===startH?'selected':''}>${l}</option>`;}).join('');
+  const endOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===(startH+2)?'selected':''}>${l}</option>`;}).join('');
+  const userOpts=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<option value="${u.id}" ${u.id===S.user.id?'selected':''}>${u.name}</option>`).join('');
+  openModal(`<div class="modal-title">+ Add Block — ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
+    <div class="form-row"><label class="form-label">Person</label><select class="form-select" id="sb-user">${userOpts}</select></div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start</label><select class="form-select" id="sb-start">${hourOpts}</select></div>
+      <div><label class="form-label">End</label><select class="form-select" id="sb-end">${endOpts}</select></div>
+    </div>
+    <div class="form-row"><label class="form-label">Color</label>
+      <input type="color" id="sb-color" value="#3acca0" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBlockDate('${dateStr}')">Add block</button></div>`);
+}
+const HOURS_RANGE_START=7,HOURS_RANGE_END=22;
+
+function saveBlockDate(dateStr){
+  const label=document.getElementById('sb-label').value.trim();if(!label){alert('Enter a label');return;}
+  const userId=document.getElementById('sb-user').value;
+  const startHour=parseInt(document.getElementById('sb-start').value);
+  const endHour=parseInt(document.getElementById('sb-end').value);
+  const color=document.getElementById('sb-color')?.value||getUser(D(),userId).color;
+  if(endHour<=startHour){alert('End must be after start');return;}
+  const data=D();
+  // Store date-specific blocks with a date field rather than dayOfWeek
+  data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color});
+  save(data);closeModal();renderPage();
+}
+
 function setCalUser(id){S.calUser=id;renderPage();}
 function calNavWeek(d){S.calWeek+=d;renderPage();}
 function calNavToday(){S.calWeek=0;renderPage();}
@@ -3426,6 +3681,95 @@ function saveSocialConfig(obj){
   localStorage.setItem('uspify_social',JSON.stringify({...cur,...obj}));
 }
 
+function renderSetPassword(){
+  // Any logged-in user can change their own password
+  return `<div style="max-width:480px">
+    <div class="panel">
+      <div class="ph">
+        <div style="width:28px;height:28px;background:var(--acd);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">🔑</div>
+        <div><div class="ph-title">Change Password</div><div class="ph-sub">Update your login password</div></div>
+      </div>
+      <div class="pb">
+        <div class="form-row">
+          <label class="form-label">Current Password</label>
+          <input class="form-input" id="sp-current" type="password" placeholder="Your current password" autocomplete="current-password">
+        </div>
+        <div class="form-row">
+          <label class="form-label">New Password</label>
+          <input class="form-input" id="sp-new" type="password" placeholder="New password (min 4 chars)" autocomplete="new-password">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Confirm New Password</label>
+          <input class="form-input" id="sp-confirm" type="password" placeholder="Re-enter new password" autocomplete="new-password">
+        </div>
+        <div id="sp-err" style="font-size:13px;color:var(--red);font-family:'DM Mono',monospace;min-height:16px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ac" onclick="saveUserPassword()">🔒 Update Password</button>
+        </div>
+      </div>
+    </div>
+    ${S.user.role==='admin'?`
+    <div class="panel" style="margin-top:16px">
+      <div class="ph">
+        <div style="width:28px;height:28px;background:var(--redd);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">👥</div>
+        <div><div class="ph-title">Reset Team Member Password</div><div class="ph-sub">Admin: set password for any user</div></div>
+      </div>
+      <div class="pb">
+        <div class="form-row">
+          <label class="form-label">Team Member</label>
+          <select class="form-select" id="sp-admin-user">
+            ${D().users.filter(u=>u.id!==S.user.id).map(u=>`<option value="${u.id}">${u.name} (${u.role})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">New Password for that user</label>
+          <input class="form-input" id="sp-admin-pass" type="password" placeholder="New password">
+        </div>
+        <div id="sp-admin-err" style="font-size:13px;color:var(--red);font-family:'DM Mono',monospace;min-height:16px;margin-bottom:8px"></div>
+        <button class="btn btn-danger" onclick="adminResetPassword()">⚠ Reset Password</button>
+      </div>
+    </div>`:``}
+  </div>`;
+}
+
+function saveUserPassword(){
+  const cur=document.getElementById('sp-current')?.value.trim();
+  const nw=document.getElementById('sp-new')?.value.trim();
+  const cf=document.getElementById('sp-confirm')?.value.trim();
+  const err=document.getElementById('sp-err');
+  if(!cur||!nw||!cf){if(err)err.textContent='Please fill in all fields.';return;}
+  if(nw.length<4){if(err)err.textContent='New password must be at least 4 characters.';return;}
+  if(nw!==cf){if(err)err.textContent='New passwords do not match.';return;}
+  const data=D();
+  const user=data.users.find(u=>u.id===S.user.id);
+  if(!user){if(err)err.textContent='User not found.';return;}
+  if(user.pass!==cur){if(err)err.textContent='Current password is incorrect.';return;}
+  user.pass=nw;
+  S.user=user;
+  save(data);
+  if(err){err.style.color='var(--ac)';err.textContent='✓ Password updated successfully!';}
+  document.getElementById('sp-current').value='';
+  document.getElementById('sp-new').value='';
+  document.getElementById('sp-confirm').value='';
+  showAIToast('🔒 Password updated!');
+}
+
+function adminResetPassword(){
+  const userId=document.getElementById('sp-admin-user')?.value;
+  const newPass=document.getElementById('sp-admin-pass')?.value.trim();
+  const err=document.getElementById('sp-admin-err');
+  if(!userId||!newPass){if(err)err.textContent='Please select a user and enter a new password.';return;}
+  if(newPass.length<4){if(err)err.textContent='Password must be at least 4 characters.';return;}
+  const data=D();
+  const user=data.users.find(u=>u.id===userId);
+  if(!user){if(err)err.textContent='User not found.';return;}
+  user.pass=newPass;
+  save(data);
+  if(err){err.style.color='var(--ac)';err.textContent=`✓ Password for ${user.name} reset successfully!`;}
+  document.getElementById('sp-admin-pass').value='';
+  showAIToast(`🔒 Password for ${user.name} reset!`);
+}
+
 function renderSettings(){
   if(S.user?.role!=='admin') return '<div class="empty-msg">Admin only.</div>';
   const s=getSocialConfig();
@@ -3650,8 +3994,8 @@ function renderAnalytics(){
 
 function renderTeam(){
   const data=D();
-  const staff=data.users.filter(u=>u.role!=='client');
   const isAdmin=S.user.role==='admin';
+  const staff=data.users.filter(u=>u.role!=='client');
 
   const STAGE_LABELS={
     ideation:'💡 Ideation',senior_approval_ideation:'✅ Script Review',design:'🎨 Design',
@@ -3663,7 +4007,16 @@ function renderTeam(){
 
   const cards=staff.map(u=>{
     // Find all active content for this user:
-    const allRelevant=getActiveJobsForUser(data,u.id);
+    let allRelevant=getActiveJobsForUser(data,u.id);
+
+    // content_creator (e.g. Leonard) is the start of the workflow — include ALL unstarted
+    // content (ideation, unassigned, no open tasks) so his card mirrors his full to-do list.
+    if(u.role==='content_creator'){
+      const unstarted=data.contents.filter(c=>
+        isUnstartedContent(c)&&!allRelevant.some(r=>r.id===c.id)
+      );
+      allRelevant=[...allRelevant,...unstarted];
+    }
 
     const byBrand={};
     allRelevant.forEach(c=>{
@@ -3686,10 +4039,16 @@ function renderTeam(){
         const itemRows=items.map(({c,task})=>{
           const prog=getProgressForContent(c);
           const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
-          return `<div class="task-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer;padding-left:8px;border-left:2px solid var(--b2);margin-bottom:4px">
+          const isTaskKind=c.jobKind==='task';
+          const isAmendTask=task&&task.label&&(task.label.includes('Amendment')||task.label.includes('amendment'));
+          const borderColor=isTaskKind?'var(--pur)':isAmendTask?'var(--red)':'var(--b2)';
+          const tabTarget=getDefaultTabForContent(c);
+          return `<div class="task-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer;padding-left:8px;border-left:2px solid ${borderColor};margin-bottom:4px">
             <div class="task-check${c.statusId==='posted'?' done':''}"></div>
+            ${isTaskKind?`<span style="font-size:10px;font-weight:700;color:var(--pur);background:var(--purd);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">TASK</span>`:''}
+            ${isAmendTask?`<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--redd);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">🔄 AMEND</span>`:''}
             <span class="task-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.title.slice(0,30)}${c.title.length>30?'…':''}</span>
-            ${progressBar(prog,'var(--t3)',60)}
+            ${!isTaskKind?progressBar(prog,'var(--t3)',60):''}
             <span class="task-due${lateClass?' late':''}" style="font-size:12px;min-width:44px;text-align:right">${fmt(c.postingDate)||'—'}</span>
           </div>`;
         }).join('');
@@ -3887,35 +4246,95 @@ function openAddJobModal(assigneeId){
   const bOpts=data.brands.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
   const stOpts=data.statuses.filter(s=>!s.isAmendment).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   openModal(`<div class="modal-title">➕ Add Job for ${u.name}<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Content Title</label><input class="form-input" id="aj-title" placeholder="e.g. Carousel #4 — New Product"></div>
-    <div class="form-row-2">
-      <div><label class="form-label">Brand</label><select class="form-select" id="aj-brand">${bOpts}</select></div>
-      <div><label class="form-label">Type</label><select class="form-select" id="aj-type"><option value="Carousel">Carousel</option><option value="Video">Video</option></select></div>
+    <div class="form-row">
+      <label class="form-label">Job Type</label>
+      <div style="display:flex;gap:8px">
+        <button id="ajkind-content" class="btn btn-ac btn-sm" style="flex:1" onclick="setAddJobKind('content')">📄 Content</button>
+        <button id="ajkind-task" class="btn btn-ghost btn-sm" style="flex:1" onclick="setAddJobKind('task')">✅ Task</button>
+      </div>
+      <input type="hidden" id="aj-kind" value="content">
     </div>
-    <div class="form-row-2">
-      <div><label class="form-label">Starting Status</label><select class="form-select" id="aj-status">${stOpts}</select></div>
-      <div><label class="form-label">Posting Date</label><input class="form-input" id="aj-date" type="date"></div>
+    <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="aj-title" placeholder="e.g. Carousel #4 — New Product"></div>
+    <div id="aj-content-fields">
+      <div class="form-row-2">
+        <div><label class="form-label">Brand</label><select class="form-select" id="aj-brand">${bOpts}</select></div>
+        <div><label class="form-label">Type</label><select class="form-select" id="aj-type"><option value="Carousel">Carousel</option><option value="Video">Video</option></select></div>
+      </div>
+      <div class="form-row-2">
+        <div><label class="form-label">Starting Status</label><select class="form-select" id="aj-status">${stOpts}</select></div>
+        <div><label class="form-label">Posting Date</label><input class="form-input" id="aj-date" type="date"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Notes / Brief</label><textarea class="form-textarea" id="aj-notes" placeholder="Brief description of the job..." style="min-height:70px"></textarea></div>
     </div>
-    <div class="form-row"><label class="form-label">Notes / Brief</label><textarea class="form-textarea" id="aj-notes" placeholder="Brief description of the job..." style="min-height:70px"></textarea></div>
+    <div id="aj-task-fields" style="display:none">
+      <div class="form-row"><label class="form-label">Due Date</label><input class="form-input" id="aj-task-date" type="date"></div>
+      <div class="form-row"><label class="form-label">Task Description</label><textarea class="form-textarea" id="aj-task-desc" placeholder="Describe what needs to be done..." style="min-height:100px"></textarea></div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-ac" onclick="saveAddJob('${assigneeId}')">➕ Assign Job</button>
     </div>`,null,'wide');
 }
 
+function setAddJobKind(kind){
+  document.getElementById('aj-kind').value=kind;
+  const contentBtn=document.getElementById('ajkind-content');
+  const taskBtn=document.getElementById('ajkind-task');
+  const contentFields=document.getElementById('aj-content-fields');
+  const taskFields=document.getElementById('aj-task-fields');
+  if(kind==='content'){
+    contentBtn.className='btn btn-ac btn-sm';contentBtn.style.flex='1';
+    taskBtn.className='btn btn-ghost btn-sm';taskBtn.style.flex='1';
+    contentFields.style.display='';taskFields.style.display='none';
+  } else {
+    taskBtn.className='btn btn-ac btn-sm';taskBtn.style.flex='1';
+    contentBtn.className='btn btn-ghost btn-sm';contentBtn.style.flex='1';
+    contentFields.style.display='none';taskFields.style.display='';
+  }
+}
+
 function saveAddJob(assigneeId){
   const title=document.getElementById('aj-title').value.trim();
   if(!title){alert('Please enter a title.');return;}
+  const kind=document.getElementById('aj-kind')?.value||'content';
+  const data=D();
+  const today=new Date().toISOString().split('T')[0];
+  const newId='ct'+uid();
+
+  if(kind==='task'){
+    // Task: lightweight entry — no brand workflow, just a to-do with description
+    const desc=document.getElementById('aj-task-desc')?.value.trim()||'';
+    const dueDate=document.getElementById('aj-task-date')?.value||'';
+    // Find first brand as placeholder (tasks still need a brandId for data structure)
+    const brandId=data.brands[0]?.id||'unknown';
+    const newTask={
+      id:newId,brandId,title,type:'Task',
+      assignees:[assigneeId],
+      statusId:'ideation',
+      postingDate:dueDate,
+      driveLink:'',copywriting:'',
+      jobKind:'task',
+      taskDescription:desc,
+      comments:desc?[{id:'cm'+uid(),userId:S.user.id,text:`📋 Task: ${desc}`,type:'general',createdAt:today}]:[],
+      statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
+      dueDates:{},
+      workflowTasks:[{id:'wt'+uid(),assigneeId,status:'open',statusId:'ideation',label:title,openedAt:today}],
+    };
+    data.contents.push(newTask);
+    save(data);closeModal();render();
+    showAIToast(`✅ Task "${title}" assigned to ${data.users.find(u=>u.id===assigneeId)?.name}`);
+    return;
+  }
+
+  // Content job (original behaviour)
   const brandId=document.getElementById('aj-brand').value;
   const type=document.getElementById('aj-type').value;
   const statusId=document.getElementById('aj-status').value;
   const postingDate=document.getElementById('aj-date').value;
   const notes=document.getElementById('aj-notes').value.trim();
-  const data=D();
-  const today=new Date().toISOString().split('T')[0];
-  const newId='ct'+uid();
   const newContent={
     id:newId,brandId,title,type,
+    jobKind:'content',
     assignees:[assigneeId],
     statusId,
     postingDate,
@@ -4072,11 +4491,11 @@ function renderClientDashboard(){
 
   const quotaRows=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
     const typePosted=contents.filter(c=>c.statusId==='posted'&&(
-      k==='wallPost'?c.title.match(/^WP#/i):
-      k==='videoAds'?c.title.match(/^Ad#/i):
-      k==='tiktok'?c.title.match(/^TikTok#/i):
-      k==='carousel'?c.type==='Carousel':
-      c.type==='Video'&&!c.title.match(/^Ad#|^TikTok#/i)
+      k==='wallPost'?(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i))):
+      k==='videoAds'?(c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))):
+      k==='tiktok'?(c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))):
+      k==='carousel'?(c.cat==='carousel'||((!c.cat)&&c.type==='Carousel')):
+      c.cat==='video'||((!c.cat)&&c.type==='Video'&&!c.title.match(/^Ad#|^TikTok#/i))
     )).length;
     const pct=v>0?Math.round(typePosted/v*100):0;
     const left=Math.max(0,v-typePosted);
@@ -4544,14 +4963,45 @@ function saveContentTitle(id, newTitle){
   showAIToast('✓ Renamed to "'+newTitle+'"');
 }
 
-function openContentDetail(id){
+function openContentDetail(id, forceTab){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const isClient=S.user.role==='client';
   if(isClient){openClientContentDetail(id);return;}
-  renderDetailPage(id);
+  // Auto-dismiss amendment notification for current user when they open the item
+  const uid=S.user.id;
+  const hasAmend=(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
+  if(hasAmend){
+    if(!c.amendNotifDismissed)c.amendNotifDismissed={};
+    c.amendNotifDismissed[uid]=true;
+    save(data);
+    renderTopbar(); // update bell count
+  }
+  renderDetailPage(id, forceTab);
 }
 
-function renderDetailPage(id){
+function getDefaultTabForContent(c){
+  // Type-aware tab mapping — carousel has dp-design, video has dp-video/dp-shoot
+  const isVideo=c.type==='Video';
+  const map={
+    'ideation':'dp-ideation',
+    'script':'dp-copy',
+    'design':'dp-design',
+    'shoot': isVideo?'dp-shoot':'dp-ideation',
+    'video_editing': isVideo?'dp-video':'dp-design',
+    'copywriting':'dp-copy',
+    'senior_approval':'dp-copy',
+    'senior_approval_ideation':'dp-ideation',
+    'senior_approval_video': isVideo?'dp-video':'dp-design',
+    'senior_approval_copy':'dp-copy',
+    'client_approval':'dp-comments',
+    'posted':'dp-history',
+    'copy_amendment':'dp-copy',
+    'design_amendment': isVideo?'dp-video':'dp-design',
+  };
+  return map[c.statusId]||'dp-ideation';
+}
+
+function renderDetailPage(id, forceTab){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
   const isAdmin=S.user.role==='admin';
@@ -4596,16 +5046,39 @@ function renderDetailPage(id){
   const historyHTML=(c.statusHistory||[]).map(h=>{const hst=getStatus(data,h.statusId);const hu=getUser(data,h.changedBy);return`<div class="history-item"><div class="history-dot" style="background:${hst.color}"></div><span class="history-status" style="color:${hst.color}">${hst.name}</span><div class="history-line"></div><span class="history-by">${hu.name}</span><span class="history-time">${fmt(h.changedAt)}</span></div>`;}).join('');
   const statusBtns=isAdmin?data.statuses.map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
 
-  // Smart default tab based on current status
-  const STATUS_DEFAULT_TAB={
-    'ideation':'dp-ideation','script':'dp-copy',
-    'design':'dp-design','shoot':'dp-shoot','video_editing':'dp-video',
-    'copywriting':'dp-copy','senior_approval':'dp-copy','senior_approval_ideation':'dp-ideation','senior_approval_video':'dp-video','senior_approval_copy':'dp-copy','client_approval':'dp-comments','posted':'dp-history',
-    'copy_amendment':'dp-copy','design_amendment':'dp-video',
-  };
-  const defaultTab = STATUS_DEFAULT_TAB[c.statusId]||'dp-ideation';
+  // Smart default tab — type-aware, supports forceTab override
+  const defaultTab = forceTab || getDefaultTabForContent(c);
   const isVideoType = c.type==='Video';
 
+  // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
+  if(c.jobKind==='task'){
+    const isDone=c.taskDone||c.statusId==='posted';
+    document.getElementById('detail-main').innerHTML=`
+      <div class="panel" style="margin-bottom:0">
+        <div class="ph" style="gap:10px">
+          <span style="font-size:22px">${isDone?'✅':'📋'}</span>
+          <div>
+            <div class="ph-title" style="${isDone?'text-decoration:line-through;color:var(--t3)':''}">${c.title}</div>
+            <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${isDone?`Completed ${c.taskDoneAt?'on '+fmt(c.taskDoneAt):''}`:c.postingDate?'Due '+fmt(c.postingDate):''}</div>
+          </div>
+        </div>
+        ${c.taskDescription?`<div class="pb"><div style="font-size:15px;line-height:1.7;color:var(--t1)">${c.taskDescription}</div></div>`:''}
+      </div>
+      ${isDone?'':`<div style="margin-top:16px">
+        <button class="btn btn-ac" style="width:100%;padding:12px;font-size:16px" onclick="markTaskDone('${id}')">✅ Mark as Done</button>
+      </div>`}
+      <div style="margin-top:20px;border-top:1px solid var(--b1);padding-top:16px">
+        <div style="font-size:13px;font-weight:700;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace">Comments</div>
+        <div>${commentsHTML||`<div class="empty-msg" style="padding:10px 0">No comments yet</div>`}</div>
+        <div style="margin-top:12px">
+          <textarea class="form-textarea" id="comment-input-${id}" placeholder="Add a comment..." style="min-height:70px;font-size:15px"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px">
+            <button class="btn btn-ac" onclick="saveComment('${id}')">Add comment</button>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
   document.getElementById('detail-main').innerHTML=`
     <div class="flow-section">
       <div class="flow-label">${c.type} Production Flow</div>
@@ -4636,7 +5109,7 @@ function renderDetailPage(id){
     <div id="dp-copy" ${defaultTab!=='dp-copy'?'style="display:none"':''}>
       ${renderCopywritingPanel(c,id)}
     </div>
-    <div id="dp-comments" style="display:none">
+    <div id="dp-comments" ${defaultTab!=='dp-comments'?'style="display:none"':''}>
       ${c.statusId==='client_approval'?renderClientApprovalPanel(c,id,data,b,st):`
       <div style="margin-bottom:14px">${commentsHTML||`<div class="empty-msg">No comments yet</div>`}</div>
       <div style="border-top:1px solid var(--b1);padding-top:14px">
@@ -4658,6 +5131,7 @@ function renderDetailPage(id){
       </div>
     </div>`:''}
   `;
+  } // end else (not task kind)
 
   // --- SIDE PANEL (right) ---
   const avs=c.assignees.map(uid=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1)">${userAvatar(getUser(data,uid),26)}<span style="font-size:15px;font-weight:600">${getUser(data,uid).name}</span><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${getUser(data,uid).title||getUser(data,uid).role}</span></div>`).join('');
@@ -4975,7 +5449,6 @@ function renderCopywritingPanel(c,id){
         <span class="idea-notif-badge" style="background:var(--teld);color:var(--tel)">⏳ Awaiting your review</span>
       </div>
       <div class="design-review-sub">Submitted by ${ver.submittedBy||'creator'} on ${ver.submittedAt||''}. Review the copy above, then approve or request changes.</div>
-      <textarea class="form-textarea" id="copy-review-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:70px;font-size:15px;margin-bottom:10px"></textarea>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn-approve-idea" onclick="approveCopyVersion('${id}',${verIdx})">✅ Approve → Senior Approval</button>
         <button class="btn-amend-idea" onclick="amendCopyVersion('${id}',${verIdx})">🔄 Amendment → Back to Creator</button>
@@ -5286,7 +5759,6 @@ function renderVideoEditingPanel(c, id){
         <span class="idea-notif-badge" style="background:var(--orad);color:var(--ora)">⏳ Awaiting your review</span>
       </div>
       <div class="design-review-sub">Watch the edited video, then approve to move to Copywriting or request changes back to ${designer.name}.</div>
-      <textarea class="form-textarea" id="wf-video-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:70px;font-size:15px;margin-bottom:10px"></textarea>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn-approve-idea" onclick="wfApproveVideo('${id}')">✅ Approved → Copywriting</button>
         <button class="btn-amend-idea" onclick="wfAmendVideo('${id}')">🔄 Amendment → Back to ${designer.name}</button>
@@ -5459,7 +5931,6 @@ function renderDesignPanel(c, id){
         <span class="idea-notif-badge" style="background:var(--ambd);color:var(--amb)">\u23F3 Awaiting your review</span>
       </div>
       <div class="design-review-sub">Submitted by ${ver.submittedBy||'designer'} on ${ver.submittedAt||''}. Review the design above, then approve to move to copywriting or request changes.</div>
-      <textarea class="form-textarea" id="design-review-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:70px;font-size:15px;margin-bottom:10px"></textarea>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn-approve-idea" onclick="approveDesign('${id}',${verIdx})">\u2705 Approve Design → Copywriting</button>
         <button class="btn-amend-idea" onclick="amendDesign('${id}',${verIdx})">\uD83D\uDD04 Request Amendment → Back to Designer</button>
@@ -5822,9 +6293,6 @@ function renderIdeationPanel(c, id){
         <span class="idea-notif-badge">⏳ Awaiting your review</span>
       </div>
       <div class="senior-review-sub">Submitted by ${approval.submittedBy||'team'} on ${approval.submittedAt||'?'}. Review the content above then decide:</div>
-      <div style="margin-bottom:10px">
-        <textarea class="form-textarea" id="senior-note-${id}" placeholder="Optional: leave a note for the team (required for amendment)..." style="min-height:70px;font-size:15px"></textarea>
-      </div>
       <div class="senior-review-actions">
         ${c.type==='Video'
           ?`<button class="btn-approve-idea" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify Leonard to Shoot</button>`
@@ -5864,16 +6332,17 @@ function renderIdeationPanel(c, id){
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDDBC\uFE0F</span> Reference Images</div>
-        <span class="idea-section-hint">Paste image URLs for visual reference</span>
+        <span class="idea-section-hint">Drag & drop or browse to upload</span>
       </div>
-      <div class="ref-images-grid">${refImagesHTML}
-        <div class="ref-img-add" onclick="document.getElementById('ref-url-${id}').focus()">
+      <input type="file" id="ref-file-${id}" accept="image/*" multiple style="display:none" onchange="handleRefFileSelect('${id}',${verIdx},this)">
+      <div class="ref-images-grid" id="ref-grid-${id}"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleRefFileDrop('${id}',${verIdx},event)">
+        ${refImagesHTML}
+        <div class="ref-img-add" onclick="document.getElementById('ref-file-${id}').click()">
           <span style="font-size:22px">+</span><span>Add reference</span>
         </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <input class="form-input" id="ref-url-${id}" placeholder="Paste image URL here..." style="font-size:14px;padding:6px 10px">
-        <button class="btn btn-ghost btn-sm" onclick="addRefImageFromInput('${id}',${verIdx})">Add</button>
       </div>
     </div>
 
@@ -5966,20 +6435,44 @@ function saveIdeation(id, verIdx){
   setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
 
-function addRefImageFromInput(id, verIdx){
-  const inp=document.getElementById('ref-url-'+id);
-  if(!inp||!inp.value.trim())return;
-  const url=inp.value.trim();inp.value='';
+function _readRefImageFiles(id, verIdx, files){
+  if(!files||!files.length) return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
   _saveIdeaTextFields(c, versions, verIdx);
   if(!versions[verIdx].refImages) versions[verIdx].refImages=[];
-  versions[verIdx].refImages.push({url,addedAt:new Date().toISOString().split('T')[0]});
-  c.ideationVersions=versions;
-  save(data);
-  const panel=document.getElementById('dp-ideation');
-  if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+  let pending=files.length;
+  Array.from(files).forEach(file=>{
+    if(!file.type.startsWith('image/')) { pending--; if(!pending){save(data);const panel=document.getElementById('dp-ideation');if(panel)panel.innerHTML=renderIdeationPanel(c,id);} return; }
+    const reader=new FileReader();
+    reader.onload=function(e){
+      versions[verIdx].refImages.push({url:e.target.result, addedAt:new Date().toISOString().split('T')[0], name:file.name});
+      pending--;
+      if(!pending){
+        c.ideationVersions=versions;
+        save(data);
+        const panel=document.getElementById('dp-ideation');
+        if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
 }
+
+function handleRefFileSelect(id, verIdx, input){
+  _readRefImageFiles(id, verIdx, input.files);
+  input.value=''; // reset so same file can be re-selected
+}
+
+function handleRefFileDrop(id, verIdx, event){
+  event.preventDefault();
+  document.getElementById('ref-grid-'+id)?.classList.remove('drag-over');
+  const files=event.dataTransfer.files;
+  _readRefImageFiles(id, verIdx, files);
+}
+
+// kept for backwards compat (old URL-stored refs still render fine via img src)
+function addRefImageFromInput(id, verIdx){}
 
 function deleteRefImage(id, verIdx, imgIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -6109,6 +6602,20 @@ function renderWorkflowActionBox(data, c){
   const isDesigner=role==='designer'||isAdmin;
   const isCreator=role==='content_creator'||isAdmin;
   const st=c.statusId;
+
+  // ── TASK KIND — show simple task action box, no workflow ──────────────────
+  if(c.jobKind==='task'){
+    const isDone=c.statusId==='posted'||c.taskDone;
+    const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===S.user.id&&t.status==='open');
+    return `<div class="wf-action-box ${isDone?'copy':'design'}" style="${isDone?'background:var(--acd);border-color:var(--ac)':''}">
+      <div class="wf-action-title">${isDone?'✅ Task Completed':'✅ Task'}${openTask&&!isDone?' — Your Turn':''}</div>
+      ${c.taskDescription?`<div class="wf-action-sub" style="margin-bottom:12px;font-size:14px;color:var(--t1);line-height:1.6">${c.taskDescription}</div>`:''}
+      ${!isDone?`<div class="wf-action-row">
+        <button class="wf-btn wf-btn-green" onclick="markTaskDone('${id}')">✅ Mark as Done</button>
+      </div>`:`<div style="font-size:13px;color:var(--ac);font-family:'DM Mono',monospace">✓ Completed on ${c.taskDoneAt||'?'}</div>`}
+    </div>`;
+  }
+
   const designer=getDesigner(data,c);
   const creator=getContentCreator(data,c);
   const senior=getSenior(data,c);
@@ -6135,7 +6642,6 @@ function renderWorkflowActionBox(data, c){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Ideation Review — ${creator.name} submitted</div>
       <div class="wf-action-sub">Review the ideation in the Ideation tab. Approve to move to Design, or request amendment.</div>
-      <div style="margin-bottom:10px"><textarea class="form-textarea" id="senior-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="approveIdeation('${id}',0)">✅ Approve → 🎨 Design</button>
         <button class="wf-btn wf-btn-red" onclick="requestIdeaAmendment('${id}',0)">🔄 Amendment → Back to ${creator.name}</button>
@@ -6168,7 +6674,6 @@ function renderWorkflowActionBox(data, c){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Design Review — ${designer.name} submitted</div>
       <div class="wf-action-sub">Review the design in the Design tab. Approve to move to Copywriting, or request changes.</div>
-      <div style="margin-bottom:10px"><textarea class="form-textarea" id="design-review-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve → ✍️ Copywriting</button>
         <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment → Back to ${designer.name}</button>
@@ -6203,7 +6708,6 @@ function renderWorkflowActionBox(data, c){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Script / Ideation Review — ${creator.name} submitted</div>
       <div class="wf-action-sub">Review the script in the Ideation tab. Approve to send ${creator.name} to shoot, or request amendment.</div>
-      <div style="margin-bottom:10px"><textarea class="form-textarea" id="wf-idea-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → Notify Leonard to Shoot</button>
         <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment → Back to ${creator.name}</button>
@@ -6236,7 +6740,6 @@ function renderWorkflowActionBox(data, c){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Copy Review — ${creator.name} submitted copy</div>
       <div class="wf-action-sub">Review the copy in the Copywriting tab, then approve to move to Client Approval or request amendment.</div>
-      <div style="margin-bottom:10px"><textarea class="form-textarea" id="wf-script-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="wfApproveScript('${id}')">✅ Approve Copy → Client Approval</button>
         <button class="wf-btn wf-btn-red" onclick="wfAmendScript('${id}')">🔄 Amendment → Back to ${creator.name}</button>
@@ -6334,7 +6837,6 @@ function renderWorkflowActionBox(data, c){
       return `<div class="wf-action-box review">
         <div class="wf-action-title">🔍 Ideation / Script Review — ${creator.name} submitted</div>
         <div class="wf-action-sub">Review the script in the <strong>Ideation tab</strong>. Approve to automatically move to Shooting and notify ${creator.name}, or request changes.</div>
-        <div style="margin-bottom:10px"><textarea class="form-textarea" id="wf-idea-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
         <div class="wf-action-row">
           <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify ${creator.name} to Shoot</button>
           <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment → Back to ${creator.name}</button>
@@ -6348,7 +6850,6 @@ function renderWorkflowActionBox(data, c){
         <div class="wf-action-title">🔍 Edited Video Review — ${designer.name} submitted</div>
         <div class="wf-action-sub">Watch the edited video in the <strong>Video Editing tab</strong>, then approve to move to Copywriting or request changes.</div>
         ${c.videoEditLink?`<div style="margin-bottom:10px"><a href="${c.videoEditLink}" target="_blank" style="font-size:14px;color:var(--blu);font-family:'DM Mono',monospace">📁 Watch edited video ↗</a></div>`:''}
-        <textarea class="form-textarea" id="wf-video-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px;margin-bottom:10px"></textarea>
         <div class="wf-action-row">
           <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approved → Copywriting</button>
           <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment → Back to ${designer.name}</button>
@@ -6360,7 +6861,6 @@ function renderWorkflowActionBox(data, c){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Copy Review — ${creator.name} submitted copy</div>
       <div class="wf-action-sub">Review the caption/copy in the <strong>Copywriting tab</strong>, then approve for Client Approval or request changes.</div>
-      <div style="margin-bottom:10px"><textarea class="form-textarea" id="wf-senior-note-${id}" placeholder="Optional note (required for amendment)..." style="min-height:60px;font-size:14px"></textarea></div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="wfSeniorApprove('${id}')">✅ Approve → Client Approval</button>
         <button class="wf-btn wf-btn-red" onclick="wfSeniorAmend('${id}')">🔄 Amendment → Back to ${creator.name}</button>
@@ -6499,18 +6999,32 @@ function wfApproveIdeationForVideo(id){
 
 function wfAmendIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-idea-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
+  const note=document.getElementById('wf-idea-note-'+id)?.value||'Amendment needed — please revise your ideation/script.';
   const creator=getContentCreator(data,c);
   c.ideationPendingApproval=false;
-  // Notify Leonard → amendment
   notifyRejected(c,creator,'Ideation needs changes',S.user.name,note);
-  const prev=[...c.assignees];
   c.statusId='ideation';
   c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
+}
+
+function markTaskDone(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const today=new Date().toISOString().split('T')[0];
+  c.taskDone=true;
+  c.taskDoneAt=today;
+  c.statusId='posted'; // reuse posted as "done" for tasks
+  c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
+  // Close all open workflow tasks for this user
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  // Dismiss amendment notif if any
+  if(!c.amendNotifDismissed)c.amendNotifDismissed={};
+  c.amendNotifDismissed[S.user.id]=true;
+  save(data);
+  renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast('✅ Task marked as done!');
 }
 
 function wfApproveVideo(id){
@@ -6983,7 +7497,30 @@ function confirmDeleteContent(id){
       <button class="btn btn-danger" onclick="deleteContent('${id}')">🗑 Yes, remove it</button>
     </div>`);
 }
-function deleteContent(id){const data=D();data.contents=data.contents.filter(c=>c.id!==id);save(data);closeModal();closeDetail();render();}
+function deleteContent(id){
+  const data=D();
+  const c=data.contents.find(x=>x.id===id);
+  if(c){
+    const b=data.brands.find(x=>x.id===c.brandId)||{name:'?',color:'#888'};
+    if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
+    data.deletionLog.push({
+      logId:'dl'+Math.random().toString(36).slice(2,9),
+      contentId:id,
+      title:c.title,
+      brandName:b.name,
+      brandColor:b.color,
+      type:c.type||'',
+      statusId:c.statusId||'',
+      deletedBy:S.user.name,
+      deletedById:S.user.id,
+      deletedAt:new Date().toISOString().split('T')[0],
+      dismissedBy:[]
+    });
+  }
+  data.contents=data.contents.filter(c=>c.id!==id);
+  save(data);closeModal();closeDetail();render();
+  showAIToast(`🗑 Content removed — admins notified`);
+}
 
 function sendWhatsApp(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7480,6 +8017,7 @@ function saveBrandInfo(brandId){
 
 // ===================== ADD BRAND =====================
 function openAddBrandModal(){
+  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   openModal(`<div class="modal-title">Add New Brand<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row-2">
       <div><label class="form-label">Brand name</label><input class="form-input" id="nb-name" type="text" placeholder="e.g. NewBrand"></div>
@@ -7684,6 +8222,7 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
 }
 
 function confirmDeleteBrand(brandId){
+  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const contentCount=data.contents.filter(c=>c.brandId===brandId).length;
   openModal(`<div class="modal-title" style="color:var(--red)">🗑 Delete Brand<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -7691,7 +8230,7 @@ function confirmDeleteBrand(brandId){
       <div style="font-size:15px;font-weight:700;color:var(--red);margin-bottom:6px">⚠ This action cannot be undone</div>
       <div style="font-size:14px;color:var(--t1);line-height:1.7">
         You are about to permanently delete <strong>${b.name}</strong>.<br>
-        ${contentCount>0?`<span style="color:var(--red);font-weight:700">This will also delete ${contentCount} content piece${contentCount!==1?'s':''} linked to this brand.</span>`:'This brand has no content pieces.'}
+        ${contentCount>0?`<span style="color:var(--red);font-weight:700">This will also delete ${contentCount} content piece${contentCount!==1?'s':''} and all ad metrics linked to this brand.</span>`:'This will also delete all ad metrics linked to this brand.'}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border-radius:var(--r);margin-bottom:16px">
@@ -7706,14 +8245,24 @@ function confirmDeleteBrand(brandId){
 }
 
 function executeDeleteBrand(brandId){
+  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const name=b.name;
+  // Remove brand
   data.brands=data.brands.filter(x=>x.id!==brandId);
+  // Remove all content pieces for this brand
   data.contents=data.contents.filter(c=>c.brandId!==brandId);
+  // Remove all ad metrics for this brand
+  if(Array.isArray(data.adMetrics)) data.adMetrics=data.adMetrics.filter(m=>m.brandId!==brandId);
+  // Remove any tasks linked to this brand
+  if(Array.isArray(data.tasks)) data.tasks=data.tasks.filter(t=>t.brandId!==brandId);
+  // Remember this brand was deleted so D() doesn't re-add it from defaults
+  if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
+  if(!data.deletedBrandIds.includes(brandId)) data.deletedBrandIds.push(brandId);
   // If currently viewing this brand, go back to dashboard
   if(S.brand===brandId){S.brand=null;S.page='dashboard';}
   save(data);closeModal();render();
-  showAIToast(`🗑 Brand "${name}" deleted`);
+  showAIToast(`🗑 Brand "${name}" and all related data deleted`);
 }
 
 // ===================== MANAGE STATUSES =====================
@@ -7757,42 +8306,74 @@ function deleteStatus(id){
 
 // ===================== SCHEDULE BLOCK MODALS =====================
 function openAddBlockModal(dayIdx,startH){
-  const data=D();
-  const dayOpts=DAY_NAMES.map((d,i)=>`<option value="${i}" ${i===dayIdx?'selected':''}>${d}</option>`).join('');
-  const hourOpts=Array.from({length:13},(_,i)=>{const h=7+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===startH?'selected':''}>${l}</option>`;}).join('');
-  const endOpts=Array.from({length:13},(_,i)=>{const h=7+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===(startH>=0?startH+2:10)?'selected':''}>${l}</option>`;}).join('');
-  const userOpts=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<option value="${u.id}" ${u.id===S.user.id?'selected':''}>${u.name}</option>`).join('');
-  openModal(`<div class="modal-title">Add schedule block<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
-    <div class="form-row-2">
-      <div><label class="form-label">Day</label><select class="form-select" id="sb-day">${dayOpts}</select></div>
-      <div><label class="form-label">Person</label><select class="form-select" id="sb-user">${userOpts}</select></div>
-    </div>
-    <div class="form-row-2">
-      <div><label class="form-label">Start</label><select class="form-select" id="sb-start">${hourOpts}</select></div>
-      <div><label class="form-label">End</label><select class="form-select" id="sb-end">${endOpts}</select></div>
-    </div>
-    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBlock()">Add block</button></div>`);
-}
-function saveBlock(){
-  const label=document.getElementById('sb-label').value.trim();if(!label){alert('Enter a label');return;}
-  const dayOfWeek=parseInt(document.getElementById('sb-day').value);
-  const userId=document.getElementById('sb-user').value;
-  const startHour=parseInt(document.getElementById('sb-start').value);
-  const endHour=parseInt(document.getElementById('sb-end').value);
-  if(endHour<=startHour){alert('End time must be after start');return;}
-  const data=D();const u=getUser(data,userId);
-  data.scheduleBlocks.push({id:'sb'+uid(),userId,dayOfWeek,startHour,endHour,label,color:u.color});
-  save(data);closeModal();renderPage();
+  // Open a date-based picker by default for the current week
+  const days=getWeekDates(S.calWeek);
+  const defaultDate=dayIdx>=0&&dayIdx<7?days[dayIdx].toISOString().split('T')[0]:new Date().toISOString().split('T')[0];
+  openAddBlockModalDate(defaultDate, startH>=0?startH:9);
 }
 function openBlockDetail(id){
   const data=D();const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
-  const u=getUser(data,b.userId);const sl=b.startHour<12?`${b.startHour}:00 AM`:b.startHour===12?'12:00 PM':`${b.startHour-12}:00 PM`;
+  // If this block is linked to a content piece, open the content detail
+  if(b.contentId){
+    closeModal();
+    openContentDetail(b.contentId);
+    return;
+  }
+  const u=getUser(data,b.userId);
+  const sl=b.startHour<12?`${b.startHour}:00 AM`:b.startHour===12?'12:00 PM':`${b.startHour-12}:00 PM`;
   const el=b.endHour<12?`${b.endHour}:00 AM`:b.endHour===12?'12:00 PM':`${b.endHour-12}:00 PM`;
-  const canDel=S.user.role==='admin'||S.user.id===b.userId;
-  openModal(`<div class="modal-title">${b.label}<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div style="font-size:16px;display:grid;gap:10px"><div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div><div><span style="color:var(--t2)">Day:</span> <strong>${DAY_NAMES[b.dayOfWeek]}</strong></div><div><span style="color:var(--t2)">Time:</span> <strong>${sl} \u2013 ${el}</strong></div></div>
-    ${canDel?`<div class="modal-actions"><button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">Delete block</button></div>`:''}`);
+  const isOwner=S.user.id===b.userId;
+  const isAdmin=S.user.role==='admin';
+  const canEdit=isAdmin||isOwner;
+  const whenStr=b.date?`📅 ${b.date}`:b.dayOfWeek!==undefined?`${DAY_NAMES[b.dayOfWeek]} (weekly)`:'—';
+
+  if(!canEdit){
+    // Read-only view for non-owners
+    openModal(`<div class="modal-title">${b.label}<button class="modal-close" onclick="closeModal()">×</button></div>
+      <div style="font-size:15px;display:grid;gap:10px">
+        <div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div>
+        <div><span style="color:var(--t2)">When:</span> <strong>${whenStr}</strong></div>
+        <div><span style="color:var(--t2)">Time:</span> <strong>${sl} – ${el}</strong></div>
+      </div>`);
+    return;
+  }
+
+  // Edit form for owner/admin
+  const hourOpts=(start)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===start?'selected':''}>${l}</option>`;}).join('');
+  openModal(`<div class="modal-title">✏️ Edit Block<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="be-label" value="${b.label}"></div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start</label><select class="form-select" id="be-start">${hourOpts(b.startHour)}</select></div>
+      <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
+    </div>
+    <div style="font-size:13px;color:var(--t2);padding:6px 0;font-family:'DM Mono',monospace">📅 ${whenStr} · 👤 ${u.name}</div>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
+    </div>`);
+}
+
+function showFixedBlockInfo(label, time, userId){
+  const data=D();const u=getUser(data,userId);
+  openModal(`<div class="modal-title">🔒 ${label}<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:15px;display:grid;gap:10px">
+      <div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div>
+      <div><span style="color:var(--t2)">Time:</span> <strong>${time}</strong></div>
+      <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;padding:8px 12px;background:var(--s2);border-radius:var(--r)">🔒 This is a fixed recurring block and cannot be edited.</div>
+    </div>`);
+}
+
+function saveBlockEdit(id){
+  const data=D();const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const label=document.getElementById('be-label').value.trim();
+  const startHour=parseInt(document.getElementById('be-start').value);
+  const endHour=parseInt(document.getElementById('be-end').value);
+  if(!label){alert('Enter a label');return;}
+  if(endHour<=startHour){alert('End must be after start');return;}
+  b.label=label;b.startHour=startHour;b.endHour=endHour;
+  save(data);closeModal();renderPage();
+  showAIToast('✓ Block updated');
 }
 function deleteBlock(id){const data=D();data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);save(data);closeModal();renderPage();}
 
@@ -8276,19 +8857,17 @@ function requestIdeaAmendment(id, verIdx){
     note
   };
   c.ideationVersions=versions;
-  // Keep or move back to ideation status
+  c.ideationPendingApproval=false;
+  // Move back to ideation
   c.statusId='ideation';
   c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  if(!c.comments)c.comments=[];
-  c.comments.push({
-    id:'cm'+uid(),userId:S.user.id,
-    text:`\uD83D\uDD04 Amendment needed on ${versions[verIdx].label} \u2014 ${note}`,
-    type:'copy',createdAt:new Date().toISOString().split('T')[0]
-  });
+  // Notify the creator via the amendment notification system
+  const creator=getContentCreator(data,c);
+  notifyRejected(c,creator,`Ideation ${versions[verIdx].label} needs changes`,S.user.name,note);
   save(data);
   _refreshIdeaPanel(id);
-  renderSidebar();
-  showAIToast(`\uD83D\uDD04 Amendment requested \u2014 content creator notified`);
+  renderSidebar();renderTopbar();
+  showAIToast(`\uD83D\uDD04 Amendment requested — ${creator.name} notified`);
 }
 
 function resetIdeaApproval(id, verIdx){
@@ -8339,11 +8918,24 @@ function getAlertItems(data){
     return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
   }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
 
-  // Deadline alerts for everyone
+  // Deletion notifications for admins/seniors (someone removed content)
+  if(role==='admin'||role==='senior'){
+    (data.deletionLog||[]).filter(entry=>
+      !entry.dismissedBy.includes(uid) &&
+      entry.deletedById!==uid // don't notify the person who deleted it
+    ).forEach(entry=>items.push({_isDeletion:true,...entry}));
+  }
+  // Deadline alerts — only for content relevant to THIS user
   data.contents.filter(c=>{
     if(c.statusId==='posted')return false;
     const days=daysUntil(c.postingDate);
-    return days<=2&&days>=0;
+    if(days>2||days<0)return false;
+    // Unstarted content → only Leonard (content_creator) sees it
+    if(isUnstartedContent(c)) return role==='content_creator'||role==='admin';
+    // Otherwise only show if this user has an active job/task on it
+    if(role==='admin') return true;
+    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
+      || c.assignees.includes(uid);
   }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
 
   return items;
@@ -8376,8 +8968,8 @@ function renderNotifPanel(){
         +shootAlerts.map(c=>{
           const b=getBrand(data,c.brandId);
           return `<div class="np-item" style="border-left:3px solid var(--pur)">
-            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">🎬</div>
-            <div class="np-info" style="cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">
+            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">🎬</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">
               <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--s3);color:var(--t2);font-family:'DM Mono',monospace">${c.type==='Video'?'🎬 Video':'🃏 Carousel'}</span></div>
               <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">🎬 Shooting</span> · <span style="color:var(--pur);font-weight:700">Approved to shoot!</span><br>By ${c.shootNotifiedBy||'senior'} on ${fmt(c.shootNotifiedAt)}</div>
             </div>
@@ -8394,8 +8986,8 @@ function renderNotifPanel(){
         +copyAlerts.map(c=>{
           const b=getBrand(data,c.brandId);
           return `<div class="np-item" style="border-left:3px solid var(--tel)">
-            <div class="np-icon" style="background:var(--teld);color:var(--tel);font-size:18px;cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">✍️</div>
-            <div class="np-info" style="cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">
+            <div class="np-icon" style="background:var(--teld);color:var(--tel);font-size:18px;cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">✍️</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">
               <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(60,204,160,0.15);color:var(--tel);font-family:'DM Mono',monospace">${c.type}</span></div>
               <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✍️ Copywriting</span> · <span style="color:var(--tel);font-weight:700">Time to write copy!</span><br>Approved by ${c.copyNotifiedBy||'senior'} on ${fmt(c.copyNotifiedAt)}</div>
             </div>
@@ -8416,8 +9008,8 @@ function renderNotifPanel(){
         +editAlerts.map(c=>{
           const b=getBrand(data,c.brandId);
           return `<div class="np-item" style="border-left:3px solid var(--ora)">
-            <div class="np-icon" style="background:var(--orad);color:var(--ora);font-size:18px;cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">✂️</div>
-            <div class="np-info" style="cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">
+            <div class="np-icon" style="background:var(--orad);color:var(--ora);font-size:18px;cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">✂️</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">
               <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(255,159,67,0.15);color:var(--ora);font-family:'DM Mono',monospace">${c.type}</span></div>
               <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✂️ Video Editing</span> · <span style="color:var(--ora);font-weight:700">Footage ready — start editing!</span><br>${c.footageFileName||'Footage uploaded'}</div>
             </div>
@@ -8439,9 +9031,10 @@ function renderNotifPanel(){
       sections.push(`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">✅ AWAITING YOUR APPROVAL (${reviewItems.length})</div>`
         +reviewItems.map(c=>{
           const b=getBrand(data,c.brandId);const col=colorMap[c.statusId]||'var(--amb)';
+          const tabTarget=getDefaultTabForContent(c);
           return `<div class="np-item" style="border-left:3px solid ${col}">
-            <div class="np-icon" style="background:${col}18;color:${col};font-size:18px;cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">✅</div>
-            <div class="np-info" style="cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">
+            <div class="np-icon" style="background:${col}18;color:${col};font-size:18px;cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">✅</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">
               <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(240,160,48,0.15);color:var(--amb);font-family:'DM Mono',monospace">${c.type}</span></div>
               <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">${['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===0?'💡 Ideation':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===1?'🎨 Design':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===2?'✍️ Copy':'📋'} Review</span> · <span style="color:${col};font-weight:700">${labelMap[c.statusId]||'Review needed'}</span></div>
             </div>
@@ -8479,8 +9072,8 @@ function renderNotifPanel(){
       }
       return '<div class="np-item" style="border-left:3px solid var(--red);flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px">'
         +'<div style="display:flex;align-items:center;gap:10px;width:100%">'
-          +'<div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;cursor:pointer;flex-shrink:0" onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')">🔄</div>'
-          +'<div class="np-info" style="cursor:pointer;flex:1" onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')">'
+          +'<div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;cursor:pointer;flex-shrink:0" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">🔄</div>'
+          +'<div class="np-info" style="cursor:pointer;flex:1" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">'
             +'<div class="np-name" style="color:var(--red)">'+c.title+'</div>'
             +'<div class="np-meta"><span style="color:'+b.color+';font-weight:700">'+b.name+'</span> &middot; <span style="color:var(--red);font-weight:700">Amendment by '+rejectedBy+'</span></div>'
           +'</div>'
@@ -8488,11 +9081,35 @@ function renderNotifPanel(){
         +'</div>'
         +'<div style="width:100%;padding:0 4px">'+commentsHTML+'</div>'
         +'<div style="margin-top:5px;width:100%;text-align:right">'
-          +'<span onclick="closeNotifPanel();openContentDetail(\'' +c.id+ '\')" style="font-size:12px;color:var(--blu);cursor:pointer;text-decoration:underline">View all comments →</span>'
+          +'<span onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')" style="font-size:12px;color:var(--blu);cursor:pointer;text-decoration:underline">View all comments →</span>'
         +'</div>'
         +'</div>';
     }).join('');
     sections.push('<div class="np-section-header" style="background:var(--redd);color:var(--red)">🔄 AMENDMENT REQUIRED ('+amendAlerts.length+')</div>'+amendItems);
+  }
+
+  // ── 3.7. CONTENT DELETION NOTIFICATIONS (admin/senior only) ────────────────
+  if(role==='admin'||role==='senior'){
+    const deletions=(data.deletionLog||[]).filter(entry=>
+      !entry.dismissedBy.includes(uid) &&
+      entry.deletedById!==uid
+    );
+    if(deletions.length){
+      sections.push(`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 CONTENT REMOVED (${deletions.length})</div>`
+        +deletions.map(entry=>`
+          <div class="np-item" style="border-left:3px solid var(--red)">
+            <div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;flex-shrink:0">🗑</div>
+            <div class="np-info" style="flex:1">
+              <div class="np-name" style="color:var(--red)">${entry.title}</div>
+              <div class="np-meta">
+                <span style="color:${entry.brandColor||'#888'};font-weight:700">${entry.brandName}</span>
+                · <span style="color:var(--t3)">${entry.type||''}</span>
+                · Removed by <strong>${entry.deletedBy}</strong> on ${entry.deletedAt}
+              </div>
+            </div>
+            <button onclick="dismissDeletionNotif('${entry.logId}')" title="Acknowledge" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`).join(''));
+    }
   }
 
     // ── 4. DEADLINE ALERTS ───────────────────────────────────────────────────
@@ -8523,35 +9140,43 @@ function renderNotifPanel(){
   body.innerHTML=sections.join('');
 }
 
+function dismissDeletionNotif(logId){
+  const data=D();
+  if(!Array.isArray(data.deletionLog)) return;
+  const entry=data.deletionLog.find(e=>e.logId===logId);
+  if(!entry) return;
+  if(!entry.dismissedBy.includes(S.user.id)) entry.dismissedBy.push(S.user.id);
+  save(data);closeNotifPanel();renderTopbar();
+}
 function dismissShootNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.shootNotifDismissed)c.shootNotifDismissed={};
   c.shootNotifDismissed[S.user.id]=true;
-  save(data);renderNotifPanel();renderTopbar();
+  save(data);closeNotifPanel();renderTopbar();
 }
 function dismissEditNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.editNotifDismissed)c.editNotifDismissed={};
   c.editNotifDismissed[S.user.id]=true;
-  save(data);renderNotifPanel();renderTopbar();
+  save(data);closeNotifPanel();renderTopbar();
 }
 function dismissSeniorNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.seniorNotifDismissed)c.seniorNotifDismissed={};
   c.seniorNotifDismissed[S.user.id]=true;
-  save(data);renderNotifPanel();renderTopbar();
+  save(data);closeNotifPanel();renderTopbar();
 }
 function dismissAmendNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.amendNotifDismissed)c.amendNotifDismissed={};
   c.amendNotifDismissed[S.user.id]=true;
-  save(data);renderNotifPanel();renderTopbar();
+  save(data);closeNotifPanel();renderTopbar();
 }
 function dismissCopyNotif(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.copyNotifDismissed)c.copyNotifDismissed={};
   c.copyNotifDismissed[S.user.id]=true;
-  save(data);renderNotifPanel();renderTopbar();
+  save(data);closeNotifPanel();renderTopbar();
 }
 
 function toggleNotifPanel(){
