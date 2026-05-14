@@ -38,7 +38,7 @@
   window.closeSidebar=function(){};
 </script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>USPify Portal v3.146</title>
+<title>USPify Portal v3.146b</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f0f11;--s1:#161618;--s2:#1e1e22;--s3:#26262c;--s4:#2e2e36;--b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.13);--b3:rgba(255,255,255,0.22);--t1:#eeecea;--t2:#b0ada6;--t3:#7e7c76;--t4:#3a3a36;--ac:#c8f04a;--ac2:#a8d030;--acd:rgba(200,240,74,0.12);--red:#ff5a5a;--redd:rgba(255,90,90,0.12);--amb:#f0a030;--ambd:rgba(240,160,48,0.12);--blu:#5a9fff;--blud:rgba(90,159,255,0.12);--pnk:#e06aaa;--pnkd:rgba(224,106,170,0.12);--tel:#3acca0;--teld:rgba(58,204,160,0.12);--pur:#9a7aff;--purd:rgba(154,122,255,0.12);--ora:#ff9f43;--orad:rgba(255,159,67,0.12);--r:8px;--r2:12px;--sb:260px}
@@ -365,7 +365,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .comment-name{font-size:14px;font-weight:700}
 .comment-time{font-size:13px;color:var(--t3);font-family:'DM Mono',monospace}
 .comment-type{font-size:12px;padding:1px 6px;border-radius:8px;font-weight:600;font-family:'DM Mono',monospace}
-.ct-copy{background:var(--blud);color:var(--blu)}.ct-design{background:var(--pnkd);color:var(--pnk)}.ct-general{background:var(--s3);color:var(--t2)}
+.ct-copy{background:var(--blud);color:var(--blu)}.ct-design{background:var(--pnkd);color:var(--pnk)}.ct-general{background:var(--s3);color:var(--t2)}.ct-review{background:var(--ambd);color:var(--amb)}
 .comment-text{font-size:14px;color:var(--t1);line-height:1.6}
 .history-item{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px}
 .history-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
@@ -917,7 +917,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   <div class="login-box fade-in">
     <div class="login-logo">
       <div class="login-icon">U</div>
-      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v3.146</div></div>
+      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v3.146b</div></div>
     </div>
     <label class="fl">Name</label><input class="fi" id="li-name" type="text" placeholder="Your name" autocomplete="off">
     <label class="fl">Password</label>
@@ -2006,7 +2006,7 @@ function renderSidebar(){
   </div>`).join('');
   const u=S.user;
   document.getElementById('sidebar').innerHTML=`
-    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v3.146</div></div></div></div>
+    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v3.146b</div></div></div></div>
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
@@ -6396,19 +6396,18 @@ function autosaveDesignNotes(id, verIdx){
 }
 
 function approveDesign(id, verIdx){
+  saveWfReviewComment(id,'Senior Approved — Design');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
-  const note=document.getElementById('design-review-note-'+id)?.value||'';
+  const note=document.getElementById('wf-review-note-'+id)?.value||'';
   const today=new Date().toISOString().split('T')[0];
   if(!versions[verIdx].approvals) versions[verIdx].approvals=[];
   versions[verIdx].approvals.push({userId:S.user.id,status:'approved',note,date:today});
   versions[verIdx].pendingReview=false;
   c.designVersions=versions;
   c.seniorNotifDismissed={[S.user.id]:true};
-  // Move to copywriting — notify Leonard
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   const creator=getContentCreator(data,c);
-  const prev=[...c.assignees];
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
   notifyApproved(c,creator,'Design approved — write the copy! ✍️',S.user.name);
   c.statusId='copywriting';
@@ -6419,9 +6418,11 @@ function approveDesign(id, verIdx){
 }
 
 function amendDesign(id, verIdx){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining what needs to be amended.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Design');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('design-review-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please add a note explaining what needs to be amended.');return;}
   const versions=getDesignVersions(c);
   const today=new Date().toISOString().split('T')[0];
   if(!versions[verIdx].approvals) versions[verIdx].approvals=[];
@@ -6431,7 +6432,6 @@ function amendDesign(id, verIdx){
   c.seniorNotifDismissed={[S.user.id]:true};
   const designer=getDesigner(data,c);
   notifyRejected(c,designer,'Design needs changes',S.user.name,note);
-  const prev=[...c.assignees];
   c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
@@ -6633,23 +6633,6 @@ function renderIdeationPanel(c, id){
     </div>
 
     ${submitBtnHTML}
-
-    <div class="idea-section" style="border-top:2px solid var(--amb);padding-top:18px;margin-top:4px">
-      <div class="idea-section-header">
-        <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCBC</span> Management Comments
-          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;font-weight:400">(Senior / Admin only)</span>
-        </div>
-      </div>
-      <div class="mgmt-comment-list">${mgmtCommentsHTML}</div>
-      ${isSeniorOrAdmin?`
-      <div class="add-mgmt-comment">
-        <div class="add-mgmt-comment-title">Leave feedback on ${idea.label}</div>
-        <textarea class="form-textarea" id="mgmt-comment-input-${id}" placeholder="Leave your feedback, revision notes, or approval comment..." style="min-height:80px;font-size:15px"></textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px">
-          <button class="btn btn-warn" onclick="saveMgmtComment('${id}',${verIdx})">\uD83D\uDCBC Submit Feedback</button>
-        </div>
-      </div>`:`<div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;padding:8px 0">Only senior staff and admins can leave management comments.</div>`}
-    </div>
   `;
 }
 
@@ -6872,6 +6855,25 @@ function wfTransition(data, c, newStatus, newAssignees, commentText, prevAssigne
 }
 
 // Render the contextual workflow action box for the right panel
+// ── Save review comment from workflow action box to shared comment thread ──
+function saveWfReviewComment(id, labelText){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const text=inp?inp.value.trim():'';
+  if(!text) return;
+  const data=D();
+  const c=data.contents.find(x=>x.id===id);
+  if(!c) return;
+  if(!c.comments) c.comments=[];
+  c.comments.push({
+    id:'cm'+uid(),
+    userId:S.user.id,
+    text:`[${labelText||'Review'}] ${text}`,
+    type:'review',
+    createdAt:new Date().toISOString().split('T')[0]
+  });
+  save(data);
+}
+
 function renderWorkflowActionBox(data, c){
   const id=c.id;
   const role=S.user.role;
@@ -6881,7 +6883,17 @@ function renderWorkflowActionBox(data, c){
   const isCreator=role==='content_creator'||isAdmin;
   const st=c.statusId;
 
-  // ── TASK KIND — show simple task action box, no workflow ──────────────────
+  // ── Helper: review comment box shown on every approval box ───────────────
+  const reviewCommentBox=(placeholder)=>`
+    <div style="margin-top:12px;border-top:1px solid var(--b1);padding-top:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">💬 Review Comment (visible to all)</div>
+      <textarea id="wf-review-note-${id}" class="form-textarea" style="min-height:70px;font-size:14px;resize:vertical" placeholder="${placeholder||'Add your review comment here — it will be saved to the shared comment thread…'}"></textarea>
+    </div>`;
+
+  // ── Helper: save review comment to shared thread ─────────────────────────
+  // Called by approve/amend functions before transitioning
+
+  // ── TASK KIND ─────────────────────────────────────────────────────────────
   if(c.jobKind==='task'){
     const isDone=c.statusId==='posted'||c.taskDone;
     const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===S.user.id&&t.status==='open');
@@ -6900,10 +6912,7 @@ function renderWorkflowActionBox(data, c){
   const isVideo=c.type==='Video';
   const isCarousel=!isVideo;
 
-  // ── CAROUSEL FLOW ──────────────────────────────────────────
-  // Flow: Ideation → Senior Approval → Design → Senior Approval → Copywriting → Senior Approval → Client Approval → Posted
-
-  // 1. IDEATION — creator writes, submits for senior
+  // ── CAROUSEL: Ideation — creator submits ──────────────────────────────────
   if(isCarousel && st==='ideation' && isCreator){
     return `<div class="wf-action-box copy">
       <div class="wf-action-title">💡 Ideation — Your Turn</div>
@@ -6915,19 +6924,19 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // 2a. SENIOR APPROVAL (IDEATION) — senior reviews
+  // ── CAROUSEL: Senior reviews ideation ────────────────────────────────────
   if(isCarousel && st==='senior_approval_ideation' && isSenior){
     return `<div class="wf-action-box review">
-      <div class="wf-action-title">🔍 Ideation Review — ${creator.name} submitted</div>
-      <div class="wf-action-sub">Review the ideation in the Ideation tab. Approve to move to Design, or request amendment.</div>
-      <div class="wf-action-row">
+      <div class="wf-action-title">🔍 Review Ideation V1 <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+      <div class="wf-action-sub">Submitted by ${creator.name}. Review the ideation in the Ideation tab, add your comment below, then decide:</div>
+      ${reviewCommentBox('Your feedback on the ideation — required for amendment, optional for approval…')}
+      <div class="wf-action-row" style="margin-top:12px">
         <button class="wf-btn wf-btn-green" onclick="approveIdeation('${id}',0)">✅ Approve → 🎨 Design</button>
-        <button class="wf-btn wf-btn-red" onclick="requestIdeaAmendment('${id}',0)">🔄 Amendment → Back to ${creator.name}</button>
+        <button class="wf-btn wf-btn-red" onclick="requestIdeaAmendment('${id}',0)">🔄 Amendment Needed → Back to ${creator.name}</button>
       </div>
     </div>`;
   }
 
-  // 2b. SENIOR APPROVAL (IDEATION) — waiting (creator/designer)
   if(isCarousel && st==='senior_approval_ideation' && !isSenior){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">⏳ Waiting for Senior Approval</div>
@@ -6935,7 +6944,7 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // 3. DESIGN — designer uploads, submits for senior
+  // ── CAROUSEL: Design phase ────────────────────────────────────────────────
   if(isCarousel && st==='design'){
     return `<div class="wf-action-box design">
       <div class="wf-action-title">🎨 Design Phase${isDesigner?' — Your Turn':''}</div>
@@ -6947,19 +6956,19 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // 4a. SENIOR APPROVAL (DESIGN) — senior reviews
+  // ── CAROUSEL: Senior reviews design ──────────────────────────────────────
   if(isCarousel && st==='senior_approval_video' && isSenior){
     return `<div class="wf-action-box review">
-      <div class="wf-action-title">🔍 Design Review — ${designer.name} submitted</div>
-      <div class="wf-action-sub">Review the design in the Design tab. Approve to move to Copywriting, or request changes.</div>
-      <div class="wf-action-row">
+      <div class="wf-action-title">🔍 Design Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+      <div class="wf-action-sub">Submitted by ${designer.name}. Review the design in the Design tab, add your comment, then decide:</div>
+      ${reviewCommentBox('Your feedback on the design…')}
+      <div class="wf-action-row" style="margin-top:12px">
         <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve → ✍️ Copywriting</button>
-        <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment → Back to ${designer.name}</button>
+        <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed → Back to ${designer.name}</button>
       </div>
     </div>`;
   }
 
-  // 4b. SENIOR APPROVAL (DESIGN) — waiting
   if(isCarousel && st==='senior_approval_video' && !isSenior){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">⏳ Waiting for Design Approval</div>
@@ -6967,9 +6976,7 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // ── VIDEO FLOW ─────────────────────────────────────────────
-
-  // STEP 1: Ideation — Leonard writes script/ideation
+  // ── VIDEO: Ideation & Script — creator submits ────────────────────────────
   if(isVideo && st==='ideation' && isCreator){
     return `<div class="wf-action-box copy">
       <div class="wf-action-title">💡 Ideation & Script — Your Turn</div>
@@ -6981,89 +6988,61 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // STEP 2: Senior reviews ideation/script (video)
+  // ── VIDEO: Senior reviews ideation/script (direct flag path) ─────────────
   if(isVideo && st==='ideation' && isSenior && c.ideationPendingApproval){
     return `<div class="wf-action-box review">
-      <div class="wf-action-title">🔍 Script / Ideation Review — ${creator.name} submitted</div>
-      <div class="wf-action-sub">Review the script in the Ideation tab. Approve to send ${creator.name} to shoot, or request amendment.</div>
-      <div class="wf-action-row">
-        <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → Notify Leonard to Shoot</button>
-        <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment → Back to ${creator.name}</button>
+      <div class="wf-action-title">🔍 Script / Ideation Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+      <div class="wf-action-sub">Submitted by ${creator.name}. Review the script in the Ideation tab, add your comment, then decide:</div>
+      ${reviewCommentBox('Your feedback on the script / ideation…')}
+      <div class="wf-action-row" style="margin-top:12px">
+        <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify ${creator.name} to Shoot</button>
+        <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
       </div>
     </div>`;
   }
 
-  // senior_approval for video (after ideation) — waiting state
   if(isVideo && (st==='senior_approval_ideation'||st==='senior_approval_copy'||st==='senior_approval') && !c.videoReviewPending && !c.copyPendingReview && isCreator){
     return `<div class="wf-action-box review">
       <div class="wf-action-title">⏳ Waiting for Senior Approval</div>
-      <div class="wf-action-sub">Your ideation/script has been submitted. ${senior.name} will review and notify you when it's approved to shoot.</div>
+      <div class="wf-action-sub">Your ideation/script has been submitted. ${senior.name} will review and notify you when approved.</div>
     </div>`;
   }
 
-  // script phase is now used for copywriting only (video) — handled below
+  // ── VIDEO: Script phase ───────────────────────────────────────────────────
   if(isVideo && st==='script' && isCreator){
     return `<div class="wf-action-box copy">
-      <div class="wf-action-title">✍️ Copywriting Phase — Your Turn</div>
-      <div class="wf-action-sub">Write the caption and copy in the <strong>Copywriting tab</strong>, then submit for ${senior.name}'s approval.</div>
+      <div class="wf-action-title">📝 Script Phase — Your Turn</div>
+      <div class="wf-action-sub">Write or refine your script in the <strong>Ideation tab</strong>, then submit for approval.</div>
       <div class="wf-action-row">
-        <button class="wf-btn wf-btn-amb" onclick="wfSubmitScript('${id}')">📤 Submit Copy → Senior Approval</button>
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+        <button class="wf-btn wf-btn-amb" onclick="wfSubmitScript('${id}')">📤 Submit Script → Senior Approval</button>
+        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-ideation')">📝 Open Ideation Tab →</button>
       </div>
     </div>`;
   }
 
-  // script submitted → senior approves or amends (video copywriting)
-  if(isVideo && st==='script' && isSenior && c.scriptPendingApproval){
-    return `<div class="wf-action-box review">
-      <div class="wf-action-title">🔍 Copy Review — ${creator.name} submitted copy</div>
-      <div class="wf-action-sub">Review the copy in the Copywriting tab, then approve to move to Client Approval or request amendment.</div>
-      <div class="wf-action-row">
-        <button class="wf-btn wf-btn-green" onclick="wfApproveScript('${id}')">✅ Approve Copy → Client Approval</button>
-        <button class="wf-btn wf-btn-red" onclick="wfAmendScript('${id}')">🔄 Amendment → Back to ${creator.name}</button>
-      </div>
-    </div>`;
-  }
-
-  // shoot phase → content creator
+  // ── VIDEO: Shoot phase ────────────────────────────────────────────────────
   if(isVideo && st==='shoot' && isCreator){
-    return `<div class="wf-action-box shoot">
-      ${c.shootNotified?`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(154,122,255,0.12);border:1px solid rgba(154,122,255,0.4);border-radius:var(--r);margin-bottom:14px">
-        <span style="font-size:24px">🎬</span>
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--pur)">Time to shoot!</div>
-          <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace">Script approved by ${c.shootNotifiedBy||'senior'} on ${fmt(c.shootNotifiedAt)}. Your turn to film.</div>
-        </div>
-      </div>`:''}
+    return `<div class="wf-action-box edit">
       <div class="wf-action-title">🎬 Shooting Phase — Your Turn</div>
-      <div class="wf-action-sub">Upload your raw footage or paste a Drive link, then alert the designer when ready.</div>
-
-      <!-- Option A: Upload directly -->
+      <div class="wf-action-sub">Upload your raw footage or paste a Google Drive link below, then hand off to the editor.</div>
       <div style="margin-bottom:10px">
         <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📤 Upload footage file</div>
         <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r);cursor:pointer;font-size:14px;color:var(--t2);transition:border-color .15s"
           onmouseenter="this.style.borderColor='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)'">
           <span style="font-size:22px">🎥</span>
-          <div>
-            <div style="font-weight:600;color:var(--t1)">Choose video file</div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;color:var(--t3)">MP4, MOV, AVI — uploads to your device storage</div>
-          </div>
+          <div><div style="font-weight:600;color:var(--t1)">Choose video file</div><div style="font-size:12px;font-family:'DM Mono',monospace;color:var(--t3)">MP4, MOV, AVI</div></div>
           <input type="file" accept="video/*" style="display:none" onchange="handleFootageUpload(event,'${id}')">
         </label>
         <div id="footage-upload-status-${id}" style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">${c.footageFileName?`✓ File: ${c.footageFileName}`:'No file selected'}</div>
       </div>
-
-      <!-- Option B: Paste Drive link -->
       <div style="margin-bottom:10px">
         <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🔗 Or paste Google Drive link</div>
         <div class="wf-link-row">
-          <input class="form-input" id="wf-footage-link-${id}" placeholder="https://drive.google.com/..." value="${c.footageLink||''}">
+          <input class="form-input" id="wf-footage-link-${id}" placeholder="https://drive.google.com/…" value="${c.footageLink||''}">
           <button class="btn btn-ghost btn-sm" onclick="wfSaveFootageLink('${id}')">Save</button>
         </div>
         ${c.footageLink?`<div style="margin-top:4px"><a href="${c.footageLink}" target="_blank" style="font-size:13px;color:var(--blu);font-family:'DM Mono',monospace">📁 View footage ↗</a></div>`:''}
       </div>
-
-      <!-- Actions -->
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
         <button class="wf-btn wf-btn-blue" onclick="wfAlertDesigner('${id}')">🔔 Alert Designer to Edit</button>
         <button class="wf-btn wf-btn-green" onclick="wfShootDone('${id}')">✅ Shooting Done → Assign to ${designer.name}</button>
@@ -7072,10 +7051,10 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // video editing phase → point to Video Editing tab
+  // ── VIDEO: Editing phase ──────────────────────────────────────────────────
   if(isVideo && st==='video_editing'){
     return `<div class="wf-action-box edit">
-      <div class="wf-action-title">✂️ Video Editing Phase</div>
+      <div class="wf-action-title">✂️ Video Editing Phase${isDesigner?' — Your Turn':''}</div>
       <div class="wf-action-sub">${isDesigner?`Upload your edited video and submit for senior review — all inside the <strong>Video Editing tab</strong>.`:isSenior&&c.videoReviewPending?`${designer.name} has submitted the edited video for your review.`:`Video is being edited by ${designer.name}.`}</div>
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
         <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-video')">🎬 Open Video Editing Tab →</button>
@@ -7085,8 +7064,7 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // copywriting phase (both types after design/video approved)
-  // COPYWRITING — both carousel and video
+  // ── COPYWRITING — both types ──────────────────────────────────────────────
   if(st==='copywriting' && isCreator){
     return `<div class="wf-action-box copy">
       <div class="wf-action-title">✍️ Copywriting Phase — Your Turn</div>
@@ -7098,62 +7076,58 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  // senior_approval — detect which review it is
+  // ── SENIOR APPROVAL (all types, all review stages) ────────────────────────
   if((st==='senior_approval'||st==='senior_approval_ideation'||st==='senior_approval_video'||st==='senior_approval_copy') && isSenior){
-
-    // Detect which approval this is:
-    // 1. Check flag first
-    // 2. Fallback: look at what status came just before senior_approval in history
     const history=c.statusHistory||[];
     const prevStatus=history.length>=2?history[history.length-2]?.statusId:null;
     const isIdeationReview=!c.videoReviewPending&&!!(c.ideationPendingApproval||(isVideo&&(prevStatus==='ideation'||st==='senior_approval_ideation')&&!c.copyPendingReview&&!c.scriptPendingApproval));
 
-    // IDEATION review (video) — came from wfSubmitIdeationForVideo
     if(isVideo && isIdeationReview){
-      // Ensure flag is set so approve works correctly
       c.ideationPendingApproval=true;
       return `<div class="wf-action-box review">
-        <div class="wf-action-title">🔍 Ideation / Script Review — ${creator.name} submitted</div>
-        <div class="wf-action-sub">Review the script in the <strong>Ideation tab</strong>. Approve to automatically move to Shooting and notify ${creator.name}, or request changes.</div>
-        <div class="wf-action-row">
+        <div class="wf-action-title">🔍 Ideation / Script Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+        <div class="wf-action-sub">Submitted by ${creator.name}. Review the script in the <strong>Ideation tab</strong>, add your comment, then decide:</div>
+        ${reviewCommentBox('Your feedback on the script / ideation…')}
+        <div class="wf-action-row" style="margin-top:12px">
           <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify ${creator.name} to Shoot</button>
-          <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment → Back to ${creator.name}</button>
+          <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
         </div>
       </div>`;
     }
 
-    // VIDEO EDIT review — came from wfVideoDone
     if(isVideo && (c.videoReviewPending||st==='senior_approval_video')){
       return `<div class="wf-action-box review">
-        <div class="wf-action-title">🔍 Edited Video Review — ${designer.name} submitted</div>
-        <div class="wf-action-sub">Watch the edited video in the <strong>Video Editing tab</strong>, then approve to move to Copywriting or request changes.</div>
-        ${c.videoEditLink?`<div style="margin-bottom:10px"><a href="${c.videoEditLink}" target="_blank" style="font-size:14px;color:var(--blu);font-family:'DM Mono',monospace">📁 Watch edited video ↗</a></div>`:''}
-        <div class="wf-action-row">
-          <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approved → Copywriting</button>
-          <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment → Back to ${designer.name}</button>
+        <div class="wf-action-title">🔍 Edited Video Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+        <div class="wf-action-sub">Submitted by ${designer.name}. Watch the video in the <strong>Video Editing tab</strong>, add your comment, then decide:</div>
+        ${c.videoEditLink?`<div style="margin:8px 0"><a href="${c.videoEditLink}" target="_blank" style="font-size:14px;color:var(--blu);font-family:'DM Mono',monospace">📁 Watch edited video ↗</a></div>`:''}
+        ${reviewCommentBox('Your feedback on the edited video…')}
+        <div class="wf-action-row" style="margin-top:12px">
+          <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approved → ✍️ Copywriting</button>
+          <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment Needed → Back to ${designer.name}</button>
         </div>
       </div>`;
     }
 
-    // COPY review — catch-all
+    // Copy review (catch-all)
     return `<div class="wf-action-box review">
-      <div class="wf-action-title">🔍 Copy Review — ${creator.name} submitted copy</div>
-      <div class="wf-action-sub">Review the caption/copy in the <strong>Copywriting tab</strong>, then approve for Client Approval or request changes.</div>
-      <div class="wf-action-row">
-        <button class="wf-btn wf-btn-green" onclick="wfSeniorApprove('${id}')">✅ Approve → Client Approval</button>
-        <button class="wf-btn wf-btn-red" onclick="wfSeniorAmend('${id}')">🔄 Amendment → Back to ${creator.name}</button>
+      <div class="wf-action-title">🔍 Copy Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+      <div class="wf-action-sub">Submitted by ${creator.name}. Review the caption/copy in the <strong>Copywriting tab</strong>, add your comment, then decide:</div>
+      ${reviewCommentBox('Your feedback on the copy / caption…')}
+      <div class="wf-action-row" style="margin-top:12px">
+        <button class="wf-btn wf-btn-green" onclick="wfSeniorApprove('${id}')">✅ Approve → 🤝 Client Approval</button>
+        <button class="wf-btn wf-btn-red" onclick="wfSeniorAmend('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
       </div>
     </div>`;
   }
 
-  // ── CLIENT APPROVAL ───────────────────────────────────────────
+  // ── CLIENT APPROVAL ───────────────────────────────────────────────────────
   if(st==='client_approval'){
-    const clientUser=data.users.find(u=>u.role==='client'&&u.brandId===c.brandId);
     if(isSenior){
       return `<div class="wf-action-box review">
         <div class="wf-action-title">🤝 Awaiting Client Approval</div>
-        <div class="wf-action-sub">Content has been sent to the client for review. Once approved, mark it as posted.</div>
-        <div class="wf-action-row">
+        <div class="wf-action-sub">Content sent to client. Add a note below if needed, then mark posted or handle amendment.</div>
+        ${reviewCommentBox('Client feedback or internal note…')}
+        <div class="wf-action-row" style="margin-top:12px">
           <button class="wf-btn wf-btn-green" onclick="wfMarkPosted('${id}')">🚀 Mark as Posted</button>
           <button class="wf-btn wf-btn-red" onclick="wfClientAmend('${id}')">🔄 Client Requested Changes</button>
         </div>
@@ -7165,10 +7139,11 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
-  return ''; // no action box for this role/status combo
+  return '';
 }
 
 function wfMarkPosted(id){
+  saveWfReviewComment(id,'Client Approved — Posted');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   c.statusId='posted';
@@ -7179,10 +7154,12 @@ function wfMarkPosted(id){
 }
 
 function wfClientAmend(id){
+  saveWfReviewComment(id,'Client Requested Changes');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   const creator=getContentCreator(data,c);
-  notifyRejected(c,creator,'Client requested changes',S.user.name,'Client has requested amendments.');
+  const note=document.getElementById('wf-review-note-'+id)?.value||'Client has requested amendments.';
+  notifyRejected(c,creator,'Client requested changes',S.user.name,note);
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
@@ -7293,21 +7270,16 @@ function notifyRejected(c, toUser, label, rejectedBy, note){
 }
 
 function wfApproveIdeationForVideo(id){
+  saveWfReviewComment(id,'Senior Approved — Ideation/Script');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-idea-note-'+id)?.value||'';
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.ideationPendingApproval=false;
-  c.seniorNotifDismissed={[S.user.id]:true}; // Jack's done with this one
-
-  // Close any open senior ideation review tasks
+  c.seniorNotifDismissed={[S.user.id]:true};
   (c.workflowTasks||[]).filter(t=>(t.statusId==='senior_approval'||t.statusId==='senior_approval_ideation')&&t.status==='open').forEach(t=>t.status='done');
-
-  // Notify Leonard → shoot
   c.shootNotified=true;c.shootNotifiedAt=today;c.shootNotifiedBy=S.user.name;
   c.shootNotifDismissed={};
   notifyApproved(c,creator,'Ideation approved — time to shoot! 🎬',S.user.name);
-
   c.statusId='shoot';
   c.statusHistory.push({statusId:'shoot',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
@@ -7316,8 +7288,11 @@ function wfApproveIdeationForVideo(id){
 }
 
 function wfAmendIdeationForVideo(id){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining the amendment needed.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Ideation/Script');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-idea-note-'+id)?.value||'Amendment needed — please revise your ideation/script.';
   const creator=getContentCreator(data,c);
   c.ideationPendingApproval=false;
   notifyRejected(c,creator,'Ideation needs changes',S.user.name,note);
@@ -7346,18 +7321,16 @@ function markTaskDone(id){
 }
 
 function wfApproveVideo(id){
+  saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-video-note-'+id)?.value||'';
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
   c.seniorNotifDismissed={[S.user.id]:true};
-  // Notify Leonard → copywriting
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;
   c.copyNotifDismissed={};
   notifyApproved(c,creator,'Video approved — write the copy! ✍️',S.user.name);
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
-  const prev=[...c.assignees];
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
@@ -7366,16 +7339,16 @@ function wfApproveVideo(id){
 }
 
 function wfAmendVideo(id){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining the amendment needed.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-video-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please add a note explaining the amendment needed.');return;}
   const designer=getDesigner(data,c);
   c.videoReviewPending=false;
   c.seniorNotifDismissed={[S.user.id]:true};
-  // Notify Hualu → back to editing
   c.editNotifDismissed={};
   notifyRejected(c,designer,'Video needs changes — back to editing',S.user.name,note);
-  const prev=[...c.assignees];
   c.statusId='video_editing';
   c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[designer.id];
@@ -7384,15 +7357,13 @@ function wfAmendVideo(id){
 }
 
 function wfApproveScript(id){
+  saveWfReviewComment(id,'Senior Approved — Script/Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-script-note-'+id)?.value||'';
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.scriptPendingApproval=false;
   c.seniorNotifDismissed={[S.user.id]:true};
-  // Notify creator → client approval (copy approved)
   notifyApproved(c,creator,'Copy approved → moving to Client Approval',S.user.name);
-  const prev=[...c.assignees];
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
@@ -7401,10 +7372,10 @@ function wfApproveScript(id){
 }
 
 function wfAmendScript(id){
-  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-script-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please add a note explaining the amendment needed.');return;}
-  const creator=getContentCreator(data,c);
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining the amendment needed.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Script/Copy');
   c.scriptPendingApproval=false;
   c.seniorNotifDismissed={[S.user.id]:true};
   notifyRejected(c,creator,'Copy needs changes',S.user.name,note);
@@ -7461,13 +7432,12 @@ function wfSubmitCopy(id){
 }
 
 function wfSeniorApprove(id){
+  saveWfReviewComment(id,'Senior Approved Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-senior-note-'+id)?.value||'';
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.seniorNotifDismissed={[S.user.id]:true};
   notifyApproved(c,creator,'Copy approved → Client Approval',S.user.name);
-  const prev=[...c.assignees];
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
@@ -7476,14 +7446,15 @@ function wfSeniorApprove(id){
 }
 
 function wfSeniorAmend(id){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining the amendment needed.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const note=document.getElementById('wf-senior-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please add a note explaining the amendment needed.');return;}
   const creator=getContentCreator(data,c);
   c.seniorNotifDismissed={[S.user.id]:true};
   notifyRejected(c,creator,'Copy needs changes — revise and resubmit',S.user.name,note);
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
-  const prev=[...c.assignees];
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[creator.id];
@@ -9199,22 +9170,17 @@ function submitIdeaForApproval(id, verIdx){
 }
 
 function approveIdeation(id, verIdx){
+  saveWfReviewComment(id,'Senior Approved — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  // Guard: Video pieces must go to shoot, not design
   if(c.type==='Video'){wfApproveIdeationForVideo(id);return;}
   const versions=getIdeationVersions(c);
-  const note=document.getElementById('senior-note-'+id)?.value||'';
+  const note=document.getElementById('wf-review-note-'+id)?.value||'';
   const today=new Date().toISOString().split('T')[0];
-  versions[verIdx].approval={
-    status:'approved',submittedBy:versions[verIdx].approval?.submittedBy||'',
-    reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note
-  };
+  versions[verIdx].approval={status:'approved',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
   c.ideationVersions=versions;
   c.ideationPendingApproval=false;
   c.seniorNotifDismissed={[S.user.id]:true};
-  c.designNotified=true;
-  c.designNotifDismissed={};
-  // Notify designer to start design
+  c.designNotified=true;c.designNotifDismissed={};
   const designer=getDesigner(data,c);
   notifyApproved(c,designer,'Ideation approved — start designing! 🎨',S.user.name);
   c.editNotifDismissed={};
@@ -9223,41 +9189,28 @@ function approveIdeation(id, verIdx){
     (c.workflowTasks||[]).filter(t=>t.assigneeId===uid2&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   });
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
-  c.statusId='design';
-  c.assignees=[designer.id];
+  c.statusId='design';c.assignees=[designer.id];
   c.workflowTasks.push({id:'wt'+uid(),assigneeId:designer.id,status:'open',statusId:'design',label:'🎨 Design',openedAt:today});
-  if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,
-    text:`✅ Ideation approved by ${S.user.name}. ${designer.name} notified for design.${note?' Note: '+note:''}`,
-    type:'general',createdAt:today});
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Approved — 🎨 ${designer.name} notified for design`);
 }
 
 function requestIdeaAmendment(id, verIdx){
+  const inp=document.getElementById('wf-review-note-'+id);
+  const note=inp?inp.value.trim():'';
+  if(!note){alert('Please add a comment explaining the amendment needed.');return;}
+  saveWfReviewComment(id,'Senior Amendment — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
-  const note=document.getElementById('senior-note-'+id)?.value||'Please review and revise the ideation.';
-  versions[verIdx].approval={
-    status:'amendment',
-    submittedBy:versions[verIdx].approval?.submittedBy||'',
-    reviewedBy:S.user.name,
-    reviewedByInit:S.user.init,
-    reviewedAt:new Date().toISOString().split('T')[0],
-    note
-  };
+  versions[verIdx].approval={status:'amendment',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:new Date().toISOString().split('T')[0],note};
   c.ideationVersions=versions;
   c.ideationPendingApproval=false;
-  // Move back to ideation
   c.statusId='ideation';
   c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  // Notify the creator via the amendment notification system
   const creator=getContentCreator(data,c);
   notifyRejected(c,creator,`Ideation ${versions[verIdx].label} needs changes`,S.user.name,note);
-  save(data);
-  _refreshIdeaPanel(id);
-  renderSidebar();renderTopbar();
-  showAIToast(`\uD83D\uDD04 Amendment requested — ${creator.name} notified`);
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast(`🔄 Amendment requested — ${creator.name} notified`);
 }
 
 function resetIdeaApproval(id, verIdx){
