@@ -5416,6 +5416,7 @@ function renderDetailPage(id, forceTab){
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
   if(c.jobKind==='task'){
     const isDone=c.taskDone||c.statusId==='posted';
+    const taskStatusBtns=canChangeStatus?data.statuses.map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
     document.getElementById('detail-main').innerHTML=`
       <div class="panel" style="margin-bottom:0">
         <div class="ph" style="gap:10px">
@@ -5430,6 +5431,10 @@ function renderDetailPage(id, forceTab){
       ${isDone?'':`<div style="margin-top:16px">
         <button class="btn btn-ac" style="width:100%;padding:12px;font-size:16px" onclick="markTaskDone('${id}')">✅ Mark as Done</button>
       </div>`}
+      ${taskStatusBtns?`<div style="margin-top:16px;padding:14px;background:var(--s2);border-radius:var(--r2);border:1px solid var(--b1)">
+        <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🔄 Change Status</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${taskStatusBtns}</div>
+      </div>`:''}
       <div style="margin-top:20px;border-top:1px solid var(--b1);padding-top:16px">
         <div style="font-size:13px;font-weight:700;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace">Comments</div>
         <div>${commentsHTML||`<div class="empty-msg" style="padding:10px 0">No comments yet</div>`}</div>
@@ -5458,7 +5463,7 @@ function renderDetailPage(id, forceTab){
       <button class="detail-tab ${defaultTab==='dp-copy'?'active':''}" onclick="switchDTab(this,'dp-copy')">✍️ Copywriting</button>
       <button class="detail-tab${c.statusId==='client_approval'?' active':''}" onclick="switchDTab(this,'dp-comments')">${c.statusId==='client_approval'?'🤝 Client Approval':'💬 Comments ('+((c.comments||[]).length)+')'}</button>
       <button class="detail-tab ${defaultTab==='dp-history'?'active':''}" onclick="switchDTab(this,'dp-history')">📋 History</button>
-      ${isAdmin||S.user.role==='senior'?`<button class="detail-tab" onclick="switchDTab(this,'dp-status')">🔄 Status</button>`:''}
+      ${isAdmin||S.user.role==='senior'||S.user.id==='leonard'||S.user.role==='content_creator'?`<button class="detail-tab" onclick="switchDTab(this,'dp-status')">🔄 Status</button>`:''}
     </div>
 
     <div id="dp-ideation" ${defaultTab!=='dp-ideation'?'style="display:none"':''}>${renderIdeationPanel(c,id)}</div>
@@ -5484,7 +5489,7 @@ function renderDetailPage(id, forceTab){
       </div>`}
     </div>
     <div id="dp-history" ${defaultTab!=='dp-history'?'style="display:none"':''}>${historyHTML||`<div class="empty-msg">No history yet</div>`}</div>
-    ${isAdmin||S.user.role==='senior'?`<div id="dp-status" style="display:none">
+    ${isAdmin||S.user.role==='senior'||S.user.id==='leonard'||S.user.role==='content_creator'?`<div id="dp-status" style="display:none">
       <div style="font-size:14px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">Click a status to force-update this content piece</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${statusBtns}</div>
       <div style="margin-top:20px;padding-top:14px;border-top:2px solid var(--redd)">
