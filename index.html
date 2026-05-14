@@ -7532,10 +7532,12 @@ function wfAmendScript(id){
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
   saveWfReviewComment(id,'Senior Amendment — Script/Copy');
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const creator=getContentCreator(data,c);
   c.scriptPendingApproval=false;
   c.seniorNotifDismissed={[S.user.id]:true};
   notifyRejected(c,creator,'Copy needs changes',S.user.name,note);
-  const prev=[...c.assignees];
+  if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[creator.id];
@@ -7564,8 +7566,8 @@ function carouselSubmitDesign(id){
   c.comments.push({id:'wt'+uid(),userId:S.user.id,
     text:`🎨 Design submitted for senior approval by ${S.user.name}`,type:'general',createdAt:today});
   const prev=[...c.assignees];
-  c.statusId='senior_approval_video';
-  c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:today});
+  c.statusId='senior_approval';
+  c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Design submitted — ${senior.name} notified to review`);
@@ -7905,7 +7907,8 @@ function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);
 function saveCopywriting(id){const inp=document.getElementById('copy-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.copywriting=inp.value;save(data);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);}}
 function saveComment(id){
   const text=document.getElementById('comment-input-'+id).value.trim();if(!text)return;
-  const type=document.getElementById('comment-type-'+id).value;
+  const typeEl=document.getElementById('comment-type-'+id);
+  const type=typeEl?typeEl.value:'general';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
