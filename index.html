@@ -8148,14 +8148,14 @@ async function saveNewBrand(){
     setProgress(5,'Asking local AI for creative titles…');
     const aiPrompt=`You are a social media content planner for "${name}".
 Brand info: ${infoSummary||'A brand needing social media content.'}
-Monthly quota: ${videos} videos, ${carousels} wall posts/carousels, ${ads} video ads, ${tiktoks} TikTok videos.
+Monthly quota: ${wallPosts2} wall posts (carousel/image/reels), ${ads} video ads, ${tiktoks} TikTok videos.
 Contract: ${months.length} months (${contractStart} to ${contractEnd}).
 
 Generate ONLY a JSON array of creative content titles for ONE month's quota (${quota} items total).
-Each item must have: "title" (creative short name, max 40 chars), "type" ("Video" or "Carousel"), "cat" (one of: video, carousel, videoAds, tiktok).
-Counts must match exactly: ${videos} video, ${carousels} carousel, ${ads} videoAds, ${tiktoks} tiktok.
+Each item must have: "title" (creative short name, max 40 chars), "type" ("Video" or "Carousel"), "cat" (one of: wallPost, videoAds, tiktok).
+Counts must match exactly: ${wallPosts2} wallPost, ${ads} videoAds, ${tiktoks} tiktok.
 Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
-[{"title":"Brand Story","type":"Video","cat":"video"},{"title":"Product Tips","type":"Carousel","cat":"carousel"}]`;
+[{"title":"Brand Story","type":"Video","cat":"videoAds"},{"title":"Product Tips","type":"Carousel","cat":"wallPost"}]`;
 
     const resp=await fetch('http://localhost:1234/v1/chat/completions',{
       method:'POST',
@@ -8194,6 +8194,7 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
     : [
         ...Array.from({length:wallPosts2},(_,i)=>({title:`WP#${i+1}`,type:'Carousel',cat:'wallPost'})),
         ...Array.from({length:ads},(_,i)=>({title:`Ad#${i+1}`,type:'Video',cat:'videoAds'})),
+        ...Array.from({length:tiktoks},(_,i)=>({title:`TikTok#${i+1}`,type:'Video',cat:'tiktok'})),
       ];
 
   // Save the brand
