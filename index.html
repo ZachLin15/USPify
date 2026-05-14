@@ -2628,7 +2628,7 @@ function renderTracker(){
     },
     {
       key:'tiktok', label:'TikTok Content', icon:'🎵', color:'var(--tel)',
-      match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i)),
+      match:c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/^TikTok#/i)||c.title.match(/tiktok/i))),
       subs:null
     },
   ];
@@ -2745,7 +2745,10 @@ function renderBrandPage(){
   const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:8px">
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
-      <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option><option value="Carousel" ${S.trackerFilterType==='Carousel'?'selected':''}>Carousel</option><option value="Video" ${S.trackerFilterType==='Video'?'selected':''}>Video</option>
+      <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option>
+      <option value="Carousel" ${S.trackerFilterType==='Carousel'?'selected':''}>Carousel</option>
+      <option value="Video" ${S.trackerFilterType==='Video'?'selected':''}>Video</option>
+      <option value="tiktok" ${S.trackerFilterType==='tiktok'?'selected':''}>🎵 TikTok</option>
     </select>
     <select class="filter-select" onchange="S.trackerFilterStatus=this.value;renderPage()">
       <option value="all" ${S.trackerFilterStatus==='all'?'selected':''}>All statuses</option>
@@ -2763,7 +2766,8 @@ function renderBrandPage(){
     </select>
     <span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${contents.length} items</span>
   </div>`;
-  if(S.trackerFilterType!=='all')contents=contents.filter(c=>c.type===S.trackerFilterType);
+  if(S.trackerFilterType==='tiktok') contents=contents.filter(c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/tiktok/i)||c.title.match(/^TikTok#/i))));
+  else if(S.trackerFilterType!=='all') contents=contents.filter(c=>c.type===S.trackerFilterType);
   if(S.trackerFilterStatus!=='all')contents=contents.filter(c=>c.statusId===S.trackerFilterStatus);
   // Always filter by selected month
   const _curM=new Date().toISOString().slice(0,7);
@@ -2905,9 +2909,10 @@ function renderBrandPage(){
   }
 
   // Group by category: Wall Posts, Video Ads, TikTok Content, Other
+  const isTiktok=c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/^TikTok#/i)||c.title.match(/tiktok/i)));
   const wallPosts=contents.filter(c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)));
   const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))));
-  const tiktokContent=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&(c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))));
+  const tiktokContent=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&isTiktok(c));
   const other=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&!tiktokContent.includes(c));
 
   const hasSep=(a,b)=>a.length&&b.length;
