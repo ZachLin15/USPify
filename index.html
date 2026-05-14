@@ -8045,8 +8045,12 @@ function openAddBrandModal(){
     </div>
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Monthly Quota Breakdown</div>
     <div class="form-row-2">
-      <div><label class="form-label">🖼 Wall Posts</label><input class="form-input" id="nb-wallpost" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Carousel / image / reels</div></div>
-      <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">TikTok / reels / video ads</div></div>
+      <div><label class="form-label">🖼 Wall Posts</label><input class="form-input" id="nb-wallpost" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Carousel / single image / reels</div></div>
+      <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Video ads (Ad#)</div></div>
+    </div>
+    <div class="form-row-2">
+      <div><label class="form-label">🎵 TikTok Content</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">TikTok videos (TikTok#)</div></div>
+      <div></div>
     </div>
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-top:6px">Contract Period</div>
     <div class="form-row-2">
@@ -8067,21 +8071,22 @@ async function saveNewBrand(){
   const sel=document.querySelector('.color-opt.selected');const color=sel?sel.dataset.color:'#888780';
   const wallPosts2=parseInt(document.getElementById('nb-wallpost').value)||0;
   const ads=parseInt(document.getElementById('nb-ads').value)||0;
+  const tiktoks=parseInt(document.getElementById('nb-tiktok').value)||0;
   const contractStart=document.getElementById('nb-cstart').value;
   const contractEnd=document.getElementById('nb-cend').value;
   const driveLink=document.getElementById('nb-drive').value.trim();
   const infoSummary=document.getElementById('nb-info').value.trim();
   if(!contractStart||!contractEnd){alert('Please set contract start and end dates.');return;}
 
-  const quota=wallPosts2+ads;
+  const quota=wallPosts2+ads+tiktoks;
   if(quota===0){alert('Please set at least one quota number.');return;}
 
   const data=D();
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
   if(data.brands.find(b=>b.id===id)){alert('Brand with this name already exists.');return;}
 
-  const quotaBreakdown={wallPost:wallPosts2,videoAds:ads,video:0,carousel:0,tiktok:0};
-  const quotaLabels={wallPost:'Wall Posts',videoAds:'Video Ads',video:'',carousel:'',tiktok:''};
+  const quotaBreakdown={wallPost:wallPosts2,videoAds:ads,tiktok:tiktoks,video:0,carousel:0};
+  const quotaLabels={wallPost:'Wall Posts',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
   // Build month list for whole contract year
   const months=[];
@@ -8091,10 +8096,9 @@ async function saveNewBrand(){
   // Build base templates (per-month, numbered)
   function buildMonthTemplates(monthLabel){
     const t=[];
-    for(let i=1;i<=videos;i++) t.push({title:`${name} Video#${i} ${monthLabel}`,type:'Video',cat:'video'});
-    for(let i=1;i<=carousels;i++) t.push({title:`${name} WP#${i} ${monthLabel}`,type:'Carousel',cat:'carousel'});
-    for(let i=1;i<=ads;i++) t.push({title:`${name} Ad#${i} ${monthLabel}`,type:'Video',cat:'videoAds'});
-    for(let i=1;i<=tiktoks;i++) t.push({title:`${name} TikTok#${i} ${monthLabel}`,type:'Video',cat:'tiktok'});
+    for(let i=1;i<=wallPosts2;i++) t.push({title:`${name} WP#${i} — ${monthLabel}`,type:'Carousel',cat:'wallPost'});
+    for(let i=1;i<=ads;i++) t.push({title:`${name} Ad#${i} — ${monthLabel}`,type:'Video',cat:'videoAds'});
+    for(let i=1;i<=tiktoks;i++) t.push({title:`${name} TikTok#${i} — ${monthLabel}`,type:'Video',cat:'tiktok'});
     return t;
   }
 
