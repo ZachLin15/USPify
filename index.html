@@ -8281,21 +8281,18 @@ function executeDeleteBrand(brandId){
 async function cloudDeleteBrand(brandId, contentIds){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
   try{
+    // Delete all content rows linked to this brand in one query using brand_id column
+    await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?brand_id=eq.${brandId}`,{
+      method:'DELETE',headers:_sbUH()
+    });
     // Delete brand row
     await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_brands?id=eq.${brandId}`,{
       method:'DELETE',headers:_sbUH()
     });
-    // Delete all content rows for this brand
-    if(contentIds&&contentIds.length){
-      // Delete in batches if needed
-      for(let i=0;i<contentIds.length;i+=50){
-        const batch=contentIds.slice(i,i+50);
-        const filter=batch.map(id=>`id.eq.${id}`).join(',');
-        await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?or=(${filter})`,{
-          method:'DELETE',headers:_sbUH()
-        });
-      }
-    }
+    // Also clean up any ad metrics rows for this brand if table exists
+    fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_admetrics?brand_id=eq.${brandId}`,{
+      method:'DELETE',headers:_sbUH()
+    }).catch(()=>{});
   }catch(e){
     console.error('Cloud delete brand failed:',e.message);
   }
@@ -8961,19 +8958,6 @@ function getAlertItems(data){
       entry.deletedById!==uid // don't notify the person who deleted it
     ).forEach(entry=>items.push({_isDeletion:true,...entry}));
   }
-  // Deadline alerts — only for content relevant to THIS user
-  data.contents.filter(c=>{
-    if(c.statusId==='posted')return false;
-    const days=daysUntil(c.postingDate);
-    if(days>2||days<0)return false;
-    // Unstarted content → only Leonard (content_creator) sees it
-    if(isUnstartedContent(c)) return role==='content_creator'||role==='admin';
-    // Otherwise only show if this user has an active job/task on it
-    if(role==='admin') return true;
-    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
-      || c.assignees.includes(uid);
-  }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
-
   return items;
 }
 
@@ -9146,27 +9130,6 @@ function renderNotifPanel(){
             <button onclick="dismissDeletionNotif('${entry.logId}')" title="Acknowledge" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
           </div>`).join(''));
     }
-  }
-
-    // ── 4. DEADLINE ALERTS ───────────────────────────────────────────────────
-  const todayStr=new Date().toISOString().split('T')[0];
-  const deadlineAlerts=data.contents.filter(c=>{
-    if(c.statusId==='posted')return false;
-    const days=daysUntil(c.postingDate);
-    return days<=2&&days>=0;
-  }).sort((a,b)=>daysUntil(a.postingDate)-daysUntil(b.postingDate));
-  if(deadlineAlerts.length){
-    sections.push(`<div class="np-section-header" style="background:var(--redd);color:var(--red)">⚠ DEADLINE ALERTS (${deadlineAlerts.length})</div>`
-      +deadlineAlerts.map(c=>{
-        const b=getBrand(data,c.brandId);const days=daysUntil(c.postingDate);const st=getStatus(data,c.statusId);
-        return `<div class="np-item" style="border-left:3px solid var(--red);cursor:pointer" onclick="closeNotifPanel();openContentDetail('${c.id}')">
-          <div class="np-icon warning">⚠</div>
-          <div class="np-info">
-            <div class="np-name">${c.title}</div>
-            <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--red);font-weight:700">${days===0?'TODAY':days+'d left'}</span> · ${st.name}</div>
-          </div>
-        </div>`;
-      }).join(''));
   }
 
   if(!sections.length){
