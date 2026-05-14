@@ -2610,27 +2610,26 @@ function renderTracker(){
   }
 
   // Extended type order — split Video into sub-categories by title prefix
-  // Two parent groups with sub-sections
+  // Flat sections per brand: Wall Post, Video Ads, TikTok Content
   const TRACKER_GROUPS=[
     {
       key:'wallPost', label:'Wall Post', icon:'🖼', color:'var(--pnk)',
       match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)),
       subs:[
-        {key:'carousel_wp', label:'Carousel', icon:'🃏', color:'var(--pur)',
-          match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
-        {key:'video_wp',    label:'Video',    icon:'🎬', color:'var(--amb)',
-          match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
+        {key:'carousel', label:'Carousel',     icon:'🃏', color:'var(--pur)',  match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
+        {key:'image',    label:'Single Image',  icon:'🖼', color:'var(--pnk)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Image'},
+        {key:'reels',    label:'Reels',         icon:'🎬', color:'var(--amb)',  match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
       ]
     },
     {
       key:'videoAds', label:'Video Ads', icon:'📢', color:'var(--red)',
-      match:c=>(c.cat==='videoAds'||c.cat==='tiktok')||((!c.cat)&&(c.title.match(/^Ad#/i)||c.title.match(/^TikTok#/i))),
-      subs:[
-        {key:'videoAds_sub', label:'Video',  icon:'🎬', color:'var(--red)',
-          match:c=>c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))},
-        {key:'tiktok',       label:'TikTok', icon:'🎵', color:'var(--tel)',
-          match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))},
-      ]
+      match:c=>c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i)),
+      subs:null
+    },
+    {
+      key:'tiktok', label:'TikTok Content', icon:'🎵', color:'var(--tel)',
+      match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i)),
+      subs:null
     },
   ];
 
@@ -2656,43 +2655,46 @@ function renderTracker(){
         const grpContents=brandContents.filter(c=>grp.match(c));
         if(!grpContents.length) return;
 
-        if(!firstGroup){
-          brandHTML+=`<div style="height:1px;background:var(--b2);margin:0 15px"></div>`;
-        }
+        if(!firstGroup) brandHTML+=`<div style="height:1px;background:var(--b2);margin:0 15px"></div>`;
         firstGroup=false;
 
-        // Parent group header
         const grpPosted=grpContents.filter(c=>c.statusId==='posted').length;
+        const grpQuota=qb[grp.key]||0;
+
+        // Group header
         brandHTML+=`<div style="padding:9px 15px 7px;background:var(--s2);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">${grp.icon}</span>
           <span style="font-size:14px;font-weight:800;color:${grp.color};font-family:'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase">${grp.label}</span>
-          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${grpContents.length} items · ${grpPosted} posted</span>
+          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">
+            <strong style="color:${grp.color}">${grpPosted}</strong> posted
+            · <strong>${grpContents.length}</strong> created
+            ${grpQuota?`· <strong style="color:${grpPosted>=grpQuota?'var(--ac)':'var(--t3)'}">${grpQuota}</strong> quota`:''}
+          </span>
         </div>`;
 
-        // Sub-sections inside the parent group
-        grp.subs.forEach((sub,si)=>{
-          const subContents=grpContents.filter(c=>sub.match(c));
-          if(!subContents.length) return;
-
-          const subPosted=subContents.filter(c=>c.statusId==='posted').length;
-          const quota=qb[sub.key]||qb[grp.key]||0;
-
-          brandHTML+=`<div style="padding:6px 15px 5px 28px;background:var(--bg);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px">
-            <span style="font-size:13px">${sub.icon}</span>
-            <span style="font-size:12px;font-weight:700;color:${sub.color};font-family:'DM Mono',monospace;letter-spacing:.04em">${sub.label}</span>
-            <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">
-              <strong style="color:${sub.color}">${subPosted}</strong> posted
-              · <strong>${subContents.length}</strong> created
-              ${quota?`· <strong style="color:${subPosted>=quota?'var(--ac)':'var(--t3)'}">${quota}</strong> quota`:''}
-            </span>
-          </div>
-          <table class="ctable" style="margin-bottom:0">
-            <thead><tr>
-              <th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th>
-            </tr></thead>
-            <tbody>${subContents.map(c=>makeRow(c)).join('')}</tbody>
+        if(grp.subs){
+          // Sub-grouped (Wall Post → Carousel / Single Image / Reels)
+          grp.subs.forEach(sub=>{
+            const subContents=grpContents.filter(c=>sub.match(c));
+            if(!subContents.length) return;
+            const subPosted=subContents.filter(c=>c.statusId==='posted').length;
+            brandHTML+=`<div style="padding:5px 15px 4px 28px;background:var(--bg);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px">
+              <span style="font-size:13px">${sub.icon}</span>
+              <span style="font-size:12px;font-weight:700;color:${sub.color};font-family:'DM Mono',monospace">${sub.label}</span>
+              <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto"><strong style="color:${sub.color}">${subPosted}</strong> posted · <strong>${subContents.length}</strong></span>
+            </div>
+            <table class="ctable" style="margin-bottom:0">
+              <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
+              <tbody>${subContents.map(c=>makeRow(c)).join('')}</tbody>
+            </table>`;
+          });
+        } else {
+          // Flat table (Video Ads, TikTok Content)
+          brandHTML+=`<table class="ctable" style="margin-bottom:0">
+            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
+            <tbody>${grpContents.map(c=>makeRow(c)).join('')}</tbody>
           </table>`;
-        });
+        }
       });
 
       html+=`<div class="panel" style="margin-bottom:12px;overflow:hidden">${brandHTML}</div>`;
