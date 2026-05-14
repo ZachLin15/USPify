@@ -5040,7 +5040,7 @@ function renderDetailPage(id, forceTab){
     <button class="btn btn-ghost btn-sm" id="detail-side-toggle" onclick="toggleDetailSide()" style="display:none" title="Show info panel">\u24D8 Info</button>
     ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openEditContentModal('${id}')">Edit</button>`:''}
     ${isAdmin?`<button class="btn btn-warn btn-sm" onclick="sendWhatsApp('${id}')">\uD83D\uDCF1 Remind</button>`:''}
-    ${(S.user.id==='caleb'||S.user.id==='carmen')?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
+    ${S.user.role==='admin'?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
   `;
 
   // --- MAIN (left panel) ---
@@ -7482,6 +7482,7 @@ function changeStatus(id,statusId){
   save(data);renderDetailPage(id);renderSidebar();
 }
 function confirmDeleteContent(id){
+  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const b=getBrand(data,c.brandId);
   openModal(`<div class="modal-title" style="color:var(--red)">🗑 Remove content piece<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -7500,6 +7501,7 @@ function confirmDeleteContent(id){
     </div>`);
 }
 function deleteContent(id){
+  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();
   const c=data.contents.find(x=>x.id===id);
   if(c){
