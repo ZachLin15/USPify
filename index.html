@@ -5407,7 +5407,7 @@ function renderDetailPage(id, forceTab){
   const commentsHTML=(c.comments||[]).map(cm=>{const cu=getUser(data,cm.userId);return`<div class="comment-item"><div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div><div class="comment-body"><div class="comment-header"><span class="comment-name">${cu.name}</span><span class="comment-time">${fmt(cm.createdAt)}</span><span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span></div><div class="comment-text">${cm.text}</div></div></div>`;}).join('');
   const historyHTML=(c.statusHistory||[]).map(h=>{const hst=getStatus(data,h.statusId);const hu=getUser(data,h.changedBy);return`<div class="history-item"><div class="history-dot" style="background:${hst.color}"></div><span class="history-status" style="color:${hst.color}">${hst.name}</span><div class="history-line"></div><span class="history-by">${hu.name}</span><span class="history-time">${fmt(h.changedAt)}</span></div>`;}).join('');
   const canChangeStatus=isAdmin||(S.user.id==='leonard'||S.user.role==='content_creator');
-  const statusBtns=canChangeStatus?data.statuses.map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
+  const statusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
 
   // Smart default tab — type-aware, supports forceTab override
   const defaultTab = forceTab || getDefaultTabForContent(c);
@@ -5416,7 +5416,7 @@ function renderDetailPage(id, forceTab){
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
   if(c.jobKind==='task'){
     const isDone=c.taskDone||c.statusId==='posted';
-    const taskStatusBtns=canChangeStatus?data.statuses.map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
+    const taskStatusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
     document.getElementById('detail-main').innerHTML=`
       <div class="panel" style="margin-bottom:0">
         <div class="ph" style="gap:10px">
@@ -6559,7 +6559,7 @@ function designerSubmitForReview(id, verIdx){
 function switchDTab(el, showId){
   document.querySelectorAll('.detail-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  ['dp-ideation','dp-design','dp-video','dp-copy','dp-comments','dp-history','dp-status'].forEach(id=>{
+  ['dp-ideation','dp-shoot','dp-design','dp-video','dp-copy','dp-comments','dp-history','dp-status'].forEach(id=>{
     const d=document.getElementById(id);if(d)d.style.display=id===showId?'block':'none';
   });
 }
@@ -7056,12 +7056,19 @@ function renderWorkflowActionBox(data, c){
   if(c.jobKind==='task'){
     const isDone=c.statusId==='posted'||c.taskDone;
     const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===S.user.id&&t.status==='open');
+    const canEditStatus=isAdmin||S.user.id==='leonard'||role==='content_creator';
+    const data3=D();
+    const wfTaskStatusBtns=canEditStatus?data3.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:2px;padding:4px 9px;font-size:12px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
     return withHistory(`<div class="wf-action-box ${isDone?'copy':'design'}" style="${isDone?'background:var(--acd);border-color:var(--ac)':''}">
-      <div class="wf-action-title">${isDone?'✅ Task Completed':'✅ Task'}${openTask&&!isDone?' — Your Turn':''}</div>
+      <div class="wf-action-title">${isDone?'✅ Task Completed':'📋 Task'}${openTask&&!isDone?' — Your Turn':''}</div>
       ${c.taskDescription?`<div class="wf-action-sub" style="margin-bottom:12px;font-size:14px;color:var(--t1);line-height:1.6">${c.taskDescription}</div>`:''}
       ${!isDone?`<div class="wf-action-row">
         <button class="wf-btn wf-btn-green" onclick="markTaskDone('${id}')">✅ Mark as Done</button>
       </div>`:`<div style="font-size:13px;color:var(--ac);font-family:'DM Mono',monospace">✓ Completed on ${c.taskDoneAt||'?'}</div>`}
+      ${wfTaskStatusBtns?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)">
+        <div style="font-size:11px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🔄 Change Status</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px">${wfTaskStatusBtns}</div>
+      </div>`:''}
     </div>`);
   }
 
