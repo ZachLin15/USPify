@@ -8252,49 +8252,43 @@ function confirmDeleteBrand(brandId){
     </div>`);
 }
 
-function executeDeleteBrand(brandId){
+async function executeDeleteBrand(brandId){
   if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const name=b.name;
-  // Collect content IDs to delete from cloud
-  const deletedContentIds=data.contents.filter(c=>c.brandId===brandId).map(c=>c.id);
-  // Remove brand
+
+  // 1. Delete from cloud FIRST (before local save overwrites nothing)
+  await cloudDeleteBrand(brandId);
+
+  // 2. Remove from local data
   data.brands=data.brands.filter(x=>x.id!==brandId);
-  // Remove all content pieces for this brand
   data.contents=data.contents.filter(c=>c.brandId!==brandId);
-  // Remove all ad metrics for this brand
   if(Array.isArray(data.adMetrics)) data.adMetrics=data.adMetrics.filter(m=>m.brandId!==brandId);
-  // Remove any tasks linked to this brand
   if(Array.isArray(data.tasks)) data.tasks=data.tasks.filter(t=>t.brandId!==brandId);
-  // Remember this brand was deleted so D() doesn't re-add it from defaults
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
   if(!data.deletedBrandIds.includes(brandId)) data.deletedBrandIds.push(brandId);
-  // If currently viewing this brand, go back to dashboard
   if(S.brand===brandId){S.brand=null;S.page='dashboard';}
+
+  // 3. Save remaining local data to cloud (upsert of remaining items only)
   save(data);
-  // Also delete from Supabase cloud
-  cloudDeleteBrand(brandId, deletedContentIds);
   closeModal();render();
   showAIToast(`🗑 Brand "${name}" and all related data deleted`);
 }
 
-async function cloudDeleteBrand(brandId, contentIds){
+async function cloudDeleteBrand(brandId){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
   try{
-    // Delete all content rows linked to this brand in one query using brand_id column
-    await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?brand_id=eq.${brandId}`,{
-      method:'DELETE',headers:_sbUH()
-    });
-    // Delete brand row
-    await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_brands?id=eq.${brandId}`,{
-      method:'DELETE',headers:_sbUH()
-    });
-    // Also clean up any ad metrics rows for this brand if table exists
-    fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_admetrics?brand_id=eq.${brandId}`,{
-      method:'DELETE',headers:_sbUH()
-    }).catch(()=>{});
+    const headers={..._sbUH(),'Prefer':'return=minimal'};
+    // Delete all content rows for this brand first (foreign key order)
+    const r1=await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?brand_id=eq.${brandId}`,{method:'DELETE',headers});
+    if(!r1.ok){const t=await r1.text();console.error('Delete contents failed:',r1.status,t);}
+    // Delete the brand row
+    const r2=await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_brands?id=eq.${brandId}`,{method:'DELETE',headers});
+    if(!r2.ok){const t=await r2.text();console.error('Delete brand failed:',r2.status,t);}
+    // Try ad metrics table (may not exist)
+    fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_admetrics?brand_id=eq.${brandId}`,{method:'DELETE',headers}).catch(()=>{});
   }catch(e){
-    console.error('Cloud delete brand failed:',e.message);
+    console.error('cloudDeleteBrand failed:',e.message);
   }
 }
 
