@@ -2674,20 +2674,27 @@ function renderTracker(){
 
         if(grp.subs){
           // Sub-grouped (Wall Post → Carousel / Single Image / Reels)
+          // All subs share ONE table so columns stay perfectly aligned
+          brandHTML+=`<table class="ctable" style="margin-bottom:0">
+            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
+            <tbody>`;
           grp.subs.forEach(sub=>{
             const subContents=grpContents.filter(c=>sub.match(c));
             if(!subContents.length) return;
             const subPosted=subContents.filter(c=>c.statusId==='posted').length;
-            brandHTML+=`<div style="padding:5px 15px 4px 28px;background:var(--bg);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px">
-              <span style="font-size:13px">${sub.icon}</span>
-              <span style="font-size:12px;font-weight:700;color:${sub.color};font-family:'DM Mono',monospace">${sub.label}</span>
-              <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto"><strong style="color:${sub.color}">${subPosted}</strong> posted · <strong>${subContents.length}</strong></span>
-            </div>
-            <table class="ctable" style="margin-bottom:0">
-              <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
-              <tbody>${subContents.map(c=>makeRow(c)).join('')}</tbody>
-            </table>`;
+            // Sub-header as a table row spanning all columns
+            brandHTML+=`<tr style="background:var(--bg)">
+              <td colspan="6" style="padding:5px 15px 4px;border-bottom:1px solid var(--b1)">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:13px">${sub.icon}</span>
+                  <span style="font-size:12px;font-weight:700;color:${sub.color};font-family:'DM Mono',monospace">${sub.label}</span>
+                  <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto"><strong style="color:${sub.color}">${subPosted}</strong> posted · <strong>${subContents.length}</strong></span>
+                </div>
+              </td>
+            </tr>`;
+            brandHTML+=subContents.map(c=>makeRow(c)).join('');
           });
+          brandHTML+=`</tbody></table>`;
         } else {
           // Flat table (Video Ads, TikTok Content)
           brandHTML+=`<table class="ctable" style="margin-bottom:0">
