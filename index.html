@@ -38,7 +38,7 @@
   window.closeSidebar=function(){};
 </script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>USPify Portal v3</title>
+<title>USPify Portal v3.142</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f0f11;--s1:#161618;--s2:#1e1e22;--s3:#26262c;--s4:#2e2e36;--b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.13);--b3:rgba(255,255,255,0.22);--t1:#eeecea;--t2:#b0ada6;--t3:#7e7c76;--t4:#3a3a36;--ac:#c8f04a;--ac2:#a8d030;--acd:rgba(200,240,74,0.12);--red:#ff5a5a;--redd:rgba(255,90,90,0.12);--amb:#f0a030;--ambd:rgba(240,160,48,0.12);--blu:#5a9fff;--blud:rgba(90,159,255,0.12);--pnk:#e06aaa;--pnkd:rgba(224,106,170,0.12);--tel:#3acca0;--teld:rgba(58,204,160,0.12);--pur:#9a7aff;--purd:rgba(154,122,255,0.12);--ora:#ff9f43;--orad:rgba(255,159,67,0.12);--r:8px;--r2:12px;--sb:260px}
@@ -275,7 +275,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .cal-allday-gutter{display:none}
 .cal-allday-cell{display:none}
 .cal-event-pill{font-size:13px;font-weight:600;padding:3px 8px;border-radius:4px;font-family:'DM Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
-.cal-body{display:grid;grid-template-columns:64px repeat(7,1fr);overflow-y:auto;max-height:calc(100vh - 260px);min-height:520px;position:relative}
+.cal-body{display:grid;grid-template-columns:64px repeat(7,1fr);overflow-y:auto;max-height:calc(100vh - 200px);min-height:520px;position:relative}
 .cal-time-col{border-right:1px solid var(--b1)}
 .cal-time-slot{height:64px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 10px 0 0}
 .cal-time-label{font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:-1px}
@@ -1270,9 +1270,9 @@ async function cloudLoad(){
     const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
     const settings=sRows[0]?.data||{};
     const data={
-      users:uRows.map(r=>r.data),
-      brands:bRows.map(r=>r.data),
-      contents:cRows.map(r=>r.data),
+      users:uRows.map(r=>r.data).filter(x=>x&&x.id),
+      brands:bRows.map(r=>r.data).filter(x=>x&&x.id),
+      contents:cRows.map(r=>r.data).filter(x=>x&&x.id),
       statuses:settings.statuses||[],
       scheduleBlocks:settings.scheduleBlocks||[],
       adMetrics:settings.adMetrics||[],
@@ -1298,9 +1298,9 @@ async function cloudSave(data){
   try{
     const now=new Date().toISOString();
     const by=S.user?.name||'?';
-    const uPayload=(data.users||[]).map(u=>({id:u.id,data:u,updated_at:now}));
-    const bPayload=(data.brands||[]).map(b=>({id:b.id,data:b,updated_at:now}));
-    const cPayload=(data.contents||[]).map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now}));
+    const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
+    const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
+    const cPayload=(data.contents||[]).filter(c=>c&&c.id).map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now}));
     const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
     // Chunk contents into batches of 100
     const chunks=[];
@@ -1462,7 +1462,7 @@ function updateDueDatesFromPosting(c){
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
 const AMENDMENT_IDS=['copy_amendment','design_amendment','ideation_amendment'];
 
-const S={user:null,page:'dashboard',brand:null,calWeek:0,calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date',collapsedBrands:{},todoFilter:'active',todoPrio:'all'};
+const S={user:null,page:'dashboard',brand:null,calWeek:0,calView:'week',calDate:new Date().toISOString().split('T')[0],calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date',collapsedBrands:{},todoFilter:'active',todoPrio:'all',brandCalBrand:'all'};
 
 // ===================== AI STATE =====================
 const AI = {
@@ -1629,6 +1629,11 @@ function D(){
   if(!Array.isArray(data.adMetrics)) data.adMetrics=getDefault().adMetrics;
   if(!Array.isArray(data.tasks)) data.tasks=[];
   if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
+  // Guard: strip any null/corrupt entries that could crash .name/.color access
+  data.users=data.users.filter(x=>x&&x.id);
+  data.brands=data.brands.filter(x=>x&&x.id);
+  data.statuses=data.statuses.filter(x=>x&&x.id);
+  data.contents=data.contents.filter(x=>x&&x.id);
 
   // Migration: ensure 'copywriting' status exists
   if(!data.statuses.find(s=>s.id==='copywriting')){
@@ -1970,7 +1975,8 @@ function renderSidebar(){
     ...(isAdmin?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
     ...(isAdmin?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
-    {id:'calendar',label:'Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
+    {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
+    {id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'},
     {id:'ads',label:'Ad Reports',icon:'<polyline points="1,12 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>'},
     {id:'team',label:'Team',icon:'<circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5"/><circle cx="12" cy="5" r="2"/><path d="M14 13c0-2-1-3.5-2-4"/>'},
     ...(isAdmin?[{id:'analytics',label:'Time Analytics',icon:'<polyline points="2 12 6 6 10 10 14 4"/><line x1="2" y1="14" x2="15" y2="14"/>'}]:[]),
@@ -2020,7 +2026,8 @@ function renderTopbar(){
     title='Content Tracker';sub='';
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
   }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
-  else if(S.page==='calendar'){title='Calendar';sub='Team timetable · deadlines · productivity';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button><button class="btn btn-info btn-sm" onclick="showProductivityReport()">Productivity Report</button>`;}
+  else if(S.page==='calendar'){title='My Calendar';sub='Schedule, blocks & tasks';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button>`;}
+  else if(S.page==='brand_calendar'){title='Brand Calendar';sub='Content schedule by brand — monthly view';}
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
   else if(S.page==='clientpost'){const cpCount=data.contents.filter(c=>c.statusId==='client_approval').length;title='Client Post';sub=cpCount>0?`${cpCount} item${cpCount>1?'s':''} ready to post to Facebook`:'No items awaiting posting';}
   else if(S.page==='responsibilities'){title='Responsibilities';sub='Assign PIC to each workflow stage per employee';}
@@ -2041,7 +2048,7 @@ function renderPage(){
   try{
     if(S.user.role==='client'){root.innerHTML=S.page==='client_dashboard'?renderClientDashboard():renderClientApprovals();return;}
     if(S.brand){root.innerHTML=renderBrandPage();return;}
-    const pages={dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings,set_password:renderSetPassword};
+    const pages={dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,brand_calendar:renderBrandCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings,set_password:renderSetPassword};
     const fn=pages[S.page];root.innerHTML=fn?fn():`<div class="empty-msg">Page not found</div>`;
     if(S.page==='calendar')initCalendarInteractions();
   }catch(e){
@@ -3111,230 +3118,323 @@ function doRevise(id){
 function renderCalendar(){
   const data=D();
   if(!data.scheduleBlocks) data.scheduleBlocks=[];
-  const days=getWeekDates(S.calWeek);
   const todayStr=new Date().toISOString().split('T')[0];
-  const calIsAdmin=S.user.role==='admin';
-  // Everyone only sees their own calendar
   S.calUser=S.user.id;
+  if(!S.calView) S.calView='week';
+  if(!S.calDate) S.calDate=todayStr;
 
-  const HOURS_START=7, HOURS_END=22; // 7am–10pm
-  const SLOT_H=64; // px per hour
+  const HOURS_START=7,HOURS_END=22,SLOT_H=90;
   const totalH=(HOURS_END-HOURS_START)*SLOT_H;
 
-  const personSel=`<div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:10px">📅 My Calendar — ${S.user.name}</div>`;
+  // ── VIEW SWITCHER & NAV ───────────────────────────────────────────────────
+  const viewBtns=['day','week','month'].map(v=>`<button onclick="S.calView='${v}';renderPage()" style="padding:5px 14px;border-radius:6px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:'Syne',sans-serif;transition:all .12s;${S.calView===v?'background:var(--ac);color:#0f0f11':'background:var(--s3);color:var(--t2)'}">${v.charAt(0).toUpperCase()+v.slice(1)}</button>`).join('');
 
-  const wLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
-  const calNav=`<div class="cal-nav" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-    <button class="cal-nav-btn" onclick="calNavWeek(-1)">◀</button>
-    <span class="cal-week-label">${wLabel}</span>
-    <button class="cal-nav-btn" onclick="calNavWeek(1)">▶</button>
-    <button class="cal-today-btn" onclick="calNavToday()">Today</button>
+  const navLabel=(()=>{
+    const d=new Date(S.calDate+'T12:00:00');
+    if(S.calView==='day') return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    if(S.calView==='week'){const wk=getWeekDatesFromDate(S.calDate);return`${wk[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${wk[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;}
+    return d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  })();
+
+  const calHeader=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="display:flex;gap:4px;background:var(--s2);padding:3px;border-radius:8px">${viewBtns}</div>
+    <button class="cal-nav-btn" onclick="calNavPrev()">◀</button>
+    <span style="font-size:15px;font-weight:700;min-width:200px;text-align:center">${navLabel}</span>
+    <button class="cal-nav-btn" onclick="calNavNext()">▶</button>
+    <button class="cal-today-btn" onclick="S.calDate='${todayStr}';renderPage()">Today</button>
   </div>`;
 
-  const visibleUserIds=[S.calUser];
-  const visBlocks=data.scheduleBlocks.filter(b=>b.userId===S.calUser);
-
   // ── AUTO-SEED LEONARD'S DEFAULT RECURRING BLOCKS ──────────────────────────
-  // These are REAL editable scheduleBlocks. We seed them for the current week
-  // if they don't already exist. Users can edit or delete them like any other block.
   const leonardUser=data.users.find(u=>u.id==='leonard');
   if(S.calUser==='leonard'&&leonardUser){
     const lc=leonardUser.color||'#3acca0';
+    const daysToSeed=S.calView==='month'?getMonthDates(S.calDate):S.calView==='week'?getWeekDatesFromDate(S.calDate):[new Date(S.calDate+'T12:00:00')];
     let seeded=false;
-    days.forEach((d,di)=>{
+    daysToSeed.forEach(d=>{
       const ds=d.toISOString().split('T')[0];
-      const dom=d.getDate();
-      const dow=di; // 0=Mon … 6=Sun
-      // Helper: only seed if no block with this seed-id already exists
-      const seed=(seedId,block)=>{
-        if(!data.scheduleBlocks.find(b=>b.id===seedId)){
-          data.scheduleBlocks.push({id:seedId,...block,userId:'leonard',date:ds});
-          seeded=true;
-        }
-      };
+      const dom=d.getDate();const dow=d.getDay();const dowMon=(dow+6)%7;
+      const seed=(sid,block)=>{if(!data.scheduleBlocks.find(b=>b.id===sid)){data.scheduleBlocks.push({id:sid,...block,userId:'leonard',date:ds});seeded=true;}};
       if(dom===1) seed('fx-receipt-'+ds,{startHour:9,endHour:10,label:'📋 Ads Receipt',color:'#ff9f43'});
       if(dom===2) seed('fx-report-'+ds,{startHour:9,endHour:11,label:'📊 Customer Ads Report',color:'#5a9fff'});
-      if(dow>=0&&dow<=4) seed('fx-adsopt-'+ds,{startHour:8,endHour:9,label:'⚡ Daily Ads Optimization',color:lc});
-      if(dow===4) seed('fx-work-'+ds,{startHour:8,endHour:18,label:'🏢 Work Day (8:30–5:30)',color:'#888780'});
-      data.brands.forEach(b=>{
-        (b.shootingDates||[]).forEach(sd=>{
-          if(sd===ds) seed('fx-shoot-'+ds+'-'+b.id,{startHour:9,endHour:18,label:`🎬 Shooting — ${b.name}`,color:'#9a7aff'});
-        });
-      });
+      if(dowMon>=0&&dowMon<=4) seed('fx-adsopt-'+ds,{startHour:8,endHour:9,label:'⚡ Daily Ads Optimization',color:lc});
+      if(dowMon===4) seed('fx-work-'+ds,{startHour:8,endHour:18,label:'🏢 Work Day (8:30–5:30)',color:'#888780'});
+      data.brands.forEach(br=>{(br.shootingDates||[]).forEach(sd=>{if(sd===ds)seed('fx-shoot-'+ds+'-'+br.id,{startHour:9,endHour:18,label:`🎬 Shooting — ${br.name}`,color:'#9a7aff'});});});
     });
-    // Upcoming shooting 18/5
     const mayShoot='2026-05-18';
-    if(days.some(d=>d.toISOString().split('T')[0]===mayShoot)){
-      if(!data.scheduleBlocks.find(b=>b.id==='fx-shoot-'+mayShoot)){
-        data.scheduleBlocks.push({id:'fx-shoot-'+mayShoot,userId:'leonard',date:mayShoot,startHour:9,endHour:18,label:'🎬 Shooting Day',color:'#9a7aff'});
-        seeded=true;
-      }
-    }
+    if(!data.scheduleBlocks.find(b=>b.id==='fx-shoot-'+mayShoot)){data.scheduleBlocks.push({id:'fx-shoot-'+mayShoot,userId:'leonard',date:mayShoot,startHour:9,endHour:18,label:'🎬 Shooting Day',color:'#9a7aff'});seeded=true;}
     if(seeded) save(data);
   }
 
-  // No more separate fixedBlocks array — everything is in scheduleBlocks now
-  const fixedBlocks=[];
+  const userBlocks=data.scheduleBlocks.filter(b=>b.userId===S.calUser);
 
-  // ── ALL-DAY EVENTS (posting deadlines, due dates) ──────────────────────────
-  const allDayByDay=days.map((d,di)=>{
-    const ds=d.toISOString().split('T')[0];
-    const pills=[];
-    data.contents.forEach(c=>{
-      visibleUserIds.forEach(uid=>{
-        const key=uid==='hualu'?'hualu':uid==='leonard'?'leonard':'jack';
-        if(c.dueDates&&c.dueDates[key]===ds){
-          const u=getUser(data,uid);const st=getStatus(data,c.statusId);
-          pills.push(`<div class="cal-event-pill" style="background:${st.color}22;color:${st.color}" onclick="openContentDetail('${c.id}')" title="${u.name}: ${c.title}">${u.init}: ${c.title.slice(0,18)}…</div>`);
-        }
-      });
-      if(c.postingDate===ds){
-        const b=getBrand(data,c.brandId);
-        pills.push(`<div class="cal-event-pill" style="background:${b.color}22;color:${b.color}" onclick="openContentDetail('${c.id}')" title="Post: ${c.title}">📅 ${c.title.slice(0,16)}…</div>`);
-      }
-    });
-    return pills;
-  });
-  const allDayRow=`<div class="cal-allday-row">
-    <div class="cal-allday-gutter">all-day</div>
-    ${allDayByDay.map((pills,di)=>`<div class="cal-allday-cell">${pills.join('')}</div>`).join('')}
-  </div>`;
-
-  // ── TIME GRID ─────────────────────────────────────────────────────────────
+  // ── TIME GRID (shared for day/week) ───────────────────────────────────────
   const timeLabels=Array.from({length:HOURS_END-HOURS_START},(_,i)=>{
     const h=HOURS_START+i;
-    const l=h===0?'12 AM':h<12?`${h} AM`:h===12?'12 PM':`${h-12} PM`;
-    return `<div class="cal-time-slot"><span class="cal-time-label">${l}</span></div>`;
+    return `<div class="cal-time-slot" style="height:${SLOT_H}px"><span class="cal-time-label">${h<12?h+' AM':h===12?'12 PM':(h-12)+' PM'}</span></div>`;
   }).join('');
 
-  const dayCols=days.map((d,di)=>{
-    const ds=d.toISOString().split('T')[0];
-    const isToday=ds===todayStr;
-    // bg click slots
+  const renderBlockEl=(b,colIdx,numCols)=>{
+    const top=(b.startHour-HOURS_START)*SLOT_H;
+    const h=Math.max(30,(b.endHour-b.startHour)*SLOT_H);
+    const tLabel=`${b.startHour<12?b.startHour+'am':b.startHour===12?'12pm':(b.startHour-12)+'pm'}–${b.endHour<12?b.endHour+'am':b.endHour===12?'12pm':(b.endHour-12)+'pm'}`;
+    const gutter=2,pct=100/numCols,left=colIdx*pct;
+    return `<div class="cal-block" style="top:${top}px;height:${h}px;left:calc(${left}% + ${colIdx===0?3:gutter}px);right:calc(${100-(left+pct)}% + ${colIdx===numCols-1?3:gutter}px);background:${b.color}22;border-left:3px solid ${b.color};border-radius:4px"
+      onclick="openBlockDetail('${b.id}')" title="${b.label} (${tLabel})">
+      <div style="color:${b.color};font-size:12px;font-weight:600;overflow:hidden;${h>=54?'white-space:normal;word-break:break-word;':'white-space:nowrap;text-overflow:ellipsis;'}">${b.label}</div>
+      <div style="color:${b.color}99;font-size:11px">${tLabel}</div>
+    </div>`;
+  };
+
+  const renderDayCol=(ds,isToday)=>{
+    const dayBlocks=userBlocks.filter(b=>b.date===ds).sort((a,b)=>a.startHour-b.startHour);
+    const cols=[];
+    const blockCols=dayBlocks.map(b=>{let c=cols.findIndex(e=>e<=b.startHour);if(c===-1){c=cols.length;cols.push(0);}cols[c]=b.endHour;return c;});
+    const nc=Math.max(1,cols.length);
     const bgSlots=Array.from({length:HOURS_END-HOURS_START},(_,i)=>{
       const h=HOURS_START+i;
-      return `<div class="cal-day-bg-slot" style="height:${SLOT_H}px"
-        ondragover="event.preventDefault();this.classList.add('cal-drop-highlight')"
-        ondragleave="this.classList.remove('cal-drop-highlight')"
-        ondrop="calDropTodo(event,'${ds}',${h},this)"
+      return `<div style="height:${SLOT_H}px;border-top:1px solid var(--b1)"
+        ondragover="event.preventDefault();this.style.background='var(--acd)'"
+        ondragleave="this.style.background=''"
+        ondrop="this.style.background='';calDropTodo(event,'${ds}',${h},this)"
         onclick="openAddBlockModalDate('${ds}',${h})"></div>`;
     }).join('');
-
-    // Timed blocks from scheduleBlocks — recurring (dayOfWeek) or date-specific
-    const recurBlocks=visBlocks.filter(b=>b.dayOfWeek===di&&!b.date);
-    const dateSpecificBlocks=data.scheduleBlocks.filter(b=>b.date===ds&&visibleUserIds.includes(b.userId));
-    // Fixed blocks for this specific date
-    const dateFixed=fixedBlocks.filter(b=>b.date===ds);
-
-    // All blocks for this day combined
-    const allDayBlocks=[
-      ...recurBlocks.map(b=>({...b,_fixed:false})),
-      ...dateSpecificBlocks.map(b=>({...b,_fixed:false})),
-      ...dateFixed.map(b=>({...b,_fixed:true}))
-    ].sort((a,b)=>a.startHour-b.startHour);
-
-    // Overlap column assignment — greedy algorithm
-    // Each block gets a column index so overlapping blocks sit side-by-side
-    const cols=[]; // cols[i] = endHour of last block in that column
-    const blockCols=allDayBlocks.map(b=>{
-      let col=cols.findIndex(endH=>endH<=b.startHour);
-      if(col===-1){col=cols.length;cols.push(0);}
-      cols[col]=b.endHour;
-      return col;
-    });
-    const totalCols=Math.max(1,cols.length);
-
-    const renderBlock=(b,isFixed,colIdx,numCols)=>{
-      const u=getUser(data,b.userId);
-      const top=(b.startHour-HOURS_START)*SLOT_H;
-      const h=Math.max(0.5,b.endHour-b.startHour)*SLOT_H;
-      const tLabel=`${b.startHour<12?b.startHour+'am':b.startHour===12?'12pm':(b.startHour-12)+'pm'}–${b.endHour<12?b.endHour+'am':b.endHour===12?'12pm':(b.endHour-12)+'pm'}`;
-      const isContentBlock=!!b.contentId;
-      // Side-by-side columns: divide width equally, leave 2px gap
-      const gutter=2;
-      const pct=100/numCols;
-      const leftPct=colIdx*pct;
-      return `<div class="cal-block" style="top:${top}px;height:${h}px;left:calc(${leftPct}% + ${colIdx===0?4:gutter}px);right:calc(${100-(leftPct+pct)}% + ${colIdx===numCols-1?4:gutter}px);background:${b.color}22;border-left:3px solid ${b.color}${isContentBlock?';border-style:solid;border-width:1px 1px 1px 3px;border-color:'+b.color+'44 '+b.color+'44 '+b.color+'44 '+b.color:''}"
-        onclick="openBlockDetail('${b.id}')" title="${b.label} (${tLabel})">
-        <div class="cal-block-label" style="color:${b.color};font-size:12px">${isContentBlock?'📋 ':''} ${b.label}</div>
-        <div class="cal-block-time" style="color:${b.color}99;font-size:11px">${tLabel}</div>
-      </div>`;
-    };
-
-    const blockHtml=allDayBlocks.map((b,i)=>renderBlock(b,b._fixed,blockCols[i],totalCols)).join('');
-
-    return `<div class="cal-day-col" id="cal-col-${di}" style="height:${totalH}px;background:${isToday?'rgba(200,240,74,0.03)':'transparent'}">
+    return `<div style="position:relative;height:${totalH}px;background:${isToday?'rgba(200,240,74,0.025)':'transparent'}">
       ${bgSlots}
-      ${blockHtml}
+      ${dayBlocks.map((b,i)=>renderBlockEl(b,blockCols[i],nc)).join('')}
     </div>`;
-  }).join('');
+  };
 
-  const grid=`<div class="cal-container" id="cal-main">
-    <div class="cal-header-row">
-      <div class="cal-gutter-head"></div>
-      ${days.map((d,di)=>{const ds=d.toISOString().split('T')[0];const isT=ds===todayStr;return`<div class="cal-day-head" style="${isT?'background:rgba(200,240,74,0.06)':''}"><div class="cal-day-name">${DAY_NAMES[di]}</div><div class="cal-day-num${isT?' today':''}">${d.getDate()}</div></div>`;}).join('')}
-    </div>
-    ${allDayRow}
-    <div class="cal-body" id="cal-body">
-      <div class="cal-time-col">${timeLabels}</div>
-      ${dayCols}
-    </div>
-  </div>`;
+  // ── DAY VIEW ─────────────────────────────────────────────────────────────
+  if(S.calView==='day'){
+    const isToday=S.calDate===todayStr;
+    const body=`<div style="display:grid;grid-template-columns:56px 1fr;border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
+      <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
+      <div>${renderDayCol(S.calDate,isToday)}</div>
+    </div>`;
+    return calHeader+renderCalTodoLayout(data,body,todayStr);
+  }
 
-  // ── TODO LIST SIDEBAR ──────────────────────────────────────────────────────
-  const myJobs=getActiveJobsForUser(data,S.user.id);
-  const unstarted=S.user.id==='leonard'
-    ? data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10)
-    : [];
-  const todoItems=[...myJobs,...unstarted]
-    .sort((a,b)=>{
-      // Items with no posting date go to the bottom
-      if(!a.postingDate && !b.postingDate) return 0;
-      if(!a.postingDate) return 1;
-      if(!b.postingDate) return -1;
-      return a.postingDate.localeCompare(b.postingDate);
-    })
-    .slice(0,20);
-  const todoListHTML=todoItems.length
-    ? todoItems.map(c=>{
-        const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
-        const today=new Date().toISOString().split('T')[0];
-        const isLateItem=c.postingDate&&c.postingDate<today;
-        return `<div class="cal-todo-item" draggable="true" data-cid="${c.id}"
-          ondragstart="calTodoDragStart(event,'${c.id}')"
-          ondragend="this.classList.remove('dragging')"
-          onclick="openContentDetail('${c.id}')">
-          <div style="width:8px;height:8px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:3px"></div>
-          <div style="min-width:0;flex:1">
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1)">${c.title.slice(0,22)}${c.title.length>22?'…':''}</div>
-            <div style="display:flex;align-items:center;gap:5px;margin-top:1px">
-              <span style="font-size:11px;color:${b.color};font-family:'DM Mono',monospace">${b.name}</span>
-              ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:${isLateItem?'var(--red)':'var(--t3)'};font-weight:${isLateItem?700:400}">📅 ${fmt(c.postingDate)}${isLateItem?' ⚠':''}</span>`:''}
-            </div>
-          </div>
+  // ── WEEK VIEW ────────────────────────────────────────────────────────────
+  if(S.calView==='week'){
+    const wkDays=getWeekDatesFromDate(S.calDate);
+    const headRow=`<div style="display:grid;grid-template-columns:56px repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
+      <div style="border-right:1px solid var(--b1)"></div>
+      ${wkDays.map(d=>{const ds=d.toISOString().split('T')[0];const isT=ds===todayStr;const dname=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][wkDays.indexOf(d)];return`<div style="text-align:center;padding:8px 2px;border-right:1px solid var(--b1)${isT?';background:rgba(200,240,74,0.06)':''}"><div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${dname}</div><div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;font-weight:700;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t1)'}">${d.getDate()}</div></div>`;}).join('')}
+    </div>`;
+    const bodyRow=`<div style="display:grid;grid-template-columns:56px repeat(7,1fr)">
+      <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
+      ${wkDays.map(d=>{const ds=d.toISOString().split('T')[0];return`<div style="border-right:1px solid var(--b1)">${renderDayCol(ds,ds===todayStr)}</div>`;}).join('')}
+    </div>`;
+    const grid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:auto;max-height:calc(100vh - 160px)">${headRow}${bodyRow}</div>`;
+    return calHeader+renderCalTodoLayout(data,grid,todayStr);
+  }
+
+  // ── MONTH VIEW ───────────────────────────────────────────────────────────
+  const monthDates=getMonthDates(S.calDate);
+  const firstDay=new Date(S.calDate.slice(0,7)+'-01T12:00:00');
+  const startPad=(firstDay.getDay()+6)%7; // Mon=0
+  const cells=[];
+  for(let i=0;i<startPad;i++) cells.push(null);
+  monthDates.forEach(d=>cells.push(d));
+  while(cells.length%7!==0) cells.push(null);
+
+  const monthGrid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
+      ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+      ${cells.map((d,i)=>{
+        if(!d) return`<div style="min-height:120px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);background:var(--s3)"></div>`;
+        const ds=d.toISOString().split('T')[0];
+        const isT=ds===todayStr;
+        const dayBlocks=userBlocks.filter(b=>b.date===ds).slice(0,3);
+        const more=userBlocks.filter(b=>b.date===ds).length-3;
+        return `<div style="min-height:120px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:4px;${isT?'background:rgba(200,240,74,0.04)':''}"
+          ondragover="event.preventDefault();this.style.outline='2px dashed var(--ac)'"
+          ondragleave="this.style.outline=''"
+          ondrop="this.style.outline='';calDropTodoMonth(event,'${ds}')">
+          <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
+          ${dayBlocks.map(b=>`<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;padding:1px 5px;border-radius:3px;background:${b.color}22;color:${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px;cursor:pointer;font-weight:600">${b.label}</div>`).join('')}
+          ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.calView='day';S.calDate='${ds}';renderPage()">+${more} more</div>`:''}
         </div>`;
-      }).join('')
-    : `<div style="padding:14px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;text-align:center">🎉 All clear!</div>`;
-
-  const todoPanel=`<div class="cal-todo-panel">
-    <div class="cal-todo-header">📋 To-Do — drag to calendar</div>
-    ${todoListHTML}
+      }).join('')}
+    </div>
   </div>`;
-
-  return `${personSel}${calNav}
-  <div class="cal-layout">
-    ${todoPanel}
-    <div>${grid}</div>
-  </div>`;
+  return calHeader+renderCalTodoLayout(data,monthGrid,todayStr);
 }
+
+function renderCalTodoLayout(data,mainGrid,todayStr){
+  // Todo sidebar removed — calendar is full width for maximum visibility
+  return mainGrid;
+}
+
+function getWeekDatesFromDate(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  const dow=(d.getDay()+6)%7; // Mon=0
+  const mon=new Date(d);mon.setDate(d.getDate()-dow);
+  return Array.from({length:7},(_,i)=>{const x=new Date(mon);x.setDate(mon.getDate()+i);return x;});
+}
+
+function getMonthDates(dateStr){
+  const [y,m]=dateStr.split('-').map(Number);
+  const days=[];
+  const d=new Date(y,m-1,1);
+  while(d.getMonth()===m-1){days.push(new Date(d));d.setDate(d.getDate()+1);}
+  return days;
+}
+
+function calNavPrev(){
+  const d=new Date(S.calDate+'T12:00:00');
+  if(S.calView==='day') d.setDate(d.getDate()-1);
+  else if(S.calView==='week') d.setDate(d.getDate()-7);
+  else d.setMonth(d.getMonth()-1);
+  S.calDate=d.toISOString().split('T')[0];
+  renderPage();
+}
+function calNavNext(){
+  const d=new Date(S.calDate+'T12:00:00');
+  if(S.calView==='day') d.setDate(d.getDate()+1);
+  else if(S.calView==='week') d.setDate(d.getDate()+7);
+  else d.setMonth(d.getMonth()+1);
+  S.calDate=d.toISOString().split('T')[0];
+  renderPage();
+}
+
+function calDropTodoMonth(e,dateStr){
+  e.preventDefault();
+  const contentId=e.dataTransfer.getData('text/plain');
+  if(!contentId) return;
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c) return;
+  const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+  openModal(`<div class="modal-title">📌 Schedule on ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="padding:10px 14px;background:${st.color}18;border-radius:var(--r);margin-bottom:14px;border-left:3px solid ${st.color}">
+      <div style="font-size:15px;font-weight:700">${c.title}</div>
+      <div style="font-size:12px;color:var(--t3)">${b.name} · ${st.name}</div>
+    </div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start time</label><select class="form-select" id="cdrop-start">${Array.from({length:15},(_,i)=>{const h=7+i;return`<option value="${h}" ${h===9?'selected':''}>${h<12?h+':00 AM':h===12?'12:00 PM':(h-12)+':00 PM'}</option>`;}).join('')}</select></div>
+      <div><label class="form-label">End time</label><select class="form-select" id="cdrop-end">${Array.from({length:15},(_,i)=>{const h=7+i;return`<option value="${h}" ${h===10?'selected':''}>${h<12?h+':00 AM':h===12?'12:00 PM':(h-12)+':00 PM'}</option>`;}).join('')}</select></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="calDropConfirm('${contentId}','${dateStr}')">📌 Add to Calendar</button></div>`);
+}
+
 function initCalendarInteractions(){
   try{
-    if(S.calWeek!==0)return;
-    const now=new Date();const di=now.getDay()===0?6:now.getDay()-1;
-    const top=(now.getHours()-8)*64+(now.getMinutes()/60)*64;
-    const col=document.getElementById('cal-col-'+di);
-    if(col){const line=document.createElement('div');line.className='cal-now-line';line.style.top=top+'px';line.innerHTML='<div class="cal-now-dot"></div>';col.appendChild(line);const body=document.getElementById('cal-body');if(body)setTimeout(()=>{body.scrollTop=Math.max(0,top-80);},50);}
-  }catch(e){console.warn('Calendar init error:',e);}
+    if(S.calView!=='day'&&S.calView!=='week') return;
+    const now=new Date();
+    const top=(now.getHours()-7)*90+(now.getMinutes()/60)*90;
+    // For week view scroll the body
+    const body=document.querySelector('div[style*="overflow:auto"]');
+    if(body) setTimeout(()=>{body.scrollTop=Math.max(0,top-100);},50);
+  }catch(e){}
+}
+
+function renderBrandCalendar(){
+  const data=D();
+  const todayStr=new Date().toISOString().split('T')[0];
+  if(!S.brandCalDate) S.brandCalDate=todayStr;
+  if(S.brandCalBrand===undefined) S.brandCalBrand='all';
+  const [y,m]=S.brandCalDate.split('-').map(Number);
+  const monthLabel=new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+
+  const monthDates=getMonthDates(S.brandCalDate);
+  const firstDay=new Date(y,m-1,1);
+  const startPad=(firstDay.getDay()+6)%7;
+  const cells=[];
+  for(let i=0;i<startPad;i++) cells.push(null);
+  monthDates.forEach(d=>cells.push(d));
+  while(cells.length%7!==0) cells.push(null);
+
+  // ── BRAND SELECTOR BUTTONS ────────────────────────────────────────────────
+  const activeBrand=S.brandCalBrand==='all'?null:getBrand(data,S.brandCalBrand);
+  const brandBtns=data.brands.map(b=>{
+    const isActive=S.brandCalBrand===b.id;
+    return `<button onclick="S.brandCalBrand='${b.id}';renderPage()" style="
+      display:inline-flex;align-items:center;gap:7px;padding:6px 13px;
+      border-radius:20px;border:2px solid ${b.color};
+      background:${isActive?b.color:'transparent'};
+      color:${isActive?'#0f0f11':b.color};
+      font-size:13px;font-weight:700;cursor:pointer;
+      font-family:'Syne',sans-serif;transition:all .15s;white-space:nowrap">
+      <span style="width:8px;height:8px;border-radius:50%;background:${isActive?'#0f0f11':b.color};flex-shrink:0;display:inline-block"></span>
+      ${b.name}
+    </button>`;
+  }).join('');
+
+  const allBtn=`<button onclick="S.brandCalBrand='all';renderPage()" style="
+    display:inline-flex;align-items:center;gap:7px;padding:6px 13px;
+    border-radius:20px;border:2px solid var(--b2);
+    background:${S.brandCalBrand==='all'?'var(--t1)':'transparent'};
+    color:${S.brandCalBrand==='all'?'var(--bg)':'var(--t2)'};
+    font-size:13px;font-weight:700;cursor:pointer;
+    font-family:'Syne',sans-serif;transition:all .15s">
+    All Brands
+  </button>`;
+
+  const brandSelector=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    ${allBtn}${brandBtns}
+  </div>`;
+
+  // ── NAV HEADER ─────────────────────────────────────────────────────────────
+  const selectedColor=activeBrand?activeBrand.color:'var(--ac)';
+  const calHeader=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="cal-nav-btn" onclick="brandCalNav(-1)">◀</button>
+    <span style="font-size:16px;font-weight:700;min-width:180px;text-align:center;color:${selectedColor}">${monthLabel}</span>
+    <button class="cal-nav-btn" onclick="brandCalNav(1)">▶</button>
+    <button class="cal-today-btn" onclick="S.brandCalDate='${todayStr}';renderPage()">Today</button>
+    ${activeBrand?`<span style="margin-left:4px;font-size:13px;font-weight:700;color:${activeBrand.color};background:${activeBrand.color}18;padding:4px 12px;border-radius:20px;border:1px solid ${activeBrand.color}40">${activeBrand.name}</span>`:''}
+  </div>`;
+
+  // ── FILTER CONTENT ─────────────────────────────────────────────────────────
+  const monthPrefix=y+'-'+String(m).padStart(2,'0');
+  const contentByDate={};
+  data.contents.forEach(c=>{
+    if(!c.postingDate||!c.postingDate.startsWith(monthPrefix)) return;
+    if(S.brandCalBrand!=='all'&&c.brandId!==S.brandCalBrand) return;
+    if(!contentByDate[c.postingDate]) contentByDate[c.postingDate]=[];
+    contentByDate[c.postingDate].push(c);
+  });
+
+  // ── CALENDAR GRID ──────────────────────────────────────────────────────────
+  const grid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
+      ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+      ${cells.map(d=>{
+        if(!d) return`<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);background:var(--s3)"></div>`;
+        const ds=d.toISOString().split('T')[0];
+        const isT=ds===todayStr;
+        const items=(contentByDate[ds]||[]);
+        const shown=items.slice(0,5);
+        const more=items.length-5;
+        return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}">
+          <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
+          ${shown.map(c=>{
+            const b=getBrand(data,c.brandId);
+            const st=getStatus(data,c.statusId);
+            return `<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:2px 6px;border-radius:4px;background:${b.color}18;color:${b.color};border-left:3px solid ${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;cursor:pointer;font-weight:600;line-height:1.5" title="${c.title} — ${b.name} [${st.name}]">${c.title}</div>`;
+          }).join('')}
+          ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.brandCalDate='${ds}';renderPage()">+${more} more</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  // ── SUMMARY STRIP ──────────────────────────────────────────────────────────
+  const totalItems=Object.values(contentByDate).flat().length;
+  const summary=totalItems>0
+    ?`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${totalItems} piece${totalItems!==1?'s':''} scheduled in ${monthLabel}${activeBrand?' for '+activeBrand.name:''}</div>`
+    :`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">No content scheduled this month${activeBrand?' for '+activeBrand.name:''}.</div>`;
+
+  return brandSelector+calHeader+grid+summary;
+}
+
+function brandCalNav(dir){
+  const d=new Date((S.brandCalDate||new Date().toISOString().split('T')[0])+'T12:00:00');
+  d.setMonth(d.getMonth()+dir);
+  S.brandCalDate=d.toISOString().split('T')[0];
+  renderPage();
 }
 function getWeekDates(offset){const today=new Date();const dow=today.getDay();const mon=new Date(today);mon.setDate(today.getDate()-(dow===0?6:dow-1)+offset*7);return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});}
 function calTodoDragStart(e, contentId){
@@ -4203,7 +4303,7 @@ function renderResponsibilities(){
       const picMap=c.pic||{};
       const stageCells=STAGE_META.map(st=>{
         const picId=picMap[st.id]||'';
-        const picUser=picId?data.users.find(u=>u.id===picId):getPIC(data,st.id,c);
+        const picUser=(picId?data.users.find(u=>u.id===picId):null)||getPIC(data,st.id,c);
         const isOverridden=!!picId;
         const opts=`<option value="">Default</option>`+staff.map(u=>`<option value="${u.id}" ${u.id===picId?'selected':''}>${u.init} ${u.name}</option>`).join('');
         return `<td style="padding:6px 8px;border-bottom:1px solid var(--b1);border-right:1px solid var(--b1);min-width:110px">
@@ -5273,7 +5373,7 @@ function renderDetailPage(id, forceTab){
           const picId=picMap[st.id]||'';
           const defUser=getPIC(data,st.id,null);
           const opts=`<option value="">Default (${defUser.name})</option>`+staff.map(u=>`<option value="${u.id}" ${u.id===picId?'selected':''}>${u.init} ${u.name}</option>`).join('');
-          const curPic=picId?data.users.find(u=>u.id===picId):defUser;
+          const curPic=(picId?data.users.find(u=>u.id===picId):null)||defUser;
           return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--b1)">
             <span style="font-size:15px;width:18px;text-align:center;flex-shrink:0">${st.icon}</span>
             <span style="font-size:13px;color:var(--t2);min-width:72px">${st.name}</span>
