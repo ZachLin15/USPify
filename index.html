@@ -1278,6 +1278,8 @@ async function cloudLoad(){
       scheduleBlocks:settings.scheduleBlocks||[],
       adMetrics:settings.adMetrics||[],
       tasks:settings.tasks||[],
+      deletedBrandIds:settings.deletedBrandIds||[],
+      deletionLog:settings.deletionLog||[],
     };
     if(!data.users.length&&!data.brands.length) return null;
     setSyncStatus('live','Live ✓');
@@ -1300,7 +1302,7 @@ async function cloudSave(data){
     const uPayload=(data.users||[]).map(u=>({id:u.id,data:u,updated_at:now}));
     const bPayload=(data.brands||[]).map(b=>({id:b.id,data:b,updated_at:now}));
     const cPayload=(data.contents||[]).map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now}));
-    const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],__savedBy:by,__savedAt:now},updated_at:now}];
+    const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
     // Chunk contents into batches of 100
     const chunks=[];
     for(let i=0;i<cPayload.length;i+=100) chunks.push(cPayload.slice(i,i+100));
@@ -7518,7 +7520,13 @@ function deleteContent(id){
     });
   }
   data.contents=data.contents.filter(c=>c.id!==id);
-  save(data);closeModal();closeDetail();render();
+  save(data);
+  // Delete from Supabase cloud
+  if(CLOUD_CONFIG.ENABLED&&CLOUD_CONFIG.URL!=='YOUR_SUPABASE_PROJECT_URL'){
+    fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=eq.${id}`,{method:'DELETE',headers:_sbUH()})
+      .catch(e=>console.error('Cloud delete content failed:',e.message));
+  }
+  closeModal();closeDetail();render();
   showAIToast(`🗑 Content removed — admins notified`);
 }
 
@@ -8248,6 +8256,8 @@ function executeDeleteBrand(brandId){
   if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const name=b.name;
+  // Collect content IDs to delete from cloud
+  const deletedContentIds=data.contents.filter(c=>c.brandId===brandId).map(c=>c.id);
   // Remove brand
   data.brands=data.brands.filter(x=>x.id!==brandId);
   // Remove all content pieces for this brand
@@ -8261,8 +8271,34 @@ function executeDeleteBrand(brandId){
   if(!data.deletedBrandIds.includes(brandId)) data.deletedBrandIds.push(brandId);
   // If currently viewing this brand, go back to dashboard
   if(S.brand===brandId){S.brand=null;S.page='dashboard';}
-  save(data);closeModal();render();
+  save(data);
+  // Also delete from Supabase cloud
+  cloudDeleteBrand(brandId, deletedContentIds);
+  closeModal();render();
   showAIToast(`🗑 Brand "${name}" and all related data deleted`);
+}
+
+async function cloudDeleteBrand(brandId, contentIds){
+  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
+  try{
+    // Delete brand row
+    await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_brands?id=eq.${brandId}`,{
+      method:'DELETE',headers:_sbUH()
+    });
+    // Delete all content rows for this brand
+    if(contentIds&&contentIds.length){
+      // Delete in batches if needed
+      for(let i=0;i<contentIds.length;i+=50){
+        const batch=contentIds.slice(i,i+50);
+        const filter=batch.map(id=>`id.eq.${id}`).join(',');
+        await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?or=(${filter})`,{
+          method:'DELETE',headers:_sbUH()
+        });
+      }
+    }
+  }catch(e){
+    console.error('Cloud delete brand failed:',e.message);
+  }
 }
 
 // ===================== MANAGE STATUSES =====================
