@@ -1990,18 +1990,18 @@ function renderSidebar(){
     const badgeStyle=p.badgeColor?`style="background:${p.badgeColor}33;color:${p.badgeColor}"`:''
     return `<div class="sb-item${active?' active':''}" onclick="nav('${p.id}')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>${p.label}${p.badge?`<span class="sb-badge" ${badgeStyle}>${p.badge}</span>`:''}</div>`;
   }).join('');
-  const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" style="position:relative;padding-right:${isAdmin?'28px':'9px'}">
+  const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" style="position:relative;padding-right:28px">
     <div onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer">
       <div class="bdot" style="background:${b.color}"></div>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.name}</span>
     </div>
-    ${isAdmin?`<button onclick="event.stopPropagation();confirmDeleteBrand('${b.id}')" title="Delete brand" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:15px;line-height:1;padding:3px 5px;border-radius:4px;transition:all .12s" onmouseenter="this.style.color='var(--red)';this.style.background='var(--redd)'" onmouseleave="this.style.color='var(--t4)';this.style.background='transparent'">×</button>`:''}
+    <button onclick="event.stopPropagation();confirmDeleteBrand('${b.id}')" title="Delete brand" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:15px;line-height:1;padding:3px 5px;border-radius:4px;transition:all .12s" onmouseenter="this.style.color='var(--red)';this.style.background='var(--redd)'" onmouseleave="this.style.color='var(--t4)';this.style.background='transparent'">×</button>
   </div>`).join('');
   const u=S.user;
   document.getElementById('sidebar').innerHTML=`
     <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal</div></div></div></div>
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
-    ${isAdmin?`<div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>`:''}
+    <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
     <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${u.color}22;color:${u.color}">${u.init}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
@@ -8027,7 +8027,6 @@ function saveBrandInfo(brandId){
 
 // ===================== ADD BRAND =====================
 function openAddBrandModal(){
-  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   openModal(`<div class="modal-title">Add New Brand<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row-2">
       <div><label class="form-label">Brand name</label><input class="form-input" id="nb-name" type="text" placeholder="e.g. NewBrand"></div>
@@ -8232,7 +8231,6 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
 }
 
 function confirmDeleteBrand(brandId){
-  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const contentCount=data.contents.filter(c=>c.brandId===brandId).length;
   openModal(`<div class="modal-title" style="color:var(--red)">🗑 Delete Brand<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -8255,7 +8253,6 @@ function confirmDeleteBrand(brandId){
 }
 
 async function executeDeleteBrand(brandId){
-  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
   const name=b.name;
 
