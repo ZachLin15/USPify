@@ -2616,9 +2616,9 @@ function renderTracker(){
       key:'wallPost', label:'Wall Post', icon:'🖼', color:'var(--pnk)',
       match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)),
       subs:[
-        {key:'carousel', label:'Carousel',     icon:'🃏', color:'var(--pur)',  match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
-        {key:'image',    label:'Single Image',  icon:'🖼', color:'var(--pnk)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Image'},
-        {key:'reels',    label:'Video',         icon:'🎬', color:'var(--pur)',  match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
+        {key:'carousel', label:'Carousel',    icon:'🃏', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
+        {key:'image',    label:'Single Image', icon:'🖼', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Image'},
+        {key:'reels',    label:'Video',        icon:'🎬', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
       ]
     },
     {
