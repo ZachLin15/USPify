@@ -2616,9 +2616,10 @@ function renderTracker(){
       key:'wallPost', label:'Wall Post', icon:'🖼', color:'var(--pnk)',
       match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)),
       subs:[
-        {key:'carousel', label:'Carousel',    icon:'🃏', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
-        {key:'image',    label:'Single Image', icon:'🖼', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Image'},
-        {key:'reels',    label:'Video',        icon:'🎬', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
+        {key:'carousel', label:'Carousel',     icon:'🃏', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
+        {key:'video_wp', label:'Video',         icon:'🎬', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
+        {key:'reels',    label:'Reels',         icon:'📱', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Reels'},
+        {key:'image',    label:'Single Image',  icon:'🖼', color:'var(--pur)', match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Single Image'},
       ]
     },
     {
@@ -2906,8 +2907,10 @@ function renderBrandPage(){
     const typeCell=`<td onclick="event.stopPropagation()" style="white-space:nowrap;display:flex;gap:4px;align-items:center;border:none">
         <select style="font-size:12px;padding:2px 4px;border-radius:4px;border:1px solid var(--b2);background:var(--s2);color:var(--t1);font-family:'DM Mono',monospace;cursor:pointer"
           onchange="toggleContentType('${c.id}',this.value)">
-          <option value="Video" ${c.type==='Video'?'selected':''}>🎬 Video</option>
           <option value="Carousel" ${c.type==='Carousel'?'selected':''}>🃏 Carousel</option>
+          <option value="Video" ${c.type==='Video'?'selected':''}>🎬 Video</option>
+          <option value="Reels" ${c.type==='Reels'?'selected':''}>📱 Reels</option>
+          <option value="Single Image" ${c.type==='Single Image'?'selected':''}>🖼 Single Image</option>
         </select>
         <select style="font-size:12px;padding:2px 4px;border-radius:4px;border:1px solid var(--b2);background:var(--s2);color:var(--t1);font-family:'DM Mono',monospace;cursor:pointer"
           onchange="toggleContentCat('${c.id}',this.value)">
@@ -8076,6 +8079,12 @@ function saveBrandInfo(brandId){
 }
 
 // ===================== ADD BRAND =====================
+function updateWpTotal(){
+  const t=['nb-wp-carousel','nb-wp-video','nb-wp-reels','nb-wp-image'].reduce((s,id)=>s+(parseInt(document.getElementById(id)?.value)||0),0);
+  const el=document.getElementById('nb-wp-total');
+  if(el) el.textContent=t;
+}
+
 function openAddBrandModal(){
   openModal(`<div class="modal-title">Add New Brand<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row-2">
@@ -8083,13 +8092,21 @@ function openAddBrandModal(){
       <div><label class="form-label">Color</label><div class="color-opts">${BRAND_COLORS.map((c,i)=>`<div class="color-opt${i===0?' selected':''}" style="background:${c}" onclick="selectColor(this,'${c}')" data-color="${c}"></div>`).join('')}</div></div>
     </div>
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Monthly Quota Breakdown</div>
-    <div class="form-row-2">
-      <div><label class="form-label">🖼 Wall Posts</label><input class="form-input" id="nb-wallpost" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Carousel / single image / reels</div></div>
-      <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Video ads (Ad#)</div></div>
+    <div style="border:1px solid var(--b2);border-radius:var(--r);padding:12px 14px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--pur);font-family:'DM Mono',monospace;margin-bottom:8px">🖼 Wall Posts — breakdown by type</div>
+      <div class="form-row-2" style="margin-bottom:6px">
+        <div><label class="form-label">🃏 Carousel</label><input class="form-input" id="nb-wp-carousel" type="number" min="0" value="0" placeholder="0" oninput="updateWpTotal()"></div>
+        <div><label class="form-label">🎬 Video</label><input class="form-input" id="nb-wp-video" type="number" min="0" value="0" placeholder="0" oninput="updateWpTotal()"></div>
+      </div>
+      <div class="form-row-2">
+        <div><label class="form-label">📱 Reels</label><input class="form-input" id="nb-wp-reels" type="number" min="0" value="0" placeholder="0" oninput="updateWpTotal()"></div>
+        <div><label class="form-label">🖼 Single Image</label><input class="form-input" id="nb-wp-image" type="number" min="0" value="0" placeholder="0" oninput="updateWpTotal()"></div>
+      </div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:6px">Total Wall Posts: <span id="nb-wp-total" style="font-weight:700;color:var(--pur)">0</span></div>
     </div>
     <div class="form-row-2">
+      <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Video ads (Ad#)</div></div>
       <div><label class="form-label">🎵 TikTok Content</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">TikTok videos (TikTok#)</div></div>
-      <div></div>
     </div>
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-top:6px">Contract Period</div>
     <div class="form-row-2">
@@ -8108,7 +8125,11 @@ function selectColor(el){document.querySelectorAll('.color-opt').forEach(e=>e.cl
 async function saveNewBrand(){
   const name=document.getElementById('nb-name').value.trim();if(!name){alert('Enter a name');return;}
   const sel=document.querySelector('.color-opt.selected');const color=sel?sel.dataset.color:'#888780';
-  const wallPosts2=parseInt(document.getElementById('nb-wallpost').value)||0;
+  const wpCarousel=parseInt(document.getElementById('nb-wp-carousel').value)||0;
+  const wpVideo=parseInt(document.getElementById('nb-wp-video').value)||0;
+  const wpReels=parseInt(document.getElementById('nb-wp-reels').value)||0;
+  const wpImage=parseInt(document.getElementById('nb-wp-image').value)||0;
+  const wallPosts2=wpCarousel+wpVideo+wpReels+wpImage;
   const ads=parseInt(document.getElementById('nb-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('nb-tiktok').value)||0;
   const contractStart=document.getElementById('nb-cstart').value;
@@ -8135,7 +8156,11 @@ async function saveNewBrand(){
   // Build base templates (per-month, numbered)
   function buildMonthTemplates(monthLabel){
     const t=[];
-    for(let i=1;i<=wallPosts2;i++) t.push({title:`${name} WP#${i} — ${monthLabel}`,type:'Carousel',cat:'wallPost'});
+    let wpIdx=1;
+    for(let i=0;i<wpCarousel;i++) t.push({title:`${name} WP#${wpIdx++} — ${monthLabel}`,type:'Carousel',cat:'wallPost'});
+    for(let i=0;i<wpVideo;i++) t.push({title:`${name} WP#${wpIdx++} — ${monthLabel}`,type:'Video',cat:'wallPost'});
+    for(let i=0;i<wpReels;i++) t.push({title:`${name} WP#${wpIdx++} — ${monthLabel}`,type:'Reels',cat:'wallPost'});
+    for(let i=0;i<wpImage;i++) t.push({title:`${name} WP#${wpIdx++} — ${monthLabel}`,type:'Single Image',cat:'wallPost'});
     for(let i=1;i<=ads;i++) t.push({title:`${name} Ad#${i} — ${monthLabel}`,type:'Video',cat:'videoAds'});
     for(let i=1;i<=tiktoks;i++) t.push({title:`${name} TikTok#${i} — ${monthLabel}`,type:'Video',cat:'tiktok'});
     return t;
@@ -8222,7 +8247,10 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
   const baseTemplates=aiTitles
     ? aiTitles.map(t=>({title:t.title,type:t.type,cat:t.cat}))
     : [
-        ...Array.from({length:wallPosts2},(_,i)=>({title:`WP#${i+1}`,type:'Carousel',cat:'wallPost'})),
+        ...Array.from({length:wpCarousel},(_,i)=>({title:`WP#${i+1}`,type:'Carousel',cat:'wallPost'})),
+        ...Array.from({length:wpVideo},(_,i)=>({title:`WP#${wpCarousel+i+1}`,type:'Video',cat:'wallPost'})),
+        ...Array.from({length:wpReels},(_,i)=>({title:`WP#${wpCarousel+wpVideo+i+1}`,type:'Reels',cat:'wallPost'})),
+        ...Array.from({length:wpImage},(_,i)=>({title:`WP#${wpCarousel+wpVideo+wpReels+i+1}`,type:'Single Image',cat:'wallPost'})),
         ...Array.from({length:ads},(_,i)=>({title:`Ad#${i+1}`,type:'Video',cat:'videoAds'})),
         ...Array.from({length:tiktoks},(_,i)=>({title:`TikTok#${i+1}`,type:'Video',cat:'tiktok'})),
       ];
