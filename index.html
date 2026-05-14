@@ -2721,15 +2721,19 @@ function toggleContentCat(contentId, newCat){
 function toggleContentType(contentId, newType){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   c.type=newType;
-  // Re-derive cat from title if not set, so tracker grouping stays correct
+  // Always ensure cat is set — derive from title if missing
   if(!c.cat){
     if(c.title.match(/^WP#/i)) c.cat='wallPost';
     else if(c.title.match(/^Ad#/i)) c.cat='videoAds';
     else if(c.title.match(/tiktok/i)||c.title.match(/^TikTok#/i)) c.cat='tiktok';
     else c.cat=newType==='Carousel'?'carousel':'video';
   }
+  // Sync type with cat — Video Ads and TikTok must be Video type
+  if((c.cat==='videoAds'||c.cat==='tiktok')&&newType==='Carousel'){
+    c.type='Video'; // force back — these cats can't be Carousel
+  }
   save(data);renderPage();
-  showAIToast(`✓ Changed to ${newType}`);
+  showAIToast(`✓ Changed to ${c.type}`);
 }
 
 function saveBrandRowDate(contentId, field, value){
