@@ -38,7 +38,7 @@
   window.closeSidebar=function(){};
 </script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>USPify Portal v3.142</title>
+<title>USPify Portal v3.146</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f0f11;--s1:#161618;--s2:#1e1e22;--s3:#26262c;--s4:#2e2e36;--b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.13);--b3:rgba(255,255,255,0.22);--t1:#eeecea;--t2:#b0ada6;--t3:#7e7c76;--t4:#3a3a36;--ac:#c8f04a;--ac2:#a8d030;--acd:rgba(200,240,74,0.12);--red:#ff5a5a;--redd:rgba(255,90,90,0.12);--amb:#f0a030;--ambd:rgba(240,160,48,0.12);--blu:#5a9fff;--blud:rgba(90,159,255,0.12);--pnk:#e06aaa;--pnkd:rgba(224,106,170,0.12);--tel:#3acca0;--teld:rgba(58,204,160,0.12);--pur:#9a7aff;--purd:rgba(154,122,255,0.12);--ora:#ff9f43;--orad:rgba(255,159,67,0.12);--r:8px;--r2:12px;--sb:260px}
@@ -253,7 +253,16 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .cal-nav-btn:hover{background:var(--s2)}
 .cal-week-label{font-size:16px;font-weight:700;flex:1;text-align:center}
 .cal-today-btn{background:var(--acd);color:var(--ac);border:none;border-radius:var(--r);padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif}
-/* Cal todo sidebar */
+/* Calendar full-width page — stretch edge to edge, only clear the AI FAB */
+.cal-page{
+  padding-left:8px!important;
+  padding-right:86px!important;
+  padding-top:72px!important;
+  padding-bottom:24px!important;
+  box-sizing:border-box;
+  width:100%;
+}
+
 .cal-layout{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:start}
 .cal-todo-panel{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;position:sticky;top:72px;max-height:calc(100vh - 120px);overflow-y:auto}
 .cal-todo-header{padding:10px 14px;border-bottom:1px solid var(--b1);font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace}
@@ -277,7 +286,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .cal-event-pill{font-size:13px;font-weight:600;padding:3px 8px;border-radius:4px;font-family:'DM Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .cal-body{display:grid;grid-template-columns:64px repeat(7,1fr);overflow-y:auto;max-height:calc(100vh - 200px);min-height:520px;position:relative}
 .cal-time-col{border-right:1px solid var(--b1)}
-.cal-time-slot{height:64px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 10px 0 0}
+.cal-time-slot{height:64px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-start;justify-content:flex-end;padding:6px 6px 0 0}
 .cal-time-label{font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:-1px}
 .cal-day-col{border-right:1px solid var(--b1);position:relative;height:768px}
 .cal-day-col:last-child{border-right:none}
@@ -908,7 +917,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   <div class="login-box fade-in">
     <div class="login-logo">
       <div class="login-icon">U</div>
-      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v3</div></div>
+      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v3.146</div></div>
     </div>
     <label class="fl">Name</label><input class="fi" id="li-name" type="text" placeholder="Your name" autocomplete="off">
     <label class="fl">Password</label>
@@ -1997,7 +2006,7 @@ function renderSidebar(){
   </div>`).join('');
   const u=S.user;
   document.getElementById('sidebar').innerHTML=`
-    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal</div></div></div></div>
+    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v3.146</div></div></div></div>
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
@@ -2044,7 +2053,7 @@ function toggleTheme(){
 
 function renderPage(){
   const root=document.getElementById('page-root');
-  root.className='content fade-in';
+  root.className='content fade-in'+(S.page==='calendar'?' cal-page':'');
   try{
     if(S.user.role==='client'){root.innerHTML=S.page==='client_dashboard'?renderClientDashboard():renderClientApprovals();return;}
     if(S.brand){root.innerHTML=renderBrandPage();return;}
@@ -3150,6 +3159,10 @@ function renderCalendar(){
     const lc=leonardUser.color||'#3acca0';
     const daysToSeed=S.calView==='month'?getMonthDates(S.calDate):S.calView==='week'?getWeekDatesFromDate(S.calDate):[new Date(S.calDate+'T12:00:00')];
     let seeded=false;
+    // One-time purge of all Work Day blocks (fx-work-*) from saved data
+    const beforeLen=data.scheduleBlocks.length;
+    data.scheduleBlocks=data.scheduleBlocks.filter(b=>!b.id.startsWith('fx-work-')&&b.label!=='🏢 Work Day (8:30–5:30)');
+    if(data.scheduleBlocks.length!==beforeLen) seeded=true;
     daysToSeed.forEach(d=>{
       const ds=d.toISOString().split('T')[0];
       const dom=d.getDate();const dow=d.getDay();const dowMon=(dow+6)%7;
@@ -3157,7 +3170,6 @@ function renderCalendar(){
       if(dom===1) seed('fx-receipt-'+ds,{startHour:9,endHour:10,label:'📋 Ads Receipt',color:'#ff9f43'});
       if(dom===2) seed('fx-report-'+ds,{startHour:9,endHour:11,label:'📊 Customer Ads Report',color:'#5a9fff'});
       if(dowMon>=0&&dowMon<=4) seed('fx-adsopt-'+ds,{startHour:8,endHour:9,label:'⚡ Daily Ads Optimization',color:lc});
-      if(dowMon===4) seed('fx-work-'+ds,{startHour:8,endHour:18,label:'🏢 Work Day (8:30–5:30)',color:'#888780'});
       data.brands.forEach(br=>{(br.shootingDates||[]).forEach(sd=>{if(sd===ds)seed('fx-shoot-'+ds+'-'+br.id,{startHour:9,endHour:18,label:`🎬 Shooting — ${br.name}`,color:'#9a7aff'});});});
     });
     const mayShoot='2026-05-18';
@@ -3207,7 +3219,7 @@ function renderCalendar(){
   // ── DAY VIEW ─────────────────────────────────────────────────────────────
   if(S.calView==='day'){
     const isToday=S.calDate===todayStr;
-    const body=`<div style="display:grid;grid-template-columns:56px 1fr;border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
+    const body=`<div style="display:grid;grid-template-columns:52px 1fr;border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;width:100%">
       <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
       <div>${renderDayCol(S.calDate,isToday)}</div>
     </div>`;
@@ -3217,15 +3229,15 @@ function renderCalendar(){
   // ── WEEK VIEW ────────────────────────────────────────────────────────────
   if(S.calView==='week'){
     const wkDays=getWeekDatesFromDate(S.calDate);
-    const headRow=`<div style="display:grid;grid-template-columns:56px repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
+    const headRow=`<div style="display:grid;grid-template-columns:52px repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1);width:100%">
       <div style="border-right:1px solid var(--b1)"></div>
-      ${wkDays.map(d=>{const ds=d.toISOString().split('T')[0];const isT=ds===todayStr;const dname=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][wkDays.indexOf(d)];return`<div style="text-align:center;padding:8px 2px;border-right:1px solid var(--b1)${isT?';background:rgba(200,240,74,0.06)':''}"><div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${dname}</div><div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;font-weight:700;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t1)'}">${d.getDate()}</div></div>`;}).join('')}
+      ${wkDays.map(d=>{const ds=d.toISOString().split('T')[0];const isT=ds===todayStr;const dname=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][wkDays.indexOf(d)];return`<div style="text-align:center;padding:8px 2px;border-right:1px solid var(--b1)${isT?';background:rgba(200,240,74,0.06)':''}"><div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${dname}</div><div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;font-weight:700;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t1)'}">${d.getDate()}</div></div>`;}).join('')}
     </div>`;
-    const bodyRow=`<div style="display:grid;grid-template-columns:56px repeat(7,1fr)">
+    const bodyRow=`<div style="display:grid;grid-template-columns:52px repeat(7,1fr);width:100%">
       <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
       ${wkDays.map(d=>{const ds=d.toISOString().split('T')[0];return`<div style="border-right:1px solid var(--b1)">${renderDayCol(ds,ds===todayStr)}</div>`;}).join('')}
     </div>`;
-    const grid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:auto;max-height:calc(100vh - 160px)">${headRow}${bodyRow}</div>`;
+    const grid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;width:100%">${headRow}${bodyRow}</div>`;
     return calHeader+renderCalTodoLayout(data,grid,todayStr);
   }
 
@@ -3238,7 +3250,7 @@ function renderCalendar(){
   monthDates.forEach(d=>cells.push(d));
   while(cells.length%7!==0) cells.push(null);
 
-  const monthGrid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
+  const monthGrid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;width:100%">
     <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
       ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
     </div>
@@ -3263,9 +3275,113 @@ function renderCalendar(){
   return calHeader+renderCalTodoLayout(data,monthGrid,todayStr);
 }
 
+function renderMiniCal(todayStr){
+  // Build a mini month calendar for date selection
+  const cur=new Date(S.calDate+'T12:00:00');
+  const y=cur.getFullYear(), m=cur.getMonth(); // 0-indexed
+  const firstDay=new Date(y,m,1);
+  const lastDay=new Date(y,m+1,0);
+  const startDow=(firstDay.getDay()+6)%7; // Mon=0
+  const monthLabel=firstDay.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+
+  // Prev/next month nav
+  const prevDate=new Date(y,m-1,1).toISOString().split('T')[0];
+  const nextDate=new Date(y,m+1,1).toISOString().split('T')[0];
+
+  // Get week dates for highlighting the active week
+  const wkDates=S.calView==='week'?getWeekDatesFromDate(S.calDate).map(d=>d.toISOString().split('T')[0]):[];
+
+  // Build cells
+  const cells=[];
+  for(let i=0;i<startDow;i++) cells.push(null);
+  for(let d=1;d<=lastDay.getDate();d++) cells.push(new Date(y,m,d));
+  while(cells.length%7!==0) cells.push(null);
+
+  const dayRows=[];
+  for(let r=0;r<cells.length/7;r++){
+    const row=cells.slice(r*7,(r+1)*7).map(d=>{
+      if(!d) return`<div style="width:28px;height:28px"></div>`;
+      const ds=d.toISOString().split('T')[0];
+      const isToday=ds===todayStr;
+      const isSelected=ds===S.calDate;
+      const inWeek=wkDates.includes(ds);
+      let bg='transparent', color='var(--t1)', fw='500';
+      if(isToday&&!isSelected){bg='var(--acd)';color='var(--ac)';fw='700';}
+      if(isSelected){bg='var(--ac)';color='#0f0f11';fw='700';}
+      else if(inWeek&&!isToday){bg='var(--s3)';fw='600';}
+      return`<div onclick="S.calDate='${ds}';renderPage()" style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:${fw};cursor:pointer;background:${bg};color:${color};transition:all .1s" onmouseover="if(this.style.background==='transparent'||this.style.background==='')this.style.background='var(--s2)'" onmouseout="this.style.background='${bg}'">${d.getDate()}</div>`;
+    }).join('');
+    dayRows.push(`<div style="display:grid;grid-template-columns:repeat(7,28px);gap:2px;justify-content:center">${row}</div>`);
+  }
+
+  const dayHeaders=['M','T','W','T','F','S','S'].map(d=>`<div style="width:28px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace">${d}</div>`).join('');
+
+  return `<div style="background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);padding:12px;position:sticky;top:72px;width:216px;flex-shrink:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700;color:var(--t1)">${monthLabel}</span>
+      <div style="display:flex;gap:2px">
+        <button onclick="S.calDate='${prevDate}';renderPage()" style="background:transparent;border:1px solid var(--b2);border-radius:5px;width:24px;height:24px;cursor:pointer;color:var(--t2);font-size:13px;display:flex;align-items:center;justify-content:center;padding:0">‹</button>
+        <button onclick="S.calDate='${nextDate}';renderPage()" style="background:transparent;border:1px solid var(--b2);border-radius:5px;width:24px;height:24px;cursor:pointer;color:var(--t2);font-size:13px;display:flex;align-items:center;justify-content:center;padding:0">›</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,28px);gap:2px;justify-content:center;margin-bottom:6px">${dayHeaders}</div>
+    <div style="display:flex;flex-direction:column;gap:2px">${dayRows.join('')}</div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--b1)">
+      <button onclick="S.calDate='${todayStr}';renderPage()" style="width:100%;background:var(--acd);color:var(--ac);border:none;border-radius:6px;padding:5px 0;font-size:12px;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif">Today</button>
+    </div>
+  </div>`;
+}
+
 function renderCalTodoLayout(data,mainGrid,todayStr){
-  // Todo sidebar removed — calendar is full width for maximum visibility
-  return mainGrid;
+  const myJobs=getActiveJobsForUser(data,S.user.id);
+  const unstarted=S.user.role==='admin'||S.user.id==='leonard'
+    ?data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10):[];
+  const todoItems=[...myJobs,...unstarted]
+    .sort((a,b)=>{if(!a.postingDate&&!b.postingDate)return 0;if(!a.postingDate)return 1;if(!b.postingDate)return -1;return a.postingDate.localeCompare(b.postingDate);})
+    .slice(0,25);
+  const todoListHTML=todoItems.length?todoItems.map(c=>{
+    const b=getBrand(data,c.brandId);
+    const st=getStatus(data,c.statusId);
+    const isLate=c.postingDate&&c.postingDate<todayStr;
+    return `<div class="cal-todo-item" draggable="true"
+      ondragstart="calTodoDragStart(event,'${c.id}')"
+      ondragend="this.classList.remove('dragging')"
+      onclick="openContentDetail('${c.id}')">
+      <div style="width:8px;height:8px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:4px"></div>
+      <div style="min-width:0;flex:1">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1);font-size:13px;font-weight:600">${c.title}</div>
+        <div style="display:flex;gap:5px;margin-top:2px;flex-wrap:wrap">
+          <span style="font-size:11px;color:${b.color};font-family:'DM Mono',monospace;font-weight:700">${b.name}</span>
+          ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:${isLate?'var(--red)':'var(--t3)'}">${fmt(c.postingDate)}${isLate?' ⚠':''}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join(''):`<div style="padding:20px 14px;font-size:13px;color:var(--t3);text-align:center;line-height:1.8">🎉 All clear!<br><span style="font-size:11px">No pending tasks</span></div>`;
+
+  // 3-col table layout: fixed todo | stretch calendar | fixed mini-cal
+  return `<table style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:12px 0">
+    <colgroup>
+      <col style="width:190px">
+      <col>
+      <col style="width:210px">
+    </colgroup>
+    <tbody><tr style="vertical-align:top">
+      <td style="padding:0;width:190px">
+        <div style="background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;position:sticky;top:72px;max-height:calc(100vh - 100px);display:flex;flex-direction:column">
+          <div style="padding:10px 12px;border-bottom:1px solid var(--b1);font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace;flex-shrink:0">
+            📋 To-Do <span style="opacity:.6">· drag to cal</span>
+          </div>
+          <div style="overflow-y:auto;flex:1">${todoListHTML}</div>
+        </div>
+      </td>
+      <td style="padding:0">
+        <div style="width:100%">${mainGrid}</div>
+      </td>
+      <td style="padding:0;width:210px">
+        ${renderMiniCal(todayStr)}
+      </td>
+    </tr></tbody>
+  </table>`;
 }
 
 function getWeekDatesFromDate(dateStr){
@@ -3323,9 +3439,8 @@ function initCalendarInteractions(){
     if(S.calView!=='day'&&S.calView!=='week') return;
     const now=new Date();
     const top=(now.getHours()-7)*90+(now.getMinutes()/60)*90;
-    // For week view scroll the body
-    const body=document.querySelector('div[style*="overflow:auto"]');
-    if(body) setTimeout(()=>{body.scrollTop=Math.max(0,top-100);},50);
+    // Scroll the page to show current time (offset by topbar ~72px)
+    setTimeout(()=>{window.scrollTo({top:Math.max(0,top+72-200),behavior:'smooth'});},80);
   }catch(e){}
 }
 
@@ -8569,41 +8684,56 @@ function openAddBlockModal(dayIdx,startH){
   openAddBlockModalDate(defaultDate, startH>=0?startH:9);
 }
 function openBlockDetail(id){
-  const data=D();const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
-  // If this block is linked to a content piece, open the content detail
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);
+  if(!b){showAIToast('Block not found');return;}
+
+  // Content-linked block → open content detail
   if(b.contentId){
-    closeModal();
-    openContentDetail(b.contentId);
-    return;
+    const c=data.contents.find(x=>x.id===b.contentId);
+    if(c){openContentDetail(b.contentId);return;}
+    // content was deleted — fall through to show block normally
   }
+
   const u=getUser(data,b.userId);
-  const sl=b.startHour<12?`${b.startHour}:00 AM`:b.startHour===12?'12:00 PM':`${b.startHour-12}:00 PM`;
-  const el=b.endHour<12?`${b.endHour}:00 AM`:b.endHour===12?'12:00 PM':`${b.endHour-12}:00 PM`;
+  const fmtH=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+  const sl=fmtH(b.startHour);
+  const el=fmtH(b.endHour);
   const isOwner=S.user.id===b.userId;
   const isAdmin=S.user.role==='admin';
   const canEdit=isAdmin||isOwner;
-  const whenStr=b.date?`📅 ${b.date}`:b.dayOfWeek!==undefined?`${DAY_NAMES[b.dayOfWeek]} (weekly)`:'—';
+  const whenStr=b.date?`📅 ${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
 
   if(!canEdit){
-    // Read-only view for non-owners
     openModal(`<div class="modal-title">${b.label}<button class="modal-close" onclick="closeModal()">×</button></div>
-      <div style="font-size:15px;display:grid;gap:10px">
+      <div style="display:grid;gap:12px;font-size:15px;padding:4px 0">
         <div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div>
         <div><span style="color:var(--t2)">When:</span> <strong>${whenStr}</strong></div>
         <div><span style="color:var(--t2)">Time:</span> <strong>${sl} – ${el}</strong></div>
-      </div>`);
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
     return;
   }
 
-  // Edit form for owner/admin
-  const hourOpts=(start)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===start?'selected':''}>${l}</option>`;}).join('');
+  // Build hour options
+  const hourOpts=(selected)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{
+    const h=HOURS_RANGE_START+i;
+    const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+    return `<option value="${h}" ${h===selected?'selected':''}>${l}</option>`;
+  }).join('');
+
   openModal(`<div class="modal-title">✏️ Edit Block<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="be-label" value="${b.label}"></div>
+    <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">${whenStr} · 👤 ${u.name}</div>
+    <div class="form-row"><label class="form-label">Label</label>
+      <input class="form-input" id="be-label" type="text" value="${b.label.replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-row"><label class="form-label">Color</label>
+      <input type="color" id="be-color" value="${b.color||'#3acca0'}" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+    </div>
     <div class="form-row-2">
       <div><label class="form-label">Start</label><select class="form-select" id="be-start">${hourOpts(b.startHour)}</select></div>
       <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
     </div>
-    <div style="font-size:13px;color:var(--t2);padding:6px 0;font-family:'DM Mono',monospace">📅 ${whenStr} · 👤 ${u.name}</div>
     <div class="modal-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -8622,13 +8752,15 @@ function showFixedBlockInfo(label, time, userId){
 }
 
 function saveBlockEdit(id){
-  const data=D();const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
-  const label=document.getElementById('be-label').value.trim();
-  const startHour=parseInt(document.getElementById('be-start').value);
-  const endHour=parseInt(document.getElementById('be-end').value);
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const label=document.getElementById('be-label')?.value.trim();
+  const startHour=parseInt(document.getElementById('be-start')?.value);
+  const endHour=parseInt(document.getElementById('be-end')?.value);
+  const color=document.getElementById('be-color')?.value||b.color;
   if(!label){alert('Enter a label');return;}
-  if(endHour<=startHour){alert('End must be after start');return;}
-  b.label=label;b.startHour=startHour;b.endHour=endHour;
+  if(endHour<=startHour){alert('End time must be after start time');return;}
+  b.label=label;b.startHour=startHour;b.endHour=endHour;b.color=color;
   save(data);closeModal();renderPage();
   showAIToast('✓ Block updated');
 }
