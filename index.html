@@ -2713,9 +2713,26 @@ function renderTracker(){
 function setTrackerTab(t){S.trackerTab=t;S.trackerFilterType='all';S.trackerFilterStatus='all';S.trackerMonth=new Date().toISOString().slice(0,7);renderPage();}
 function sortBy(col){if(!S.brandTableSort)S.brandTableSort={col:'postingDate',dir:'asc'};if(S.brandTableSort.col===col){S.brandTableSort.dir=S.brandTableSort.dir==='asc'?'desc':'asc';}else{S.brandTableSort.col=col;S.brandTableSort.dir='asc';}renderPage();}
 
+function toggleContentCat(contentId, newCat){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  c.cat=newCat;
+  // Sync type to match category
+  if(newCat==='wallPost') c.type=c.type||'Carousel'; // keep existing type
+  else if(newCat==='videoAds'||newCat==='tiktok') c.type='Video';
+  save(data);renderPage();
+  showAIToast(`✓ Category changed to ${newCat}`);
+}
+
 function toggleContentType(contentId, newType){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   c.type=newType;
+  // Re-derive cat from title if not set, so tracker grouping stays correct
+  if(!c.cat){
+    if(c.title.match(/^WP#/i)) c.cat='wallPost';
+    else if(c.title.match(/^Ad#/i)) c.cat='videoAds';
+    else if(c.title.match(/tiktok/i)||c.title.match(/^TikTok#/i)) c.cat='tiktok';
+    else c.cat=newType==='Carousel'?'carousel':'video';
+  }
   save(data);renderPage();
   showAIToast(`✓ Changed to ${newType}`);
 }
@@ -2885,12 +2902,18 @@ function renderBrandPage(){
     const leonardCell=isAdmin
       ?`<td class="due-date" onclick="event.stopPropagation()"><input type="date" value="${c.dueDates?.leonard||''}" style="background:transparent;border:none;border-bottom:1px dashed var(--b2);color:var(--tel);font-size:13px;font-family:'DM Mono',monospace;cursor:pointer;padding:1px 2px;width:110px;outline:none" onchange="saveBrandRowDate('${c.id}','leonard',this.value)" onfocus="this.style.borderBottomColor='var(--ac)'" onblur="this.style.borderBottomColor='var(--b2)'"></td>`
       :`<td class="due-date" style="color:var(--tel)">${c.dueDates?.leonard?fmt(c.dueDates.leonard):'—'}</td>`;
-    // Inline type toggle — all logged-in users can change type
-    const typeCell=`<td onclick="event.stopPropagation()" style="white-space:nowrap">
+    // Inline type + category toggles
+    const typeCell=`<td onclick="event.stopPropagation()" style="white-space:nowrap;display:flex;gap:4px;align-items:center;border:none">
         <select style="font-size:12px;padding:2px 4px;border-radius:4px;border:1px solid var(--b2);background:var(--s2);color:var(--t1);font-family:'DM Mono',monospace;cursor:pointer"
           onchange="toggleContentType('${c.id}',this.value)">
           <option value="Video" ${c.type==='Video'?'selected':''}>🎬 Video</option>
           <option value="Carousel" ${c.type==='Carousel'?'selected':''}>🃏 Carousel</option>
+        </select>
+        <select style="font-size:12px;padding:2px 4px;border-radius:4px;border:1px solid var(--b2);background:var(--s2);color:var(--t1);font-family:'DM Mono',monospace;cursor:pointer"
+          onchange="toggleContentCat('${c.id}',this.value)">
+          <option value="wallPost" ${(c.cat==='wallPost'||(!c.cat&&c.title.match(/^WP#/i)))?'selected':''}>🖼 Wall Post</option>
+          <option value="videoAds" ${(c.cat==='videoAds'||(!c.cat&&c.title.match(/^Ad#/i)))?'selected':''}>📢 Video Ads</option>
+          <option value="tiktok" ${(c.cat==='tiktok'||(!c.cat&&c.title.match(/tiktok/i)))?'selected':''}>🎵 TikTok</option>
         </select>
       </td>`;
     return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
