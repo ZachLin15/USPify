@@ -2025,7 +2025,7 @@ function renderTopbar(){
     const h=new Date().getHours();title=`${h<12?'Good morning':'Good afternoon'}, ${S.user.name}`;sub=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
   }else if(S.page==='tracker'){
-    title='Content Tracker';sub=`${data.contents.length} pieces · sorted by brand & posting date`;
+    title='Content Tracker';sub='';
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
   }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
   else if(S.page==='calendar'){title='Calendar';sub='Team timetable · deadlines · productivity';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button><button class="btn btn-info btn-sm" onclick="showProductivityReport()">Productivity Report</button>`;}
