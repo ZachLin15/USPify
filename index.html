@@ -2904,24 +2904,28 @@ function renderBrandPage(){
     <table class="ctable">${thead}<tbody>${sorted.map(c=>makeRowWithType(c)).join('')}</tbody></table>`;
   }
 
-  // Group by category: Wall Posts (WP#) and Video Ads (Ad#, TikTok#, others)
+  // Group by category: Wall Posts, Video Ads, TikTok Content, Other
   const wallPosts=contents.filter(c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)));
-  const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.cat==='videoAds'||c.cat==='tiktok'||((!c.cat)&&(c.title.match(/^Ad#/i)||c.title.match(/^TikTok#/i)))));
-  const other=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c));
+  const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))));
+  const tiktokContent=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&(c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))));
+  const other=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&!tiktokContent.includes(c));
+
+  const hasSep=(a,b)=>a.length&&b.length;
 
   const stats=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-bottom:16px">
     ${[['Total',data.contents.filter(c=>c.brandId===b.id).length,'var(--t1)'],['In progress',contents.filter(c=>c.statusId!=='posted').length,'var(--blu)'],['Posted',contents.filter(c=>c.statusId==='posted').length,'var(--ac)'],['Overdue',contents.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted').length,'var(--red)'],['Quota left',Math.max(0,b.quota-data.contents.filter(c=>c.brandId===b.id).length),'var(--amb)']].map(([l,v,col])=>
     `<div class="stat-c"><div class="stat-lbl">${l}</div><div class="stat-val" style="color:${col};font-size:21px">${v}</div></div>`).join('')}
   </div>`;
 
-  // Sidebar toggle button for brand page
   const sidebarBtn=`<button onclick="toggleSidebar()" title="Toggle sidebar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;color:var(--t2);cursor:pointer;font-family:'DM Mono',monospace;transition:all .12s;margin-bottom:10px" onmouseenter="this.style.borderColor='var(--ac)';this.style.color='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">☰ Toggle sidebar</button>`;
 
   return sidebarBtn+stats+infoBar+filterRow+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
-    ${wallPosts.length&&(videoAds.length||other.length)?'<div style="height:1px;background:var(--b1)"></div>':''}
+    ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
-    ${(wallPosts.length||videoAds.length)&&other.length?'<div style="height:1px;background:var(--b1)"></div>':''}
+    ${hasSep(videoAds,tiktokContent)||hasSep(videoAds,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
+    ${categorySection('TikTok Content','🎵','#3acca0',tiktokContent)}
+    ${hasSep(tiktokContent,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Other','🎬','var(--amb)',other)}
     ${!contents.length?`<div class="empty-msg" style="padding:20px">No content for this month</div>`:''}
   </div>`;
