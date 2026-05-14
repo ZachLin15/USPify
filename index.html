@@ -1650,24 +1650,17 @@ function D(){
     }
   });
 
-  // Migration: sync brand fields from defaults — force full refresh of quota/templates
+  // Migration: sync brand fields from defaults — only for brands that haven't been customised
   const defaultBrands=getDefault().brands;
-  // Only add missing default brands if they haven't been explicitly deleted by the user.
-  // We track deleted brand IDs in data.deletedBrandIds to prevent them from being re-added.
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
   defaultBrands.forEach(db=>{
-    if(data.deletedBrandIds.includes(db.id)) return; // user deleted this — don't re-add
+    if(data.deletedBrandIds.includes(db.id)) return;
     const eb=data.brands.find(b=>b.id===db.id);
     if(!eb){
       data.brands.push(db);
     } else {
-      // Always sync quota, breakdown, labels, contract, templates from defaults
-      eb.quota=db.quota;
-      eb.quotaBreakdown=db.quotaBreakdown;
-      eb.quotaLabels=db.quotaLabels;
-      eb.contractStart=db.contractStart;
-      eb.contractEnd=db.contractEnd;
-      eb.templates=db.templates;
+      // Only sync templates — do NOT overwrite quota/breakdown/contract that admin may have customised
+      if(!eb.templates||!eb.templates.length) eb.templates=db.templates;
     }
   });
 
@@ -2099,15 +2092,16 @@ function getActiveJobsForUser(data, userId){
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
   return [...new Set([
-    // 1. Has an explicit open workflow task → always show
-    ...data.contents.filter(c=>(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')),
+    // 1. Has an explicit open workflow task → always show (exclude task-kind — they have their own panel)
+    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')),
     // 2. Explicitly in assignees AND at one of their active stages
     ...data.contents.filter(c=>
+      c.jobKind!=='task'&&
       c.assignees.includes(userId)&&
       c.statusId!=='posted'&&
       activeStages.includes(c.statusId)
     ),
-  ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted');
+  ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted'&&c.jobKind!=='task');
 }
 
 // ===================== JOB-BASED TODO PANEL (dashboard) =====================
@@ -3334,6 +3328,8 @@ function calTodoDragStart(e, contentId){
   e.currentTarget.classList.add('dragging');
 }
 
+const HOURS_RANGE_START=7,HOURS_RANGE_END=22;
+
 function calDropTodo(e, dateStr, hour, slotEl){
   e.preventDefault();
   slotEl.classList.remove('cal-drop-highlight');
@@ -3409,8 +3405,6 @@ function openAddBlockModalDate(dateStr, startH){
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBlockDate('${dateStr}')">Add block</button></div>`);
 }
-const HOURS_RANGE_START=7,HOURS_RANGE_END=22;
-
 function saveBlockDate(dateStr){
   const label=document.getElementById('sb-label').value.trim();if(!label){alert('Enter a label');return;}
   const userId=document.getElementById('sb-user').value;
@@ -6923,7 +6917,47 @@ function renderWorkflowActionBox(data, c){
     </div>`;
   }
 
+  // ── CLIENT APPROVAL ───────────────────────────────────────────
+  if(st==='client_approval'){
+    const clientUser=data.users.find(u=>u.role==='client'&&u.brandId===c.brandId);
+    if(isSenior){
+      return `<div class="wf-action-box review">
+        <div class="wf-action-title">🤝 Awaiting Client Approval</div>
+        <div class="wf-action-sub">Content has been sent to the client for review. Once approved, mark it as posted.</div>
+        <div class="wf-action-row">
+          <button class="wf-btn wf-btn-green" onclick="wfMarkPosted('${id}')">🚀 Mark as Posted</button>
+          <button class="wf-btn wf-btn-red" onclick="wfClientAmend('${id}')">🔄 Client Requested Changes</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="wf-action-box review">
+      <div class="wf-action-title">🤝 Pending Client Approval</div>
+      <div class="wf-action-sub">Waiting for client to review and approve before posting.</div>
+    </div>`;
+  }
+
   return ''; // no action box for this role/status combo
+}
+
+function wfMarkPosted(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const today=new Date().toISOString().split('T')[0];
+  c.statusId='posted';
+  c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
+  (c.workflowTasks||[]).filter(t=>t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast('🚀 Marked as posted!');
+}
+
+function wfClientAmend(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const today=new Date().toISOString().split('T')[0];
+  const creator=getContentCreator(data,c);
+  notifyRejected(c,creator,'Client requested changes',S.user.name,'Client has requested amendments.');
+  c.statusId='copywriting';
+  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast('🔄 Sent back for revisions');
 }
 
 // ── WORKFLOW ACTION HANDLERS ───────────────────────────────────
@@ -8145,8 +8179,8 @@ async function saveNewBrand(){
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
   if(data.brands.find(b=>b.id===id)){alert('Brand with this name already exists.');return;}
 
-  const quotaBreakdown={wallPost:wallPosts2,videoAds:ads,tiktok:tiktoks,video:0,carousel:0};
-  const quotaLabels={wallPost:'Wall Posts',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
+  const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,video:0,carousel:0};
+  const quotaLabels={wallPost:'Wall Posts',wpCarousel:'Carousel',wpVideo:'Video',wpReels:'Reels',wpImage:'Single Image',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
   // Build month list for whole contract year
   const months=[];
@@ -8957,8 +8991,7 @@ function approveIdeation(id, verIdx){
 function requestIdeaAmendment(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
-  const note=document.getElementById('senior-note-'+id)?.value||'';
-  if(!note.trim()){alert('Please leave a note explaining what needs to be amended.');return;}
+  const note=document.getElementById('senior-note-'+id)?.value||'Please review and revise the ideation.';
   versions[verIdx].approval={
     status:'amendment',
     submittedBy:versions[verIdx].approval?.submittedBy||'',
