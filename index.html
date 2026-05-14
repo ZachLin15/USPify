@@ -2610,15 +2610,29 @@ function renderTracker(){
   }
 
   // Extended type order — split Video into sub-categories by title prefix
-  const QUOTA_SECTIONS=[
-    {key:'wallPost',  label:'Wall Posts',   icon:'🖼', type:'Video',   match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i))},
-    {key:'videoAds',  label:'Video Ads',    icon:'📢', type:'Video',   match:c=>c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))},
-    {key:'tiktok',    label:'TikTok',       icon:'🎵', type:'Video',   match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))},
-    {key:'video',     label:'Videos',       icon:'🎬', type:'Video',   match:c=>(c.cat==='video')||((!c.cat)&&c.type==='Video'&&!c.title.match(/^WP#|^Ad#|^TikTok#/i))},
-    {key:'carousel',  label:'Carousel',     icon:'🃏', type:'Carousel',match:c=>c.type==='Carousel'},
+  // Two parent groups with sub-sections
+  const TRACKER_GROUPS=[
+    {
+      key:'wallPost', label:'Wall Post', icon:'🖼', color:'var(--pnk)',
+      match:c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)),
+      subs:[
+        {key:'carousel_wp', label:'Carousel', icon:'🃏', color:'var(--pur)',
+          match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Carousel'},
+        {key:'video_wp',    label:'Video',    icon:'🎬', color:'var(--amb)',
+          match:c=>(c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)))&&c.type==='Video'},
+      ]
+    },
+    {
+      key:'videoAds', label:'Video Ads', icon:'📢', color:'var(--red)',
+      match:c=>(c.cat==='videoAds'||c.cat==='tiktok')||((!c.cat)&&(c.title.match(/^Ad#/i)||c.title.match(/^TikTok#/i))),
+      subs:[
+        {key:'videoAds_sub', label:'Video',  icon:'🎬', color:'var(--red)',
+          match:c=>c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))},
+        {key:'tiktok',       label:'TikTok', icon:'🎵', color:'var(--tel)',
+          match:c=>c.cat==='tiktok'||((!c.cat)&&c.title.match(/^TikTok#/i))},
+      ]
+    },
   ];
-
-  const TYPE_COLOR={Video:'var(--amb)',Carousel:'var(--pur)',wallPost:'var(--pnk)',videoAds:'var(--red)',tiktok:'var(--tel)',video:'var(--amb)'};
 
   let html='';
 
@@ -2631,65 +2645,54 @@ function renderTracker(){
       if(!brandContents.length) return;
       const qb=b.quotaBreakdown||{};
 
-      // Brand header row
       let brandHTML=`<div style="display:flex;align-items:center;gap:9px;padding:10px 15px 8px;background:${b.color}0d;border-bottom:1px solid var(--b1)">
         <div style="width:9px;height:9px;border-radius:50%;background:${b.color};flex-shrink:0"></div>
         <span style="font-size:14px;font-weight:700;color:${b.color};letter-spacing:.06em;text-transform:uppercase;font-family:'DM Mono',monospace">${b.name}</span>
         <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${brandContents.length} / ${b.quota} total</span>
       </div>`;
 
-      // Sub-sections per quota type
-      let firstSection=true;
-      QUOTA_SECTIONS.forEach(sec=>{
-        const sectionContents=brandContents.filter(c=>sec.match(c));
-        const quota=qb[sec.key]||0;
-        // Only show if there are contents OR a quota is set
-        if(!sectionContents.length&&!quota) return;
+      let firstGroup=true;
+      TRACKER_GROUPS.forEach(grp=>{
+        const grpContents=brandContents.filter(c=>grp.match(c));
+        if(!grpContents.length) return;
 
-        const posted=sectionContents.filter(c=>c.statusId==='posted').length;
-        const pct=quota>0?Math.round(posted/quota*100):0;
-        const color=TYPE_COLOR[sec.key]||'var(--t2)';
-
-        if(!firstSection){
-          brandHTML+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 15px;background:var(--bg)">
-            <div style="flex:1;height:1px;background:var(--b1)"></div>
-            <span style="font-size:11px;color:var(--t4);font-family:'DM Mono',monospace">✦</span>
-            <div style="flex:1;height:1px;background:var(--b1)"></div>
-          </div>`;
+        if(!firstGroup){
+          brandHTML+=`<div style="height:1px;background:var(--b2);margin:0 15px"></div>`;
         }
-        firstSection=false;
+        firstGroup=false;
 
-        // Section header with quota progress
-        brandHTML+=`<div style="padding:8px 15px 6px;background:var(--s2);border-bottom:1px solid var(--b1)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
-            <span style="font-size:15px">${sec.icon}</span>
-            <span style="font-size:13px;font-weight:700;color:${color};font-family:'DM Mono',monospace;letter-spacing:.04em">${sec.label}</span>
-            <span style="font-size:12px;color:var(--t2);font-family:'DM Mono',monospace;margin-left:auto">
-              <strong style="color:${color}">${posted}</strong> posted
-              · <strong>${sectionContents.length}</strong> created
-              ${quota?`· <strong style="color:${posted>=quota?'var(--ac)':'var(--t3)'}">${quota}</strong> quota`:''}
-              ${quota&&sectionContents.length<quota?`· <span style="color:var(--red)">${quota-sectionContents.length} missing</span>`:''}
+        // Parent group header
+        const grpPosted=grpContents.filter(c=>c.statusId==='posted').length;
+        brandHTML+=`<div style="padding:9px 15px 7px;background:var(--s2);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">${grp.icon}</span>
+          <span style="font-size:14px;font-weight:800;color:${grp.color};font-family:'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase">${grp.label}</span>
+          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${grpContents.length} items · ${grpPosted} posted</span>
+        </div>`;
+
+        // Sub-sections inside the parent group
+        grp.subs.forEach((sub,si)=>{
+          const subContents=grpContents.filter(c=>sub.match(c));
+          if(!subContents.length) return;
+
+          const subPosted=subContents.filter(c=>c.statusId==='posted').length;
+          const quota=qb[sub.key]||qb[grp.key]||0;
+
+          brandHTML+=`<div style="padding:6px 15px 5px 28px;background:var(--bg);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px">
+            <span style="font-size:13px">${sub.icon}</span>
+            <span style="font-size:12px;font-weight:700;color:${sub.color};font-family:'DM Mono',monospace;letter-spacing:.04em">${sub.label}</span>
+            <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">
+              <strong style="color:${sub.color}">${subPosted}</strong> posted
+              · <strong>${subContents.length}</strong> created
+              ${quota?`· <strong style="color:${subPosted>=quota?'var(--ac)':'var(--t3)'}">${quota}</strong> quota`:''}
             </span>
           </div>
-          ${quota?`<div style="background:var(--s3);border-radius:3px;height:4px;overflow:hidden">
-            <div style="height:100%;width:${Math.min(100,Math.round(sectionContents.length/quota*100))}%;background:${color};border-radius:3px;transition:width .3s;opacity:.5"></div>
-            <div style="height:100%;width:${Math.min(100,pct)}%;background:${posted>=quota?'var(--ac)':color};border-radius:3px;margin-top:-4px;transition:width .3s"></div>
-          </div>`:''}
-        </div>
-        <table class="ctable" style="margin-bottom:0">
-          <thead><tr>
-            <th>Content piece</th>
-            <th>Assigned</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>Posting date</th>
-            <th>Drive</th>
-          </tr></thead>
-          <tbody>${sectionContents.length
-            ? sectionContents.map(c=>makeRow(c)).join('')
-            : `<tr><td colspan="6" style="padding:10px 15px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;text-align:center">No content yet — quota: ${quota}</td></tr>`
-          }</tbody>
-        </table>`;
+          <table class="ctable" style="margin-bottom:0">
+            <thead><tr>
+              <th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th>
+            </tr></thead>
+            <tbody>${subContents.map(c=>makeRow(c)).join('')}</tbody>
+          </table>`;
+        });
       });
 
       html+=`<div class="panel" style="margin-bottom:12px;overflow:hidden">${brandHTML}</div>`;
