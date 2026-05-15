@@ -6292,21 +6292,8 @@ function renderDesignPanel(c, id){
       }).join('')
     :`<div class="empty-msg" style="padding:12px 0;font-size:13px">No reviews yet for ${ver.label}.</div>`;
 
-  // Senior review box \u2014 shown when designer has submitted for review
-  const seniorReviewHTML=(isSeniorOrAdmin&&ver.pendingReview)?`
-    <div class="design-review-box">
-      <div class="design-review-title">\uD83D\uDD0D Review Design ${ver.label}
-        <span class="idea-notif-badge" style="background:var(--ambd);color:var(--amb)">\u23F3 Awaiting your review</span>
-      </div>
-      <div class="design-review-sub">Submitted by ${ver.submittedBy||'designer'} on ${ver.submittedAt||''}. Review the design above, then approve to move to copywriting or request changes.</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn-approve-idea" onclick="approveDesign('${id}',${verIdx})">\u2705 Approve Design → Copywriting</button>
-        <button class="btn-amend-idea" onclick="amendDesign('${id}',${verIdx})">\uD83D\uDD04 Request Amendment → Back to Designer</button>
-      </div>
-    </div>` : (isSeniorOrAdmin&&ver.link&&!ver.pendingReview)?`
-    <div style="padding:10px 12px;background:var(--s2);border-radius:var(--r);font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">
-      Waiting for designer to submit ${ver.label} for review.
-    </div>`  : '';
+  // Senior review is handled in the right sidebar action box only
+  const seniorReviewHTML='';
 
   // Designer upload section — browse file OR paste URL
   const uploaderHTML=isDesigner?`
@@ -6538,7 +6525,6 @@ function designerSubmitForReview(id, verIdx){
   versions[verIdx].submittedBy=S.user.name;
   versions[verIdx].submittedAt=new Date().toISOString().split('T')[0];
   if(!versions[verIdx].approvals) versions[verIdx].approvals=[];
-  // Log a pending entry
   versions[verIdx].approvals.push({
     userId:S.user.id,status:'pending',
     note:`${versions[verIdx].label} submitted for senior review by ${S.user.name}`,
@@ -6549,11 +6535,17 @@ function designerSubmitForReview(id, verIdx){
   c.comments.push({id:'cm'+uid(),userId:S.user.id,
     text:`\uD83C\uDFA8 Design ${versions[verIdx].label} submitted for senior review by ${S.user.name}`,
     type:'general',createdAt:new Date().toISOString().split('T')[0]});
+  // Set flag and transition status so sidebar shows Design Review for Jack
+  c.designPendingReview=true;
+  const senior=getSenior(data,c);
+  c.seniorNotifDismissed={};
+  const prev=[...c.assignees];
+  c.statusId='senior_approval';
+  c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.assignees=[senior.id];
   save(data);
-  const panel=document.getElementById('dp-design');
-  if(panel) panel.innerHTML=renderDesignPanel(c,id);
-  renderTopbar();
-  showAIToast(`\uD83D\uDCE4 Design ${versions[verIdx].label} submitted \u2014 senior notified`);
+  renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast(`\uD83D\uDCE4 Design ${versions[verIdx].label} submitted \u2014 ${senior.name} notified`);
 }
 
 function switchDTab(el, showId){
