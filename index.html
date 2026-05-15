@@ -6497,6 +6497,7 @@ function approveDesign(id, verIdx){
   versions[verIdx].pendingReview=false;
   c.designVersions=versions;
   c.seniorNotifDismissed={[S.user.id]:true};
+  c.designPendingReview=false;
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   const creator=getContentCreator(data,c);
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
@@ -6521,9 +6522,8 @@ function amendDesign(id, verIdx){
   versions[verIdx].pendingReview=false;
   c.designVersions=versions;
   c.seniorNotifDismissed={[S.user.id]:true};
+  c.designPendingReview=false;
   const designer=getDesigner(data,c);
-  notifyRejected(c,designer,'Design needs changes',S.user.name,note);
-  c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
@@ -7271,6 +7271,18 @@ function renderWorkflowActionBox(data, c){
       </div>`);
     }
 
+    if(!isVideo && (prevStatus==='design'||c.designPendingReview)){
+      return withHistory(`<div class="wf-action-box review">
+        <div class="wf-action-title">🎨 Design Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+        <div class="wf-action-sub">Submitted by ${designer.name}. Review the design in the <strong>Design tab</strong>, add your comment, then decide:</div>
+        ${reviewCommentBox('Your feedback on the design…')}
+        <div class="wf-action-row" style="margin-top:12px">
+          <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve Design → ✍️ Copywriting</button>
+          <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed → Back to ${designer.name}</button>
+        </div>
+      </div>`);
+    }
+
     return withHistory(`<div class="wf-action-box review">
       <div class="wf-action-title">🔍 Copy Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
       <div class="wf-action-sub">Submitted by ${creator.name}. Review the caption/copy in the <strong>Copywriting tab</strong>, add your comment, then decide:</div>
@@ -7565,6 +7577,7 @@ function carouselSubmitDesign(id){
   if(!c.comments)c.comments=[];
   c.comments.push({id:'wt'+uid(),userId:S.user.id,
     text:`🎨 Design submitted for senior approval by ${S.user.name}`,type:'general',createdAt:today});
+  c.designPendingReview=true;
   const prev=[...c.assignees];
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:today});
