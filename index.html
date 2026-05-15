@@ -2108,8 +2108,8 @@ function getActiveJobsForUser(data, userId){
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
   return [...new Set([
-    // 1. Has an explicit open workflow task → always show (exclude task-kind — they have their own panel)
-    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')),
+    // 1. Has an explicit open workflow task AND content is at one of their active stages
+    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&activeStages.includes(c.statusId)),
     // 2. Explicitly in assignees AND at one of their active stages
     ...data.contents.filter(c=>
       c.jobKind!=='task'&&
@@ -5766,11 +5766,18 @@ function amendCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
+  const today=new Date().toISOString().split('T')[0];
   const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
-  v[verIdx].approvals.push({userId:S.user.id,status:'amendment',note,date:new Date().toISOString().split('T')[0]});
+  v[verIdx].approvals.push({userId:S.user.id,status:'amendment',note,date:today});
   v[verIdx].pendingReview=false;c.copyVersions=v;c.copyPendingReview=false;
-  const creator=getContentCreator(data,c);const prev=[...c.assignees];
-  wfTransition(data,c,'copywriting',[creator.id],`✍️ Copy amendment by ${S.user.name}: ${note}. Back to ${creator.name}.`,prev);
+  const creator=getContentCreator(data,c);
+  // Close reviewer's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  notifyRejected(c,creator,`Copy ${v[verIdx].label} needs changes`,S.user.name,note);
+  if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
+  c.statusId='copywriting';
+  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
+  c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
 }
 
@@ -6487,6 +6494,9 @@ function approveDesign(id, verIdx){
   c.designPendingReview=false;
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   const creator=getContentCreator(data,c);
+  // Close all of designer's open tasks before handing off
+  const designer=getDesigner(data,c);
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===designer.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
   notifyApproved(c,creator,'Design approved — write the copy! ✍️',S.user.name);
   c.statusId='copywriting';
@@ -6510,7 +6520,11 @@ function amendDesign(id, verIdx){
   c.designVersions=versions;
   c.seniorNotifDismissed={[S.user.id]:true};
   c.designPendingReview=false;
+  // Close Jack's open tasks before handing back to designer
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   const designer=getDesigner(data,c);
+  notifyRejected(c,designer,'Design needs changes',S.user.name,note);
+  c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
@@ -7324,9 +7338,13 @@ function wfClientAmend(id){
   const today=new Date().toISOString().split('T')[0];
   const creator=getContentCreator(data,c);
   const note=document.getElementById('wf-review-note-'+id)?.value||'Client has requested amendments.';
-  notifyRejected(c,creator,'Client requested changes',S.user.name,note);
+  // Close reviewer's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  notifyRejected(c,creator,'Client requested changes — revise and resubmit',S.user.name,note);
+  if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
+  c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🔄 Sent back for revisions');
 }
@@ -7417,8 +7435,13 @@ function notifyApproved(c, toUser, label, approvedBy){
 function notifyRejected(c, toUser, label, rejectedBy, note){
   const today=new Date().toISOString().split('T')[0];
   if(!c.workflowTasks)c.workflowTasks=[];
+  // Close any open tasks for the reviewer (the person rejecting)
+  (c.workflowTasks).filter(t=>t.assigneeId===S.user?.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  // Close any stale open tasks for the recipient (in case of re-amendment)
+  (c.workflowTasks).filter(t=>t.assigneeId===toUser.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  // Add new amendment task for recipient
   c.workflowTasks.push({id:'wt'+uid(),assigneeId:toUser.id,status:'open',
-    statusId:c.statusId,label:`🔄 Amendment: ${label}`,openedAt:today});
+    statusId:c.statusId,label:`🔄 Need Amendment: ${label}`,openedAt:today});
   c.seniorNotifDismissed={};
   c.shootNotifDismissed={};
   c.editNotifDismissed={};
@@ -7426,7 +7449,11 @@ function notifyRejected(c, toUser, label, rejectedBy, note){
   c.amendNotifDismissed=c.amendNotifDismissed||{};
   delete c.amendNotifDismissed[toUser.id];
   c.amendNotifiedBy=rejectedBy;
-  c.amendNote=note;
+  c.amendNote=note||'Please revise and resubmit.';
+  if(!c.comments)c.comments=[];
+  c.comments.push({id:'cm'+uid(),userId:S.user?.id||'system',
+    text:`🔄 Amendment by ${rejectedBy} → ${toUser.name}: ${label}${note?'. Note: '+note:''}`,
+    type:'general',createdAt:today});
 }
 
 function wfApproveIdeationForVideo(id){
@@ -7454,10 +7481,13 @@ function wfAmendIdeationForVideo(id){
   saveWfReviewComment(id,'Senior Amendment — Ideation/Script');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
+  const today=new Date().toISOString().split('T')[0];
   c.ideationPendingApproval=false;
+  // Close Jack's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,creator,'Ideation needs changes',S.user.name,note);
   c.statusId='ideation';
-  c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
@@ -7505,12 +7535,14 @@ function wfAmendVideo(id){
   saveWfReviewComment(id,'Senior Amendment — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const designer=getDesigner(data,c);
+  const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
   c.seniorNotifDismissed={[S.user.id]:true};
-  c.editNotifDismissed={};
+  // Close Jack's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,designer,'Video needs changes — back to editing',S.user.name,note);
   c.statusId='video_editing';
-  c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Video amendment — ${designer.name} notified`);
@@ -7615,11 +7647,14 @@ function wfSeniorAmend(id){
   saveWfReviewComment(id,'Senior Amendment — Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
+  const today=new Date().toISOString().split('T')[0];
   c.seniorNotifDismissed={[S.user.id]:true};
+  // Close Jack's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,creator,'Copy needs changes — revise and resubmit',S.user.name,note);
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   c.statusId='copywriting';
-  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
@@ -9366,13 +9401,17 @@ function requestIdeaAmendment(id, verIdx){
   saveWfReviewComment(id,'Senior Amendment — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
-  versions[verIdx].approval={status:'amendment',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:new Date().toISOString().split('T')[0],note};
+  const today=new Date().toISOString().split('T')[0];
+  versions[verIdx].approval={status:'amendment',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
   c.ideationVersions=versions;
   c.ideationPendingApproval=false;
+  // Close reviewer's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   c.statusId='ideation';
-  c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:today});
   const creator=getContentCreator(data,c);
   notifyRejected(c,creator,`Ideation ${versions[verIdx].label} needs changes`,S.user.name,note);
+  c.assignees=[creator.id];
   save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment requested — ${creator.name} notified`);
 }
