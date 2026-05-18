@@ -942,7 +942,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
     {id:'developer',name:'Developer',role:'admin',pass:'developer'},
     {id:'jack',name:'Jack',role:'senior',pass:'jack'},
     {id:'hualu',name:'Hualu',role:'designer',pass:'hualu'},
-    {id:'leonard',name:'Leonard',role:'content_creator',pass:'leonard'},
+    {id:'leonard',name:'Leonard',role:'admin',pass:'leonard'},
     {id:'lunox_client',name:'Lunox',role:'client',pass:'lunox',brandId:'lunox'}
   ];
   function miniGetUsers(){
@@ -1491,7 +1491,7 @@ function getDefault(){
       {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
       {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack',assignedStatuses:['senior_approval']},
       {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu',assignedStatuses:['design','video_editing']},
-      {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard',assignedStatuses:['ideation','script']},
+      {id:'leonard',name:'Leonard',role:'admin',title:'Admin',init:'L',color:'#3acca0',pass:'leonard',assignedStatuses:['ideation','script']},
       {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
     ],
     brands:[
@@ -1857,6 +1857,12 @@ function userAvatar(u,size){const sz=size||20;return `<div class="tav" style="wi
 function progressBar(pct,color,width){return `<div style="display:flex;align-items:center;gap:6px;min-width:${width||120}px"><div class="prog-bar-bg" style="flex:1"><div class="prog-bar" style="width:${pct}%;background:${color}"></div></div><span class="prog-pct" style="color:${color}">${pct}%</span></div>`;}
 
 // ===================== AUTH =====================
+
+// Admin check — includes leonard by user ID so he always has full access
+function isAdminUser(user){
+  if(!user) return false;
+  return user.role==='admin' || user.id==='leonard';
+}
 function toggleLoginPw(){
   const inp=document.getElementById('li-pass');
   const btn=document.getElementById('li-pw-toggle');
@@ -1963,7 +1969,7 @@ function render(){
 }
 
 function renderSidebar(){
-  const data=D();const isAdmin=S.user.role==='admin';const isClient=S.user.role==='client';
+  const data=D();const isAdmin=isAdminUser(S.user);const isClient=S.user.role==='client';
   if(isClient){
     const b=getBrand(data,S.user.brandId);
     const pendingApprovalCount=data.contents.filter(c=>c.brandId===S.user.brandId&&c.statusId==='client_approval').length;
@@ -2015,7 +2021,7 @@ function renderSidebar(){
 }
 
 function renderTopbar(){
-  const data=D();const isAdmin=S.user.role==='admin';const isClient=S.user.role==='client';
+  const data=D();const isAdmin=isAdminUser(S.user);const isClient=S.user.role==='client';
   let title='',sub='',actions='';
   if(isClient){
     const brandObj=getBrand(data,S.user.brandId);
@@ -2293,7 +2299,7 @@ function toggleBrandCollapse(brandId){
 function renderDashboard(){
   const data=D();const today=new Date().toISOString().split('T')[0];
   const curMonth=new Date().toISOString().slice(0,7);
-  const isAdmin=S.user.role==='admin';
+  const isAdmin=isAdminUser(S.user);
 
   // Non-admin: only show content assigned to them
   const allContents=isAdmin
@@ -2580,7 +2586,7 @@ function renderTracker(){
   });
 
   // Build table row for a single content piece (no Type column)
-  const isSeniorOrAdmin=S.user.role==='admin'||S.user.role==='senior';
+  const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
   function makeRow(c){
     const st=getStatus(data,c.statusId);
     const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
@@ -2825,7 +2831,7 @@ function renderBrandPage(){
     contents=[...contents].sort((a,c2)=>(!a.postingDate?1:!c2.postingDate?-1:a.postingDate.localeCompare(c2.postingDate)));
   }
   const infoBar=b.infoSummary?`<div style="background:${b.color}11;border:1px solid ${b.color}33;border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:15px;line-height:1.6;color:var(--t2)">${b.infoSummary}</div>`:'';
-  const isAdmin=S.user.role==='admin'||S.user.role==='developer';
+  const isAdmin=isAdminUser(S.user)||S.user.role==='developer';
 
   function makeRow(c){
     const st=getStatus(data,c.statusId);const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
@@ -3335,7 +3341,7 @@ function renderMiniCal(todayStr){
 
 function renderCalTodoLayout(data,mainGrid,todayStr){
   const myJobs=getActiveJobsForUser(data,S.user.id);
-  const unstarted=S.user.role==='admin'||S.user.id==='leonard'
+  const unstarted=isAdminUser(S.user)||S.user.id==='leonard'
     ?data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10):[];
   const todoItems=[...myJobs,...unstarted]
     .sort((a,b)=>{if(!a.postingDate&&!b.postingDate)return 0;if(!a.postingDate)return 1;if(!b.postingDate)return -1;return a.postingDate.localeCompare(b.postingDate);})
@@ -3827,7 +3833,7 @@ async function fetchAllMetaData(){
 function rmFmt(n){return n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=1000?`${(n/1000).toFixed(1)}K`:String(Math.round(n));}
 
 function renderAds(){
-  const data=D();const month=S.adMonth||'2026-04';const isAdmin=S.user.role==='admin';
+  const data=D();const month=S.adMonth||'2026-04';const isAdmin=isAdminUser(S.user);
   const s=getMetaSettings();
   const hasToken=!!(s&&s.token);
 
@@ -3981,7 +3987,7 @@ function renderSetPassword(){
         </div>
       </div>
     </div>
-    ${S.user.role==='admin'?`
+    ${isAdminUser(S.user)?`
     <div class="panel" style="margin-top:16px">
       <div class="ph">
         <div style="width:28px;height:28px;background:var(--redd);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">👥</div>
@@ -4351,7 +4357,7 @@ function renderAnalytics(){
 
 function renderTeam(){
   const data=D();
-  const isAdmin=S.user.role==='admin';
+  const isAdmin=isAdminUser(S.user);
   const staff=data.users.filter(u=>u.role!=='client');
 
   const STAGE_LABELS={
@@ -4460,7 +4466,7 @@ function renderTeam(){
 // ===================== RESPONSIBILITIES PAGE =====================
 function renderResponsibilities(){
   const data=D();
-  const canEdit=S.user.role==='admin'||S.user.role==='senior';
+  const canEdit=isAdminUser(S.user)||S.user.role==='senior';
   if(!canEdit)return'<div class="empty-msg">Admin / Senior only.</div>';
 
   const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
@@ -4708,7 +4714,7 @@ function saveAddJob(assigneeId){
 // ===================== CLIENT PORTAL =====================
 // ===================== CLIENT APPROVAL DETAIL PANEL =====================
 function renderClientApprovalPanel(c, id, data, b, st){
-  const isAdmin=S.user.role==='admin'||S.user.role==='senior';
+  const isAdmin=isAdminUser(S.user)||S.user.role==='senior';
   const isVideo=c.type==='Video';
   const copyText=c.copywriting||'';
 
@@ -5366,7 +5372,7 @@ function getDefaultTabForContent(c){
 function renderDetailPage(id, forceTab){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
-  const isAdmin=S.user.role==='admin';
+  const isAdmin=isAdminUser(S.user);
   const prog=getProgressForContent(c);
   const days=daysUntil(c.postingDate);
 
@@ -5400,7 +5406,7 @@ function renderDetailPage(id, forceTab){
     <button class="btn btn-ghost btn-sm" id="detail-side-toggle" onclick="toggleDetailSide()" style="display:none" title="Show info panel">\u24D8 Info</button>
     ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openEditContentModal('${id}')">Edit</button>`:''}
     ${isAdmin?`<button class="btn btn-warn btn-sm" onclick="sendWhatsApp('${id}')">\uD83D\uDCF1 Remind</button>`:''}
-    ${S.user.role==='admin'?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
+    ${isAdminUser(S.user)?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
   `;
 
   // --- MAIN (left panel) ---
@@ -5785,8 +5791,8 @@ function renderCopywritingPanel(c,id){
   const versions=getCopyVersions(c);
   const verIdx=Math.min(getCopyVerIdx(id),versions.length-1);
   const ver=versions[verIdx];
-  const isSeniorOrAdmin=S.user.role==='admin'||S.user.role==='senior';
-  const isCreator=S.user.role==='content_creator'||S.user.role==='admin';
+  const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
+  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
   const data=D();
   const VER_COLORS=['#3acca0','#5a9fff','#9a7aff','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS[verIdx%VER_COLORS.length];
@@ -5888,7 +5894,7 @@ function renderCopywritingPanel(c,id){
 
 // ===================== SHOOTING PANEL =====================
 function renderShootingPanel(c, id){
-  const isCreator=S.user.role==='content_creator'||S.user.role==='admin';
+  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
   const data=D();
   const designer=getDesigner(data,c);
 
@@ -5992,9 +5998,9 @@ function autoSaveShootNotes(id){
 }
 
 function renderVideoEditingPanel(c, id){
-  const isDesigner=S.user.role==='designer'||S.user.role==='admin';
-  const isCreator=S.user.role==='content_creator'||S.user.role==='admin';
-  const isSeniorOrAdmin=S.user.role==='senior'||S.user.role==='admin';
+  const isDesigner=S.user.role==='designer'||isAdminUser(S.user);
+  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
+  const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
   const data=D();
   const designer=getDesigner(data,c);
 
@@ -6263,8 +6269,8 @@ function renderDesignPanel(c, id){
   const versions=getDesignVersions(c);
   const verIdx=Math.min(getDesignVerIdx(id), versions.length-1);
   const ver=versions[verIdx];
-  const isSeniorOrAdmin=S.user.role==='admin'||S.user.role==='senior';
-  const isDesigner=S.user.role==='designer'||S.user.role==='admin';
+  const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
+  const isDesigner=S.user.role==='designer'||isAdminUser(S.user);
   const VER_COLORS_D=['#5a9fff','#9a7aff','#3acca0','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS_D[verIdx%VER_COLORS_D.length];
 
@@ -6634,7 +6640,7 @@ function renderIdeationPanel(c, id){
 
   // Approval state for this version
   const approval = idea.approval || {status:'none'}; // none | pending | approved | amendment
-  const isSeniorOrAdmin = S.user.role==='admin'||S.user.role==='senior';
+  const isSeniorOrAdmin = isAdminUser(S.user)||S.user.role==='senior';
   const isWorker = !isSeniorOrAdmin && S.user.role!=='client';
   const isPending = approval.status==='pending';
   const isApproved = approval.status==='approved';
@@ -8870,7 +8876,7 @@ function openBlockDetail(id){
   const sl=fmtH(b.startHour);
   const el=fmtH(b.endHour);
   const isOwner=S.user.id===b.userId;
-  const isAdmin=S.user.role==='admin';
+  const isAdmin=isAdminUser(S.user);
   const canEdit=isAdmin||isOwner;
   const whenStr=b.date?`📅 ${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
 
