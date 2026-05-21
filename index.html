@@ -1375,6 +1375,15 @@ async function initCloudSync(){
   const cloudData=await cloudLoad();
   if(cloudData&&cloudData.users?.length){
     localStorage.setItem(KEY,JSON.stringify(cloudData));
+    // Refresh S.user from fresh cloud data, but preserve isAdminUser logic
+    if(S.user){
+      const freshUser=cloudData.users.find(u=>u.id===S.user.id);
+      if(freshUser){
+        // If isAdminUser says this user should be admin, force the role
+        if(S.user.id==='leonard'||freshUser.id==='leonard') freshUser.role='admin';
+        S.user=freshUser;
+      }
+    }
     if(typeof render==='function') render();
   }
   initRealtimeSync();
@@ -1895,6 +1904,8 @@ function doLogin(){
   const data=D();
   const user=data.users.find(u=>u.name.toLowerCase()===name||u.id===name);
   if(user&&user.pass===pass){
+    // Force admin role for leonard
+    if(user.id==='leonard') user.role='admin';
     S.user=user;
     sessionStorage.setItem('uspify_uid',user.id);
     document.getElementById('login-screen').style.display='none';
@@ -2764,11 +2775,18 @@ function saveBrandRowDate(contentId, field, value){
   if(!c) return;
   if(field==='postingDate'){
     c.postingDate=value;
-    // Auto-update due dates relative to new posting date
     if(value){
       if(!c.dueDates) c.dueDates={};
       c.dueDates.hualu=addDays(value,-4);
       c.dueDates.leonard=addDays(value,-7);
+      // Update the other date inputs in the same row without re-rendering
+      const row=document.querySelector(`tr[data-cid="${contentId}"]`);
+      if(row){
+        const hInput=row.querySelector('[data-field="hualu"]');
+        const lInput=row.querySelector('[data-field="leonard"]');
+        if(hInput) hInput.value=c.dueDates.hualu;
+        if(lInput) lInput.value=c.dueDates.leonard;
+      }
     }
   } else if(field==='hualu'){
     if(!c.dueDates) c.dueDates={};
@@ -2778,8 +2796,6 @@ function saveBrandRowDate(contentId, field, value){
     c.dueDates.leonard=value;
   }
   save(data);
-  // Re-render the brand page to update late flags and stats
-  renderPage();
   showAIToast(`✓ Date updated`);
 }
 
@@ -2849,7 +2865,7 @@ function renderBrandPage(){
       :`<td class="due-date${lateClass}">${fmt(c.postingDate)||'—'}${lateClass?' ⚠':''}</td>`;
     const hualuCell=isAdmin
       ?`<td class="due-date" onclick="event.stopPropagation()">
-          <input type="date" value="${c.dueDates?.hualu||''}" title="Edit Hualu due date"
+          <input type="date" value="${c.dueDates?.hualu||''}" title="Edit Hualu due date" data-field="hualu"
             style="background:transparent;border:none;border-bottom:1px dashed var(--b2);color:var(--tel);font-size:13px;font-family:'DM Mono',monospace;cursor:pointer;padding:1px 2px;width:110px;outline:none"
             onchange="saveBrandRowDate('${c.id}','hualu',this.value)"
             onfocus="this.style.borderBottomColor='var(--ac)'"
@@ -2858,14 +2874,14 @@ function renderBrandPage(){
       :`<td class="due-date" style="color:var(--tel)">${c.dueDates?.hualu?fmt(c.dueDates.hualu):'—'}</td>`;
     const leonardCell=isAdmin
       ?`<td class="due-date" onclick="event.stopPropagation()">
-          <input type="date" value="${c.dueDates?.leonard||''}" title="Edit Leonard due date"
+          <input type="date" value="${c.dueDates?.leonard||''}" title="Edit Leonard due date" data-field="leonard"
             style="background:transparent;border:none;border-bottom:1px dashed var(--b2);color:var(--tel);font-size:13px;font-family:'DM Mono',monospace;cursor:pointer;padding:1px 2px;width:110px;outline:none"
             onchange="saveBrandRowDate('${c.id}','leonard',this.value)"
             onfocus="this.style.borderBottomColor='var(--ac)'"
             onblur="this.style.borderBottomColor='var(--b2)'">
         </td>`
       :`<td class="due-date" style="color:var(--tel)">${c.dueDates?.leonard?fmt(c.dueDates.leonard):'—'}</td>`;
-    return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
+    return `<tr class="clickable" data-cid="${c.id}" onclick="openContentDetail('${c.id}')">
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠</span>`:''}</td>
       <td><div class="av-row">${avs}</div></td>
       <td>${statusBadge(st)}</td>
@@ -9806,8 +9822,10 @@ window.onload=function(){
   // Auto-login from session
   const savedId=sessionStorage.getItem('uspify_uid');
   if(savedId){
-    const data=D();const user=data.users.find(u=>u.id===savedId);
+    const data=D();let user=data.users.find(u=>u.id===savedId);
     if(user){
+      // Force admin role for leonard regardless of stored role
+      if(user.id==='leonard') user={...user,role:'admin'};
       S.user=user;
       if(user.role==='client'){S.page='client_approvals';S.brand=null;}
       document.getElementById('login-screen').style.display='none';
