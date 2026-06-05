@@ -1289,6 +1289,7 @@ async function cloudLoad(){
       tasks:settings.tasks||[],
       deletedBrandIds:settings.deletedBrandIds||[],
       deletionLog:settings.deletionLog||[],
+      __savedBy:settings.__savedBy||'',
     };
     if(!data.users.length&&!data.brands.length) return null;
     setSyncStatus('live','Live ✓');
@@ -1336,38 +1337,88 @@ async function cloudSave(data){
 }
 
 function initRealtimeSync(){
-  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
-  const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
-  let ws;
-  function connect(){
+  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
+
+  let ws, pollTimer, lastHash='', reconnectDelay=3000;
+
+  // ── Hash to detect real data changes ─────────────────────────────────────
+  function dataHash(data){
+    try{ return (data.contents||[]).length+'|'+(data.brands||[]).length+'|'+(data.scheduleBlocks||[]).length+'|'+((data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).join('')).slice(0,200); }catch(e){ return ''; }
+  }
+
+  // ── Pull fresh data and re-render if changed ─────────────────────────────
+  async function pullIfChanged(){
     try{
+      const fresh=await cloudLoad();
+      if(fresh&&fresh.users?.length){
+        const h=dataHash(fresh);
+        if(h!==lastHash){
+          lastHash=h;
+          const savedBy=fresh.__savedBy;
+          localStorage.setItem(KEY,JSON.stringify(fresh));
+          // Refresh S.user preserving admin override
+          if(S.user){
+            const fu=fresh.users.find(u=>u.id===S.user.id);
+            if(fu){ if(fu.id==='leonard') fu.role='admin'; S.user=fu; }
+          }
+          render();
+          if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
+        }
+      }
+    }catch(e){}
+  }
+
+  // ── WebSocket realtime ────────────────────────────────────────────────────
+  function connectWS(){
+    try{
+      const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
       ws=new WebSocket(wsUrl);
       ws.onopen=()=>{
-        ws.send(JSON.stringify({topic:'realtime:public:uspify_contents',event:'phx_join',payload:{},ref:'1'}));
-        ws.send(JSON.stringify({topic:'realtime:public:uspify_settings',event:'phx_join',payload:{},ref:'2'}));
+        reconnectDelay=3000;
+        // Subscribe to all 4 tables
+        ['uspify_contents','uspify_brands','uspify_users','uspify_settings'].forEach((tbl,i)=>{
+          ws.send(JSON.stringify({topic:`realtime:public:${tbl}`,event:'phx_join',payload:{config:{broadcast:{self:false},presence:{key:''}}},ref:String(i+1)}));
+        });
         setSyncStatus('live','Live ✓');
+        // Cancel polling when WS is live
+        if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
       };
       ws.onmessage=async(e)=>{
         try{
           const msg=JSON.parse(e.data);
-          if(msg.event==='INSERT'||msg.event==='UPDATE'){
-            const savedBy=msg.payload?.record?.data?.__savedBy;
-            if(savedBy&&savedBy!==S.user?.name){
-              const fresh=await cloudLoad();
-              if(fresh&&fresh.users?.length){
-                localStorage.setItem(KEY,JSON.stringify(fresh));
-                render();
-                showAIToast('🔄 Updated by '+savedBy);
-              }
-            }
+          // Phoenix heartbeat — reply to keep connection alive
+          if(msg.event==='phx_reply'&&msg.payload?.status==='ok') return;
+          if(msg.event==='heartbeat'){ ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'})); return; }
+          if(['INSERT','UPDATE','DELETE'].includes(msg.event)){
+            await pullIfChanged();
           }
         }catch(err){}
       };
-      ws.onclose=()=>{setSyncStatus('idle','Reconnecting…');setTimeout(connect,5000);};
-      ws.onerror=()=>{setSyncStatus('error','WS error');};
-    }catch(err){setSyncStatus('error','RT failed');}
+      ws.onclose=()=>{
+        setSyncStatus('idle','Reconnecting…');
+        // Fall back to polling while reconnecting
+        startPolling();
+        setTimeout(connectWS, reconnectDelay);
+        reconnectDelay=Math.min(reconnectDelay*2, 30000);
+      };
+      ws.onerror=()=>{ setSyncStatus('error','Sync error'); };
+    }catch(err){
+      setSyncStatus('error','RT failed');
+      startPolling();
+    }
   }
-  connect();
+
+  // ── Polling fallback (every 15s) ──────────────────────────────────────────
+  function startPolling(){
+    if(pollTimer) return; // already polling
+    setSyncStatus('idle','Polling…');
+    pollTimer=setInterval(pullIfChanged, 15000);
+  }
+
+  // Heartbeat sender every 25s to keep WS alive
+  setInterval(()=>{ try{ if(ws&&ws.readyState===1) ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'})); }catch(e){} }, 25000);
+
+  connectWS();
 }
 
 async function initCloudSync(){
@@ -5422,7 +5473,7 @@ function renderDetailPage(id, forceTab){
     <button class="btn btn-ghost btn-sm" id="detail-side-toggle" onclick="toggleDetailSide()" style="display:none" title="Show info panel">\u24D8 Info</button>
     ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openEditContentModal('${id}')">Edit</button>`:''}
     ${isAdmin?`<button class="btn btn-warn btn-sm" onclick="sendWhatsApp('${id}')">\uD83D\uDCF1 Remind</button>`:''}
-    ${isAdminUser(S.user)?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>`:''}
+    <button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>
   `;
 
   // --- MAIN (left panel) ---
@@ -7990,7 +8041,6 @@ function changeStatus(id,statusId){
   save(data);renderDetailPage(id);renderSidebar();
 }
 function confirmDeleteContent(id){
-  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const b=getBrand(data,c.brandId);
   openModal(`<div class="modal-title" style="color:var(--red)">🗑 Remove content piece<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -8009,7 +8059,6 @@ function confirmDeleteContent(id){
     </div>`);
 }
 function deleteContent(id){
-  if(S.user?.role!=='admin'){showAIToast('⛔ Admin only');return;}
   const data=D();
   const c=data.contents.find(x=>x.id===id);
   if(c){
