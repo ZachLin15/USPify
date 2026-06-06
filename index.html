@@ -1296,19 +1296,16 @@ async function _wakeSupabase(){
   }catch(e){ /* ignore — just a warm-up */ }
 }
 
-async function cloudLoad(retries=3, delay=1000){
+async function cloudLoad(retries=3, delay=1000, skipWakeup=false){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
-  // Why load can fail:
-  // 1. Supabase free tier "pauses" after inactivity — needs 10-15s to wake up
-  // 2. Slow network / mobile connection timeout
-  // 3. Brief Supabase outage
-  // Solution: wake-up ping first, then 3 retries with 20s timeout each
   for(let attempt=1; attempt<=retries; attempt++){
     try{
       if(attempt===1){
-        setSyncStatus('loading','Connecting…');
-        await _wakeSupabase(); // wake Supabase before the real fetch
-        setSyncStatus('loading','Loading…');
+        if(!skipWakeup){
+          setSyncStatus('loading','Connecting…');
+          await _wakeSupabase(); // wake Supabase — needed on cold start
+          setSyncStatus('loading','Loading…');
+        }
       } else {
         setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
       }
@@ -1415,7 +1412,8 @@ async function cloudSave(data){
     }
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
-    // Broadcast to all other browsers so they pull immediately
+    // Note: broadcast already fired in save() — this is just a safety net
+    // for cases where cloudSave is called directly (retries etc.)
     broadcastPing([...dirtyIds], by).catch(()=>{});
   }catch(e){
     setSyncStatus('error','Save failed');
@@ -1474,7 +1472,7 @@ function initRealtimeSync(){
     if(_pulling||_initSyncing) return; // skip if already pulling or init in progress
     _pulling=true;
     try{
-      const fresh=await cloudLoad(2, 500); // 2 retries for background poll
+      const fresh=await cloudLoad(2, 300, true); // skipWakeup — Supabase is awake
       if(!fresh||!fresh.users?.length){_pulling=false;return;}
 
       const h=dataHash(fresh);
@@ -1587,6 +1585,7 @@ function initRealtimeSync(){
           // Broadcast ping from another user's save → pull immediately
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
+            if(typeof _logNotifReceived==='function') _logNotifReceived(by);
             // Only pull if SOMEONE ELSE saved - never pull our own saves
             if(by!==S.user?.name){
               pullIfChanged();
@@ -1752,7 +1751,7 @@ function getStageDaysForUser(statusId, role){
 // Recalculate and update due dates when posting date changes
 function updateDueDatesFromPosting(c){
   if(!c.postingDate) return;
-  const isVideo=c.type==='Video';
+  const isVideo=c.type==='Video'||c.type==='Reels';
   c.dueDates=c.dueDates||{};
   c.dueDates.hualu=addWorkingDays(c.postingDate, isVideo?-4:-3);
   c.dueDates.leonard=addWorkingDays(c.postingDate, isVideo?-7:-5);
@@ -2023,7 +2022,7 @@ function D(){
           postingDate=d.toISOString().split('T')[0];
         }
         if(!postingDate.startsWith(month)) postingDate=`${month}-${String(Math.min(daysInMonth,28)).padStart(2,'0')}`;
-        const isVid=(t.type==='Video')||(t.cat==='videoAds')||(t.cat==='tiktok');
+        const isVid=(t.type==='Video')||(t.type==='Reels')||(t.cat==='videoAds')||(t.cat==='tiktok');
         const hualuDueStr=addWorkingDays(postingDate,isVid?-4:-3);
         const leonardDueStr=addWorkingDays(postingDate,isVid?-7:-5);
         // Derive category from template prefix/cat — locked permanently so renaming doesn't change it
@@ -2075,12 +2074,27 @@ let _saveDebounceTimer=null;
 function save(data, dirtyContentId){
   _dataCache=null;_dataCacheKey=null; // invalidate cache
   localStorage.setItem(KEY,JSON.stringify(data));
-  // Track what changed for smart diff-save
   if(dirtyContentId) markDirty(dirtyContentId);
-  else markDirty(null); // mark full save needed
-  // Debounce cloudSave — short window so saves feel instant
+  else markDirty(null);
+  // Debounce upload (batches rapid saves like typing)
   clearTimeout(_saveDebounceTimer);
   _saveDebounceTimer=setTimeout(()=>cloudSave(data), 150);
+}
+
+// saveNow: for workflow button clicks — uploads to Supabase FIRST, then broadcasts
+// This guarantees Jack pulls fresh data (not old data) when he receives the ping
+async function saveNow(data, dirtyContentId){
+  _dataCache=null;_dataCacheKey=null;
+  localStorage.setItem(KEY,JSON.stringify(data));
+  if(dirtyContentId) markDirty(dirtyContentId);
+  else markDirty(null);
+  clearTimeout(_saveDebounceTimer); // cancel any pending debounced save
+  // Upload to Supabase immediately (no debounce)
+  await cloudSave(data);
+  // Broadcast AFTER data is safely in Supabase
+  if(CLOUD_CONFIG.ENABLED && S.user?.name){
+    broadcastPing(dirtyContentId?[dirtyContentId]:[], S.user.name).catch(()=>{});
+  }
 }
 function uid(){return Math.random().toString(36).slice(2,9);}
 
@@ -2398,7 +2412,8 @@ function renderTopbar(){
   else if(S.page==='responsibilities'){title='Responsibilities';sub='Assign PIC to each workflow stage per employee';}
   else if(S.page==='team'){title='Team';sub='Workload, tasks & auto-progress';}
   else if(S.page==='set_password'){title='Set Password';sub='Change your login password';}
-  document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
+  document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}
+    ${isAdminUser(S.user)||S.user.role==='senior'?`<button onclick="openNotifTestPanel()" title="Test notifications" style="background:var(--purd);border:1px solid var(--pur);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:13px;color:var(--pur);font-family:'DM Mono',monospace;font-weight:700;transition:all .12s" onmouseenter="this.style.background='var(--pur)';this.style.color='#fff'" onmouseleave="this.style.background='var(--purd)';this.style.color='var(--pur)'">🔔 Test</button>`:''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
 }
 
 function toggleTheme(){
@@ -3383,7 +3398,7 @@ function renderApprovals(){
     const submitter=last?getUser(data,last.changedBy):{name:'?'};
     const meta=STAGE_META[c.statusId]||STAGE_META['senior_approval'];
     const tabTarget=c.statusId==='senior_approval_ideation'?'dp-ideation':
-                    c.statusId==='senior_approval_video'?(c.type==='Video'?'dp-video':'dp-design'):
+                    c.statusId==='senior_approval_video'?((c.type==='Video'||c.type==='Reels')?'dp-video':'dp-design'):
                     c.statusId==='senior_approval_copy'?'dp-copy':'dp-comments';
     // Smart approve action based on status
     const onApprove=c.statusId==='senior_approval_ideation'
@@ -3502,11 +3517,11 @@ function renderClientPost(){
   </div>`;
 }
 
-function approveContent(id,nextStatusId){
+async function approveContent(id,nextStatusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  save(data, c.id);render();
+  await saveNow(data, c.id);render();
 }
 function openReviseModal(id){
   const data=D();
@@ -5755,8 +5770,8 @@ function getDefaultTabForContent(c){
     'ideation':'dp-ideation',
     'script':'dp-copy',
     'design':'dp-design',
-    'shoot': isVideo?'dp-shoot':'dp-ideation',
-    'video_editing': isVideo?'dp-video':'dp-design',
+    'shoot': (c.type==='Video'||c.type==='Reels')?'dp-shoot':'dp-ideation',
+    'video_editing': (c.type==='Video'||c.type==='Reels')?'dp-video':'dp-design',
     'copywriting':'dp-copy',
     'senior_approval':'dp-copy',
     'senior_approval_ideation':'dp-ideation',
@@ -5778,7 +5793,7 @@ function renderDetailPage(id, forceTab){
   const days=daysUntil(c.postingDate);
 
   // Choose flow
-  const flow = c.type==='Video' ? VIDEO_FLOW : CAROUSEL_FLOW;
+  const flow = (c.type==='Video'||c.type==='Reels') ? VIDEO_FLOW : CAROUSEL_FLOW;
 
   // --- TOPBAR ---
   document.getElementById('detail-title').innerHTML='';
@@ -5818,7 +5833,7 @@ function renderDetailPage(id, forceTab){
 
   // Smart default tab — type-aware, supports forceTab override
   const defaultTab = forceTab || getDefaultTabForContent(c);
-  const isVideoType = c.type==='Video';
+  const isVideoType = c.type==='Video'||c.type==='Reels';
 
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
   if(c.jobKind==='task'){
@@ -6044,7 +6059,7 @@ function openReverseFlowConfirm(id){
     </div>`);
 }
 
-function executeReverseFlow(id, prevStatusId){
+async function executeReverseFlow(id, prevStatusId){
   const reason=document.getElementById('reverse-reason')?.value.trim();
   if(!reason){alert('Please enter a reason for reversing the flow.');return;}
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -6067,7 +6082,7 @@ function executeReverseFlow(id, prevStatusId){
     if(!c.workflowTasks)c.workflowTasks=[];
     c.workflowTasks.push({id:'wt'+uid(),assigneeId:picUser.id,status:'open',statusId:prevStatusId,label:`${prev.name} (reversed)`,openedAt:today});
   }
-  save(data, c.id);closeModal();renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);closeModal();renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`⬅ Reversed to ${prev.name}${picUser?' — '+picUser.name+' reassigned':''}`);
 }
 function driveEmbedUrl(url){
@@ -6157,7 +6172,7 @@ function submitCopyForReview(id,verIdx){
   showAIToast(`📤 Copy ${v[verIdx].label} submitted — senior notified`);
 }
 
-function approveCopyVersion(id,verIdx){
+async function approveCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
@@ -6166,10 +6181,10 @@ function approveCopyVersion(id,verIdx){
   c.statusId='senior_approval_copy';c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✅ Copy ${v[verIdx].label} approved by ${S.user.name}.${note?' Note: '+note:''} → Senior Approval.`,type:'copy',createdAt:new Date().toISOString().split('T')[0]});
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
 }
 
-function amendCopyVersion(id,verIdx){
+async function amendCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
@@ -6185,7 +6200,7 @@ function amendCopyVersion(id,verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
 }
 
 function renderCopywritingPanel(c,id){
@@ -6887,7 +6902,7 @@ function autosaveDesignNotes(id, verIdx){
   },900);
 }
 
-function approveDesign(id, verIdx){
+async function approveDesign(id, verIdx){
   saveWfReviewComment(id,'Senior Approved — Design');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
@@ -6909,11 +6924,11 @@ function approveDesign(id, verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Design approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-function amendDesign(id, verIdx){
+async function amendDesign(id, verIdx){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining what needs to be amended.');return;}
@@ -6934,11 +6949,11 @@ function amendDesign(id, verIdx){
   c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Design amendment — ${designer.name} notified`);
 }
 
-function designerSubmitForReview(id, verIdx){
+async function designerSubmitForReview(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
   if(!versions[verIdx].link){alert('Please upload a design file first.');return;}
@@ -6964,7 +6979,7 @@ function designerSubmitForReview(id, verIdx){
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[senior.id];
-  save(data, c.id);
+  await saveNow(data, c.id);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`\uD83D\uDCE4 Design ${versions[verIdx].label} submitted \u2014 ${senior.name} notified`);
 }
@@ -7488,7 +7503,9 @@ function renderWorkflowActionBox(data, c){
   const designer=getDesigner(data,c);
   const creator=getContentCreator(data,c);
   const senior=getSenior(data,c);
-  const isVideo=c.type==='Video';
+  // Video & Reels both need shooting → VIDEO_FLOW
+  // Carousel & Single Image → CAROUSEL_FLOW (design only)
+  const isVideo=c.type==='Video'||c.type==='Reels';
   const isCarousel=!isVideo;
 
   // ── CAROUSEL: Ideation — creator submits ──────────────────────────────────
@@ -7728,18 +7745,18 @@ function renderWorkflowActionBox(data, c){
 
   return withHistory('');
 }
-function wfMarkPosted(id){
+async function wfMarkPosted(id){
   saveWfReviewComment(id,'Client Approved — Posted');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   c.statusId='posted';
   c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
   (c.workflowTasks||[]).filter(t=>t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🚀 Marked as posted!');
 }
 
-function wfClientAmend(id){
+async function wfClientAmend(id){
   saveWfReviewComment(id,'Client Requested Changes');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
@@ -7752,7 +7769,7 @@ function wfClientAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🔄 Sent back for revisions');
 }
 
@@ -7783,7 +7800,7 @@ function wfSaveVideoLink(id){
 }
 
 // VIDEO: submit script for approval
-function wfSubmitScript(id){
+async function wfSubmitScript(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.scriptPendingApproval=true;
   const senior=getSenior(data,c);
@@ -7798,7 +7815,7 @@ function wfSubmitScript(id){
 
 // VIDEO: senior approves script → shoot
 // VIDEO: Leonard submits ideation/script for senior review
-function wfSubmitIdeationForVideo(id){
+async function wfSubmitIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const senior=getSenior(data,c);
   const today=new Date().toISOString().split('T')[0];
@@ -7815,7 +7832,7 @@ function wfSubmitIdeationForVideo(id){
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Ideation submitted — ${senior.name} notified to review`);
 }
 
@@ -7863,7 +7880,7 @@ function notifyRejected(c, toUser, label, rejectedBy, note){
     type:'general',createdAt:today});
 }
 
-function wfApproveIdeationForVideo(id){
+async function wfApproveIdeationForVideo(id){
   saveWfReviewComment(id,'Senior Approved — Ideation/Script');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -7877,11 +7894,11 @@ function wfApproveIdeationForVideo(id){
   c.statusId='shoot';
   c.statusHistory.push({statusId:'shoot',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Ideation approved — 🎬 ${creator.name} notified to shoot!`);
 }
 
-function wfAmendIdeationForVideo(id){
+async function wfAmendIdeationForVideo(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -7896,11 +7913,11 @@ function wfAmendIdeationForVideo(id){
   c.statusId='ideation';
   c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
 }
 
-function markTaskDone(id){
+async function markTaskDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   c.taskDone=true;
@@ -7912,12 +7929,12 @@ function markTaskDone(id){
   // Dismiss amendment notif if any
   if(!c.amendNotifDismissed)c.amendNotifDismissed={};
   c.amendNotifDismissed[S.user.id]=true;
-  save(data, c.id);
+  await saveNow(data, c.id);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('✅ Task marked as done!');
 }
 
-function wfApproveVideo(id){
+async function wfApproveVideo(id){
   saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -7931,11 +7948,11 @@ function wfApproveVideo(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Video approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-function wfAmendVideo(id){
+async function wfAmendVideo(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -7951,7 +7968,7 @@ function wfAmendVideo(id){
   c.statusId='video_editing';
   c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Video amendment — ${designer.name} notified`);
 }
 
@@ -7988,7 +8005,7 @@ function wfAmendScript(id){
   showAIToast(`🔄 Script amendment — ${creator.name} notified`);
 }
 
-function carouselSubmitDesign(id){
+async function carouselSubmitDesign(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
   // Mark latest version as pending review
@@ -8013,27 +8030,26 @@ function carouselSubmitDesign(id){
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Design submitted — ${senior.name} notified to review`);
 }
 
-function wfSubmitCopy(id){
+async async function wfSubmitCopy(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const senior=getSenior(data,c);
   const today=new Date().toISOString().split('T')[0];
-  c.seniorNotifDismissed={}; // reset so Jack sees it fresh
-  const prev=[...c.assignees];
+  // Close Leonard's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   c.statusId='senior_approval_copy';
   c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  if(!c.comments)c.comments=[];
-  c.comments.push({id:'wt'+uid(),userId:S.user.id,
-    text:`✍️ Copywriting submitted by ${S.user.name} for review.`,type:'general',createdAt:today});
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  notifyApproved(c, senior, 'Copy ready for review ✍️', S.user.name);
+  await await saveNow(data, c.id); // upload + broadcast before re-render
+  renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Copy submitted — ${senior.name} notified`);
 }
 
-function wfSeniorApprove(id){
+async function wfSeniorApprove(id){
   saveWfReviewComment(id,'Senior Approved Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -8043,11 +8059,11 @@ function wfSeniorApprove(id){
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Approved — moved to client approval`);
 }
 
-function wfSeniorAmend(id){
+async function wfSeniorAmend(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -8063,7 +8079,7 @@ function wfSeniorAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
 }
 
@@ -8106,7 +8122,7 @@ async function uploadFootageToDrive(event, id){
 
   c.footageFileName=file.name;
   c.footageFileSize=Math.round(file.size/1024/1024*10)/10+'MB';
-  save(data, c.id);
+  await saveNow(data, c.id);
 
   if(GDRIVE_CLIENT_ID==='YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'){
     // Not configured — show file selected + manual fallback
@@ -8166,7 +8182,7 @@ async function uploadFootageToDrive(event, id){
     });
 
     const driveLink=`https://drive.google.com/file/d/${result.id}/view`;
-    c.footageLink=driveLink;save(data, c.id);
+    c.footageLink=driveLink;await saveNow(data, c.id);
     if(progWrap) progWrap.style.display='none';
     if(statusEl) statusEl.innerHTML=`<span style="color:var(--ac)">✅ Uploaded: <strong>${file.name}</strong> (${c.footageFileSize})</span>`;
     const panel=document.getElementById('dp-shoot');
@@ -8307,20 +8323,24 @@ function wfAssignToDesigner(id){
 }
 
 // VIDEO: shooting done → designer to edit
-function wfShootDone(id){
+async function wfShootDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-footage-link-'+id);
   if(linkInp&&linkInp.value.trim()) c.footageLink=linkInp.value.trim();
   const designer=getDesigner(data,c);
-  const prev=[...c.assignees];
-  wfTransition(data,c,'video_editing',[designer.id],
-    `\uD83C\uDFAC Shooting done by ${S.user.name}.${c.footageLink?' Footage link added.':''} Assigned to ${designer.name} for video editing.`,prev);
-  save(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
-  showAIToast(`\u2705 Shooting done \u2014 ${designer.name} assigned to edit`);
+  const today=new Date().toISOString().split('T')[0];
+  // Close Leonard's open tasks
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  c.statusId='video_editing';
+  c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
+  c.assignees=[designer.id];
+  notifyApproved(c, designer, 'Footage ready — start editing! ✂️', S.user.name);
+  await saveNow(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
+  showAIToast(`✅ Shooting done — ${designer.name} notified to edit`);
 }
 
 // VIDEO: video editing done → senior review
-function wfVideoDone(id){
+async function wfVideoDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-video-link-'+id)||document.getElementById('video-edit-input-'+id);
   if(linkInp&&linkInp.value.trim()) c.videoEditLink=linkInp.value.trim();
@@ -8338,7 +8358,7 @@ function wfVideoDone(id){
   c.statusId='senior_approval_video';
   c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  save(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
+  await saveNow(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
   showAIToast(`✅ Video submitted — ${senior.name} notified to review`);
 }
 
@@ -9746,7 +9766,7 @@ function _refreshIdeaPanel(id){
   renderTopbar();
 }
 
-function submitIdeaForApproval(id, verIdx){
+async function submitIdeaForApproval(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
   _saveIdeaTextFields(c,versions,verIdx);
@@ -9770,12 +9790,12 @@ function submitIdeaForApproval(id, verIdx){
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  save(data, c.id);
+  await saveNow(data, c.id);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Submitted — ${senior.name} notified to review`);
 }
 
-function approveIdeation(id, verIdx){
+async function approveIdeation(id, verIdx){
   saveWfReviewComment(id,'Senior Approved — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(c.type==='Video'){wfApproveIdeationForVideo(id);return;}
@@ -9797,11 +9817,11 @@ function approveIdeation(id, verIdx){
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.statusId='design';c.assignees=[designer.id];
   c.workflowTasks.push({id:'wt'+uid(),assigneeId:designer.id,status:'open',statusId:'design',label:'🎨 Design',openedAt:today});
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Approved — 🎨 ${designer.name} notified for design`);
 }
 
-function requestIdeaAmendment(id, verIdx){
+async function requestIdeaAmendment(id, verIdx){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -9819,7 +9839,7 @@ function requestIdeaAmendment(id, verIdx){
   const creator=getContentCreator(data,c);
   notifyRejected(c,creator,`Ideation ${versions[verIdx].label} needs changes`,S.user.name,note);
   c.assignees=[creator.id];
-  save(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment requested — ${creator.name} notified`);
 }
 
@@ -9838,53 +9858,30 @@ function getAlertItems(data){
   const uid=S.user?.id;
   const role=S.user?.role;
   const items=[];
+  const seen=new Set();
+  function addItem(c){if(!c||seen.has(c.id))return;seen.add(c.id);items.push(c);}
 
-  // Shoot notifications for Leonard (content_creator)
-  if(role==='content_creator'||role==='admin'){
-    data.contents.filter(c=>
-      c.statusId==='shoot'&&c.shootNotified&&!(c.shootNotifDismissed||{})[uid]
-    ).forEach(c=>items.push(c));
-    // Copywriting notifications for Leonard
-    data.contents.filter(c=>
-      c.statusId==='copywriting'&&c.copyNotified&&!(c.copyNotifDismissed||{})[uid]
-    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
-  }
+  // UNIVERSAL RULE: open workflowTask for this user = notification
+  data.contents.filter(c=>
+    c.statusId!=='posted'&&
+    (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
+  ).forEach(addItem);
 
-  // Editing notifications for Hualu (designer) — footage ready to edit (video)
-  if(role==='designer'||role==='admin'){
-    data.contents.filter(c=>
-      c.statusId==='video_editing'&&c.designerAlerted&&!(c.editNotifDismissed||{})[uid]
-    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
-
-    // Carousel design notifications — ideation approved, Hualu needs to start designing
-    data.contents.filter(c=>
-      c.type!=='Video' &&
-      c.statusId==='design' &&
-      !(c.designNotifDismissed||{})[uid] &&
-      (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.statusId==='design')
-    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
-  }
-
-  // All senior approval notifications for Jack (senior)
+  // Senior/admin: also show all pending approval items (even without explicit task)
   if(role==='senior'||role==='admin'){
-    data.contents.filter(c=>
-      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')
-      &&!(c.seniorNotifDismissed||{})[uid]
-    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+    const SENIOR=['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'];
+    data.contents.filter(c=>SENIOR.includes(c.statusId)).forEach(addItem);
   }
 
-  // Amendment notifications — for anyone whose work was rejected
-  data.contents.filter(c=>{
-    if((c.amendNotifDismissed||{})[uid])return false;
-    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
-  }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+  // Admin: also show all client approvals
+  if(role==='admin'){
+    data.contents.filter(c=>c.statusId==='client_approval').forEach(addItem);
+  }
 
-  // Deletion notifications for admins/seniors (someone removed content)
+  // Deletion notifications
   if(role==='admin'||role==='senior'){
-    (data.deletionLog||[]).filter(entry=>
-      !entry.dismissedBy.includes(uid) &&
-      entry.deletedById!==uid // don't notify the person who deleted it
-    ).forEach(entry=>items.push({_isDeletion:true,...entry}));
+    (data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid)
+      .forEach(e=>items.push({_isDeletion:true,...e}));
   }
   return items;
 }
@@ -9901,343 +9898,83 @@ function renderNotifBell(data){
 function renderNotifPanel(){
   const data=D();
   const body=document.getElementById('notif-body');
-  const role=S.user?.role;
   const uid=S.user?.id;
-  let sections=[];
+  const role=S.user?.role;
+  let html='';
 
-  // ── 1. SHOOT NOTIFICATIONS for Leonard/content_creator ──────────────────
-  if(role==='content_creator'||role==='admin'){
-    const shootAlerts=data.contents.filter(c=>
-      c.statusId==='shoot'&&c.shootNotified&&
-      !(c.shootNotifDismissed||{})[uid]
-    );
-    if(shootAlerts.length){
-      sections.push(`<div class="np-section-header" style="background:var(--purd);color:var(--pur)">🎬 TIME TO SHOOT (${shootAlerts.length})</div>`
-        +shootAlerts.map(c=>{
-          const b=getBrand(data,c.brandId);
-          return `<div class="np-item" style="border-left:3px solid var(--pur)">
-            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">🎬</div>
-            <div class="np-info" style="cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">
-              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--s3);color:var(--t2);font-family:'DM Mono',monospace">${c.type==='Video'?'🎬 Video':'🃏 Carousel'}</span></div>
-              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">🎬 Shooting</span> · <span style="color:var(--pur);font-weight:700">Approved to shoot!</span><br>By ${c.shootNotifiedBy||'senior'} on ${fmt(c.shootNotifiedAt)}</div>
-            </div>
-            <button onclick="dismissShootNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`;
-        }).join(''));
-    }
-    // Copywriting notifications for Leonard
-    const copyAlerts=data.contents.filter(c=>
-      c.statusId==='copywriting'&&c.copyNotified&&!(c.copyNotifDismissed||{})[uid]
-    );
-    if(copyAlerts.length){
-      sections.push(`<div class="np-section-header" style="background:var(--teld);color:var(--tel)">✍️ TIME TO WRITE COPY (${copyAlerts.length})</div>`
-        +copyAlerts.map(c=>{
-          const b=getBrand(data,c.brandId);
-          return `<div class="np-item" style="border-left:3px solid var(--tel)">
-            <div class="np-icon" style="background:var(--teld);color:var(--tel);font-size:18px;cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">✍️</div>
-            <div class="np-info" style="cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">
-              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(60,204,160,0.15);color:var(--tel);font-family:'DM Mono',monospace">${c.type}</span></div>
-              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✍️ Copywriting</span> · <span style="color:var(--tel);font-weight:700">Time to write copy!</span><br>Approved by ${c.copyNotifiedBy||'senior'} on ${fmt(c.copyNotifiedAt)}</div>
-            </div>
-            <button onclick="dismissCopyNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`;
-        }).join(''));
-    }
-  }
+  const STATUS_ICON={'ideation':'💡','senior_approval_ideation':'💡','shoot':'🎬',
+    'video_editing':'✂️','design':'🎨','senior_approval_video':'🎨',
+    'copywriting':'✍️','senior_approval_copy':'✍️','senior_approval':'🔍',
+    'client_approval':'🤝','posted':'🚀'};
+  const STATUS_COLOR={'ideation':'var(--t3)','senior_approval_ideation':'var(--blu)',
+    'shoot':'var(--pur)','video_editing':'var(--ora)','design':'var(--blu)',
+    'senior_approval_video':'var(--ora)','copywriting':'var(--tel)',
+    'senior_approval_copy':'var(--tel)','senior_approval':'var(--amb)',
+    'client_approval':'var(--pnk)','posted':'var(--ac)'};
 
-  // ── 2. VIDEO EDITING NOTIFICATION for Hualu/designer ────────────────────
-  if(role==='designer'||role==='admin'){
-    const editAlerts=data.contents.filter(c=>
-      c.statusId==='video_editing'&&c.designerAlerted&&
-      !(c.editNotifDismissed||{})[uid]
-    );
-    if(editAlerts.length){
-      sections.push(`<div class="np-section-header" style="background:var(--orad);color:var(--ora)">✂️ FOOTAGE READY TO EDIT (${editAlerts.length})</div>`
-        +editAlerts.map(c=>{
-          const b=getBrand(data,c.brandId);
-          return `<div class="np-item" style="border-left:3px solid var(--ora)">
-            <div class="np-icon" style="background:var(--orad);color:var(--ora);font-size:18px;cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">✂️</div>
-            <div class="np-info" style="cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">
-              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(255,159,67,0.15);color:var(--ora);font-family:'DM Mono',monospace">${c.type}</span></div>
-              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✂️ Video Editing</span> · <span style="color:var(--ora);font-weight:700">Footage ready — start editing!</span><br>${c.footageFileName||'Footage uploaded'}</div>
-            </div>
-            <button onclick="dismissEditNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`;
-        }).join(''));
-    }
+  // All items this user needs to act on
+  const taskItems=data.contents.filter(c=>
+    c.statusId!=='posted'&&
+    (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
+  );
+  const seniorItems=(role==='senior'||role==='admin')
+    ?data.contents.filter(c=>
+        ['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'].includes(c.statusId)
+        &&!taskItems.find(x=>x.id===c.id))
+    :[];
+  const clientItems=role==='admin'
+    ?data.contents.filter(c=>c.statusId==='client_approval'&&!taskItems.find(x=>x.id===c.id))
+    :[];
 
-    // Carousel design notifications — ideation approved, time to design
-    const designAlerts=data.contents.filter(c=>
-      c.type!=='Video' &&
-      c.statusId==='design' &&
-      !(c.designNotifDismissed||{})[uid] &&
-      (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.statusId==='design')
-    );
-    if(designAlerts.length){
-      sections.push(`<div class="np-section-header" style="background:var(--purd);color:var(--pur)">🎨 CAROUSEL READY TO DESIGN (${designAlerts.length})</div>`
-        +designAlerts.map(c=>{
-          const b=getBrand(data,c.brandId);
-          return `<div class="np-item" style="border-left:3px solid var(--pur)">
-            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="dismissDesignNotif('${c.id}');openContentDetail('${c.id}','dp-design')">🎨</div>
-            <div class="np-info" style="cursor:pointer" onclick="dismissDesignNotif('${c.id}');openContentDetail('${c.id}','dp-design')">
-              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--purd);color:var(--pur);font-family:'DM Mono',monospace">Carousel</span></div>
-              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--pur);font-weight:700">🎨 Ideation approved — start designing!</span></div>
-            </div>
-            <button onclick="dismissDesignNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`;
-        }).join(''));
-    }
-  }
+  const allItems=[...taskItems,...seniorItems,...clientItems];
 
-  // ── 3. SENIOR REVIEW NOTIFICATIONS for Jack/senior ──────────────────────
-  if(role==='senior'||role==='admin'){
-    const reviewItems=data.contents.filter(c=>
-      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')&&
-      !(c.seniorNotifDismissed||{})[uid]
-    );
-    const labelMap={'senior_approval_ideation':'📋 Script Review','senior_approval_video':'🎬 Video Review','senior_approval_copy':'✍️ Copy Review','senior_approval':'🔍 Review'};
-    const colorMap={'senior_approval_ideation':'var(--amb)','senior_approval_video':'var(--ora)','senior_approval_copy':'var(--tel)','senior_approval':'var(--amb)'};
-    if(reviewItems.length){
-      sections.push(`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">✅ AWAITING YOUR APPROVAL (${reviewItems.length})</div>`
-        +reviewItems.map(c=>{
-          const b=getBrand(data,c.brandId);const col=colorMap[c.statusId]||'var(--amb)';
-          const tabTarget=getDefaultTabForContent(c);
-          return `<div class="np-item" style="border-left:3px solid ${col}">
-            <div class="np-icon" style="background:${col}18;color:${col};font-size:18px;cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">✅</div>
-            <div class="np-info" style="cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">
-              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(240,160,48,0.15);color:var(--amb);font-family:'DM Mono',monospace">${c.type}</span></div>
-              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">${['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===0?'💡 Ideation':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===1?'🎨 Design':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===2?'✍️ Copy':'📋'} Review</span> · <span style="color:${col};font-weight:700">${labelMap[c.statusId]||'Review needed'}</span></div>
-            </div>
-            <button onclick="dismissSeniorNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`;
-        }).join(''));
-    }
-  }
-
-  // ── 3.5. AMENDMENT NOTIFICATIONS — anyone whose work was rejected ────────
-  const amendAlerts=data.contents.filter(c=>{
-    if((c.amendNotifDismissed||{})[uid]) return false;
-    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
-  });
-  if(amendAlerts.length){
-    const amendItems=amendAlerts.map(c=>{
+  if(allItems.length){
+    const rows=allItems.map(c=>{
       const b=getBrand(data,c.brandId);
-      const rejectedBy=c.amendNotifiedBy||'Senior';
-      const amendNote=c.amendNote||'Please revise and resubmit.';
-      const recentComments=(c.comments||[]).filter(cm=>cm.text&&(cm.text.includes('Amendment')||cm.text.includes('amendment')||cm.text.includes('🔄'))).slice(-3);
-      let commentsHTML='';
-      if(recentComments.length){
-        commentsHTML=recentComments.map(cm=>{
-          const cu=getUser(data,cm.userId);
-          return '<div style="margin-top:5px;padding:5px 8px;background:var(--s1);border-radius:5px;border-left:2px solid var(--red)">'
-            +'<span style="font-size:11px;font-weight:700;color:'+cu.color+'">'+cu.init+' '+cu.name+'</span>'
-            +'<span style="font-size:11px;color:var(--t3);margin-left:6px">'+fmt(cm.createdAt)+'</span>'
-            +'<div style="font-size:12px;color:var(--t1);margin-top:2px">'+cm.text.replace(/^[🔄✅📤]\s*/,'')+'</div>'
-            +'</div>';
-        }).join('');
-      } else {
-        commentsHTML='<div style="margin-top:4px;padding:5px 8px;background:var(--redd);border-radius:5px">'
-          +'<span style="font-size:12px;color:var(--red)">'+amendNote+'</span>'
-          +'</div>';
-      }
-      return '<div class="np-item" style="border-left:3px solid var(--red);flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px">'
-        +'<div style="display:flex;align-items:center;gap:10px;width:100%">'
-          +'<div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;cursor:pointer;flex-shrink:0" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">🔄</div>'
-          +'<div class="np-info" style="cursor:pointer;flex:1" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">'
-            +'<div class="np-name" style="color:var(--red)">'+c.title+'</div>'
-            +'<div class="np-meta"><span style="color:'+b.color+';font-weight:700">'+b.name+'</span> &middot; <span style="color:var(--red);font-weight:700">Amendment by '+rejectedBy+'</span></div>'
-          +'</div>'
-          +'<button onclick="dismissAmendNotif(\'' +c.id+ '\')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0">×</button>'
-        +'</div>'
-        +'<div style="width:100%;padding:0 4px">'+commentsHTML+'</div>'
-        +'<div style="margin-top:5px;width:100%;text-align:right">'
-          +'<span onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')" style="font-size:12px;color:var(--blu);cursor:pointer;text-decoration:underline">View all comments →</span>'
-        +'</div>'
-        +'</div>';
+      const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
+      const isAmend=openTask&&openTask.label&&openTask.label.includes('🔄');
+      const stColor=isAmend?'var(--red)':(STATUS_COLOR[c.statusId]||'var(--t3)');
+      const stIcon=isAmend?'🔄':(STATUS_ICON[c.statusId]||'📋');
+      const taskLabel=openTask?openTask.label.replace(/^[^ ]+ /,''):'Review needed';
+      const tabTarget=
+        c.statusId==='senior_approval_ideation'?'dp-ideation':
+        c.statusId==='senior_approval_video'?(c.type==='Video'?'dp-video':'dp-design'):
+        (c.statusId==='senior_approval_copy'||c.statusId==='copywriting')?'dp-copy':
+        c.statusId==='design'?'dp-design':
+        c.statusId==='video_editing'?'dp-video':
+        c.statusId==='shoot'?'dp-shoot':'dp-ideation';
+      return `<div class="np-item" style="border-left:3px solid ${stColor}" onclick="closeNotifPanel();openContentDetail('${c.id}','${tabTarget}')">
+        <div class="np-icon" style="background:${stColor}22;color:${stColor};font-size:18px;flex-shrink:0">${stIcon}</div>
+        <div class="np-info">
+          <div class="np-name">${c.title}</div>
+          <div class="np-meta">
+            <span style="color:${b.color};font-weight:700">${b.name}</span>
+            · <span style="color:${stColor};font-weight:600">${taskLabel}</span>
+            ${c.postingDate?`· 📅 ${fmt(c.postingDate)}`:''}
+          </div>
+        </div>
+      </div>`;
     }).join('');
-    sections.push('<div class="np-section-header" style="background:var(--redd);color:var(--red)">🔄 AMENDMENT REQUIRED ('+amendAlerts.length+')</div>'+amendItems);
+    html+=`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">🔔 YOUR TASKS (${allItems.length})</div>${rows}`;
   }
 
-  // ── 3.7. CONTENT DELETION NOTIFICATIONS (admin/senior only) ────────────────
+  // Deletion notifications
   if(role==='admin'||role==='senior'){
-    const deletions=(data.deletionLog||[]).filter(entry=>
-      !entry.dismissedBy.includes(uid) &&
-      entry.deletedById!==uid
-    );
-    if(deletions.length){
-      sections.push(`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 CONTENT REMOVED (${deletions.length})</div>`
-        +deletions.map(entry=>`
-          <div class="np-item" style="border-left:3px solid var(--red)">
-            <div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;flex-shrink:0">🗑</div>
-            <div class="np-info" style="flex:1">
-              <div class="np-name" style="color:var(--red)">${entry.title}</div>
-              <div class="np-meta">
-                <span style="color:${entry.brandColor||'#888'};font-weight:700">${entry.brandName}</span>
-                · <span style="color:var(--t3)">${entry.type||''}</span>
-                · Removed by <strong>${entry.deletedBy}</strong> on ${entry.deletedAt}
-              </div>
-            </div>
-            <button onclick="dismissDeletionNotif('${entry.logId}')" title="Acknowledge" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
-          </div>`).join(''));
+    const dels=(data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid);
+    if(dels.length){
+      html+=`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 REMOVED (${dels.length})</div>`;
+      html+=dels.map(e=>`<div class="np-item" style="border-left:3px solid var(--red)">
+        <div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px">🗑</div>
+        <div class="np-info">
+          <div class="np-name" style="color:var(--red)">${e.title}</div>
+          <div class="np-meta"><span style="color:${e.brandColor||'#888'};font-weight:700">${e.brandName}</span> · Removed by <strong>${e.deletedBy}</strong> on ${e.deletedAt}</div>
+        </div>
+        <button onclick="event.stopPropagation();dismissDeletionNotif('${e.logId}')" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px">×</button>
+      </div>`).join('');
     }
   }
 
-  if(!sections.length){
-    body.innerHTML=`<div class="np-empty">✅ All good! No pending reviews or alerts.</div>`;
-    return;
-  }
-  body.innerHTML=sections.join('');
+  body.innerHTML=html||`<div class="np-empty">✅ All caught up!</div>`;
 }
 
-function dismissDeletionNotif(logId){
-  const data=D();
-  if(!Array.isArray(data.deletionLog)) return;
-  const entry=data.deletionLog.find(e=>e.logId===logId);
-  if(!entry) return;
-  if(!entry.dismissedBy.includes(S.user.id)) entry.dismissedBy.push(S.user.id);
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissDesignNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.designNotifDismissed)c.designNotifDismissed={};
-  c.designNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissShootNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.shootNotifDismissed)c.shootNotifDismissed={};
-  c.shootNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissEditNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.editNotifDismissed)c.editNotifDismissed={};
-  c.editNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissSeniorNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.seniorNotifDismissed)c.seniorNotifDismissed={};
-  c.seniorNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissAmendNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.amendNotifDismissed)c.amendNotifDismissed={};
-  c.amendNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-function dismissCopyNotif(contentId){
-  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.copyNotifDismissed)c.copyNotifDismissed={};
-  c.copyNotifDismissed[S.user.id]=true;
-  save(data);closeNotifPanel();renderTopbar();
-}
-
-function toggleNotifPanel(){
-  const panel=document.getElementById('notif-panel');
-  if(panel.classList.contains('open')){panel.classList.remove('open');return;}
-  renderNotifPanel();
-  panel.classList.add('open');
-  // Close when clicking outside
-  setTimeout(()=>document.addEventListener('click',outsideNotifClick,{once:true}),10);
-}
-
-function outsideNotifClick(e){
-  const panel=document.getElementById('notif-panel');
-  const btn=document.getElementById('notif-btn');
-  if(panel&&!panel.contains(e.target)&&btn&&!btn.contains(e.target)){
-    panel.classList.remove('open');
-  }
-}
-
-function closeNotifPanel(){
-  document.getElementById('notif-panel').classList.remove('open');
-}
-
-function sendSingleReminder(contentId){
-  const data=D();
-  const c=data.contents.find(x=>x.id===contentId);
-  if(!c)return;
-  const b=getBrand(data,c.brandId);
-  const prog=getProgressForContent(c);
-  const days=daysUntil(c.postingDate);
-  const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
-  const msg=encodeURIComponent(
-    `\uD83D\uDD14 *USPify Reminder*\n\n`+
-    `\uD83D\uDCCC *${c.title}*\n`+
-    `\uD83C\uDFF7 Brand: ${b.name}\n`+
-    `\uD83D\uDC65 Team: ${assigneeNames}\n`+
-    `\uD83D\uDCCA Progress: ${prog}% (needs to reach 60%+)\n`+
-    `\uD83D\uDCC5 Posting date: ${c.postingDate?fmtFull(c.postingDate):'Not set'}\n`+
-    `\u23F3 ${days<0?Math.abs(days)+'d overdue':days===999?'No deadline set':days+'d remaining'}\n\n`+
-    `Please update the status in USPify Portal.`
-  );
-  window.open(`https://wa.me/?text=${msg}`,'_blank');
-}
-
-function sendAllReminders(){
-  const data=D();
-  const alerts=getAlertItems(data);
-  if(!alerts.length){showAIToast('No items need reminders!');return;}
-  const lines=alerts.map(c=>{
-    const b=getBrand(data,c.brandId);
-    const prog=getProgressForContent(c);
-    const days=daysUntil(c.postingDate);
-    const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
-    return `\u2022 ${c.title} (${b.name}) \u2014 ${prog}% \u2014 ${days<0?Math.abs(days)+'d overdue':days+'d left'} \u2014 Team: ${assigneeNames}`;
-  }).join('\n');
-  const msg=encodeURIComponent(
-    `\uD83D\uDD14 *USPify \u2014 Progress Reminder*\n\n`+
-    `The following ${alerts.length} content piece${alerts.length>1?'s are':' is'} below 60% progress:\n\n`+
-    lines+
-    `\n\nPlease update statuses in the USPify Portal.`
-  );
-  window.open(`https://wa.me/?text=${msg}`,'_blank');
-  closeNotifPanel();
-}
-
-// ===================== INIT =====================
-window.onload=function(){
-  // Wire login keyboard events
-  const liPass=document.getElementById('li-pass');
-  const liName=document.getElementById('li-name');
-  if(liPass) liPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-  if(liName) liName.addEventListener('keydown',e=>{if(e.key==='Enter')liPass&&liPass.focus();});
-  // Auto-login from session
-  const savedId=sessionStorage.getItem('uspify_uid');
-  if(savedId){
-    const data=D();
-    const HARDCODED=[
-      {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
-      {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
-      {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
-      {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack'},
-      {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
-      {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard'},
-      {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
-    ];
-    const hc=HARDCODED.find(u=>u.id===savedId);
-    const stored=data.users.find(u=>u.id===savedId);
-    let user=stored?{...stored,pass:(hc||{}).pass,role:(hc||stored).role}:hc;
-    if(user){
-      S.user=user;
-      // Restore last visited page/brand so refresh goes back to same view
-      if(user.role==='client'){
-        S.page='client_approvals';S.brand=null;
-      } else {
-        const savedPage=sessionStorage.getItem('uspify_page');
-        const savedBrand=sessionStorage.getItem('uspify_brand');
-        if(savedPage) S.page=savedPage;
-        if(savedBrand) S.brand=savedBrand||null;
-      }
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('app').style.display='flex';
-      initCloudSync().then(()=>{render();initAI();}).catch(()=>{render();initAI();});
-      return;
-    }
-  }
-};
-</script>
-</body>
-</html>
+>
