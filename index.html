@@ -1473,7 +1473,28 @@ function initRealtimeSync(){
             const fu=fresh.users.find(u=>u.id===S.user.id);
             if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}
           }
-          render();
+
+          // If the user is actively editing inside the detail overlay,
+          // skip re-rendering the detail panel to avoid wiping textareas.
+          // Only update the sidebar/topbar counts so they stay fresh.
+          const detailOpen=document.getElementById('detail-overlay')?.classList.contains('open');
+          const activeEl=document.activeElement;
+          const isTyping=activeEl&&(activeEl.tagName==='TEXTAREA'||activeEl.tagName==='INPUT')&&activeEl.id&&(
+            activeEl.id.startsWith('idea-')||
+            activeEl.id.startsWith('copy-ver-')||
+            activeEl.id.startsWith('design-')||
+            activeEl.id.startsWith('video-')||
+            activeEl.id.startsWith('shoot-')
+          );
+
+          if(detailOpen&&isTyping){
+            // User is mid-edit — update sidebar/topbar silently, skip full render
+            try{renderSidebar();}catch(e){}
+            try{renderTopbar();}catch(e){}
+          } else {
+            render();
+          }
+
           if(savedBy&&savedBy!==S.user?.name){
             showAIToast('🔄 Updated by '+savedBy);
           }
@@ -1555,7 +1576,10 @@ function initRealtimeSync(){
           // Broadcast ping from another user's save → pull immediately
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            if(by!==S.user?.name) pullIfChanged();
+            // Only pull if SOMEONE ELSE saved - never pull our own saves
+            if(by!==S.user?.name){
+              pullIfChanged();
+            }
             return;
           }
 
@@ -6095,7 +6119,7 @@ function autosaveCopyVersion(id){
   _autoSaveTimers['cv_'+id]=setTimeout(()=>{
     saveCopyVersion(id,getCopyVerIdx(id));
     setAutosaveStatus('saved','✓ autosaved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },900);
+  },200); // fast save beats pullIfChanged
 }
 
 function submitCopyForReview(id,verIdx){
@@ -6532,7 +6556,7 @@ function autosaveVideoField(id, field, val){
     c[field]=val;save(data);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },900);
+  },200); // fast save beats pullIfChanged
 }
 
 function saveVideoNotes(id){
@@ -7238,20 +7262,20 @@ function setAutosaveStatus(status, label){
 }
 
 function autosaveCopywriting(id){
-  setAutosaveStatus('saving','saving\u2026');
+  setAutosaveStatus('saving','saving…');
   clearTimeout(_autoSaveTimers['copy_'+id]);
   _autoSaveTimers['copy_'+id]=setTimeout(()=>{
     const inp=document.getElementById('copy-input-'+id);
     if(!inp)return;
     const data=D();const c=data.contents.find(x=>x.id===id);
-    if(c){c.copywriting=inp.value;save(data);}
+    if(c){c.copywriting=inp.value;save(data,c.id);}
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },900);
+  },200);
 }
 
 function autosaveIdeation(id){
-  setAutosaveStatus('saving','saving\u2026');
+  setAutosaveStatus('saving','saving…');
   clearTimeout(_autoSaveTimers['idea_'+id]);
   _autoSaveTimers['idea_'+id]=setTimeout(()=>{
     const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7259,10 +7283,10 @@ function autosaveIdeation(id){
     const verIdx=getIdeaVerIndex(id);
     _saveIdeaTextFields(c,versions,verIdx);
     c.ideationVersions=versions;
-    save(data);
+    save(data, c.id);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },900);
+  },200); // 200ms so it saves BEFORE pullIfChanged can wipe the textarea
 }
 
 // ===================== WORKFLOW ENGINE =====================
