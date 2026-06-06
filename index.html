@@ -1330,8 +1330,7 @@ function markDirty(id){if(id)_dirtyContentIds.add(id);}
 
 async function cloudSave(data){
   // DEBUG: log every cloudSave call
-  const _dbg=(msg)=>{console.log('[cloudSave]',msg);const el=document.getElementById('sync-status');if(el)el.title=(el.title||'')+'
-'+new Date().toLocaleTimeString()+': '+msg;};
+  const _dbg=(msg)=>{console.log('[cloudSave]',msg);};
   if(!CLOUD_CONFIG.ENABLED){_dbg('SKIPPED: CLOUD_CONFIG.ENABLED=false URL='+CLOUD_CONFIG.URL);return;}
   if(CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL'){_dbg('SKIPPED: URL is placeholder');return;}
   if(_initSyncing){_dbg('QUEUED: _initSyncing=true');_pendingSave=data;return;}
