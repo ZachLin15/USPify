@@ -1399,6 +1399,86 @@ function initRealtimeSync(){
   }
 
   let _pulling=false;
+
+// ── Message-style notification toast ─────────────────────────────────────
+// Appears when Jack/Hualu/Leonard receives a new workflowTask from someone else
+let _notifToastTimer=null;
+function showTaskNotification(c, task, fromName){
+  // Remove any existing notification
+  const existing=document.getElementById('task-notif-toast');
+  if(existing) existing.remove();
+
+  const data=D();
+  const brand=data.brands.find(b=>b.id===c.brandId)||{name:c.brandId,color:'#888'};
+  const label=task.label.replace(/^[✅🔄📋]\s*/,'');
+
+  // Colour by action type
+  const isAmend=task.label.includes('🔄')||task.label.includes('Amendment');
+  const accentColor=isAmend?'#ff5a5a':'#c8f04a';
+  const accentBg=isAmend?'rgba(255,90,90,0.12)':'rgba(200,240,74,0.12)';
+  const icon=isAmend?'🔄':'🔔';
+
+  const toast=document.createElement('div');
+  toast.id='task-notif-toast';
+  toast.style.cssText=`
+    position:fixed;bottom:28px;right:28px;
+    width:320px;background:var(--s1,#1e1e1e);
+    border:1.5px solid ${accentColor};border-radius:16px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.7);
+    z-index:9999;overflow:hidden;cursor:pointer;
+    animation:slideInRight .25s cubic-bezier(.34,1.56,.64,1);
+    font-family:'DM Mono',monospace;
+  `;
+  toast.innerHTML=`
+    <style>
+      @keyframes slideInRight{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+      @keyframes shrinkBar{from{width:100%}to{width:0%}}
+    </style>
+    <div style="padding:14px 16px 10px;display:flex;gap:12px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:${accentColor};margin-bottom:2px">${fromName} → You</div>
+        <div style="font-size:14px;font-weight:700;color:#f0f0f0;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div>
+        <div style="font-size:12px;color:#a0a0a0;margin-bottom:6px">${label}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="background:${brand.color}22;color:${brand.color};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${brand.name}</span>
+          <span style="background:${accentBg};color:${accentColor};padding:2px 8px;border-radius:20px;font-size:11px">Tap to open</span>
+        </div>
+      </div>
+      <button onclick="event.stopPropagation();document.getElementById('task-notif-toast')?.remove()" style="background:transparent;border:none;color:#666;cursor:pointer;font-size:18px;padding:0;line-height:1;flex-shrink:0">×</button>
+    </div>
+    <div style="height:3px;background:rgba(255,255,255,0.08)">
+      <div style="height:100%;background:${accentColor};animation:shrinkBar 8s linear forwards"></div>
+    </div>
+  `;
+
+  // Click → open the content
+  toast.addEventListener('click', ()=>{
+    toast.remove();
+    const tab=c.statusId==='senior_approval_ideation'?'dp-ideation':
+              c.statusId==='senior_approval_video'?(c.type==='Video'?'dp-video':'dp-design'):
+              (c.statusId==='senior_approval_copy'||c.statusId==='copywriting')?'dp-copy':
+              c.statusId==='design'?'dp-design':
+              c.statusId==='shoot'?'dp-shoot':'dp-ideation';
+    if(typeof openContentDetail==='function') openContentDetail(c.id, tab);
+  });
+
+  document.body.appendChild(toast);
+
+  // Auto-dismiss after 8 seconds
+  if(_notifToastTimer) clearTimeout(_notifToastTimer);
+  _notifToastTimer=setTimeout(()=>{
+    if(toast.parentNode){
+      toast.style.transition='all .3s ease';
+      toast.style.opacity='0';
+      toast.style.transform='translateX(120%)';
+      setTimeout(()=>toast.remove(), 300);
+    }
+  }, 8000);
+}
+
+  let _seenTaskIds=new Set(); // tracks tasks already toasted to this user
+
   async function pullIfChanged(){
     if(_pulling||_initSyncing) return;
     _pulling=true;
@@ -1414,6 +1494,18 @@ function initRealtimeSync(){
           if(S.user){
             const fu=fresh.users.find(u=>u.id===S.user.id);
             if(fu){S.user=fu;}
+          }
+          // Detect NEW workflowTasks for this user → show message-style notification
+          if(S.user){
+            const _uid=S.user.id;
+            (fresh.contents||[]).forEach(c=>{
+              (c.workflowTasks||[]).filter(t=>
+                t.assigneeId===_uid&&t.status==='open'&&!_seenTaskIds.has(t.id)
+              ).forEach(t=>{
+                _seenTaskIds.add(t.id);
+                showTaskNotification(c, t, savedBy||'Someone');
+              });
+            });
           }
           render();
           if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
@@ -1496,6 +1588,14 @@ function initRealtimeSync(){
   setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 25000);
 
   // Initial hash from current data
+  // Seed seen task IDs from current data so we don't toast existing tasks on load
+  try{
+    const _uid=S.user?.id;
+    if(_uid)(D().contents||[]).forEach(c=>
+      (c.workflowTasks||[]).filter(t=>t.assigneeId===_uid&&t.status==='open')
+        .forEach(t=>_seenTaskIds.add(t.id))
+    );
+  }catch(_){}
   try{ lastHash=dataHash(D()); }catch(e){}
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullIfChanged();});
   window.addEventListener('focus',pullIfChanged);
