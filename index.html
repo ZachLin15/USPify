@@ -9277,38 +9277,31 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
   data.brands.push({id,name,color,quota,driveLink,brandGuide:'',infoSummary,shootingDates:[],
     templates:baseTemplates,quotaBreakdown,quotaLabels,contractStart,contractEnd});
 
-  // Insert content for every month in contract
+  // Build ALL content in one pass — no DOM updates during loop, one save at end
   const today=new Date().toISOString().split('T')[0];
   let totalCreated=0;
-  const totalItems=months.length*quota;
+  const newPieces=[];
 
-  for(let mi=0;mi<months.length;mi++){
-    const month=months[mi];
+  setProgress(50,'Building content pieces...');
+  await new Promise(r=>setTimeout(r,50)); // yield to browser to update progress bar
+
+  months.forEach(month=>{
     const[yr,mo]=month.split('-').map(Number);
     const daysInMonth=new Date(yr,mo,0).getDate();
     const interval=Math.max(1,Math.floor(daysInMonth/quota));
-    const monthLabel=new Date(month+'-01').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
-
-    setProgress(
-      Math.round(5+(mi/months.length)*90),
-      `Inserting ${monthLabel} (${mi+1}/${months.length})…`
-    );
-    await new Promise(r=>setTimeout(r,30));
+    // Use Intl for locale-safe month label
+    const monthLabel=new Date(month+'-15').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
 
     baseTemplates.forEach((t,i)=>{
-      // Make title unique per month: "Brand Story — May 26", "Video#1 — May 26"
       const pieceTitle=`${t.title} — ${monthLabel}`;
-      const existing=data.contents.find(c=>c.brandId===id&&c.title===pieceTitle);
-      if(existing) return;
-
+      if(data.contents.find(c=>c.brandId===id&&c.title===pieceTitle)) return;
       let dayNum=Math.min(daysInMonth,3+(i*interval));
       let postingDate=`${month}-${String(dayNum).padStart(2,'0')}`;
       postingDate=nextBusinessDay(postingDate);
       if(!postingDate.startsWith(month)) postingDate=addBusinessDays(`${month}-${String(daysInMonth).padStart(2,'0')}`,-1);
-
-      data.contents.push({
+      newPieces.push({
         id:'ct'+uid(),brandId:id,
-        title:pieceTitle,type:t.type,
+        title:pieceTitle,type:t.type,cat:t.cat||'wallPost',
         assignees:[],statusId:'ideation',
         postingDate,driveLink:'',copywriting:'',comments:[],
         statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
@@ -9317,14 +9310,16 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
       });
       totalCreated++;
     });
+  });
 
-    addPreview(`✓ ${monthLabel} — ${quota} pieces added`);
-  }
+  // Push all at once and save once
+  data.contents.push(...newPieces);
+  setProgress(80,'Saving to cloud...');
+  await new Promise(r=>setTimeout(r,50));
+  await saveNow(data);
 
   setProgress(100,'Done!');
-  save(data);
-
-  await new Promise(r=>setTimeout(r,800));
+  await new Promise(r=>setTimeout(r,400));
   closeModal();
   S.brand=id;
   render();
