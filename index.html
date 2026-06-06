@@ -9312,17 +9312,74 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
     });
   });
 
-  // Push all at once and save once
+  // Push all pieces to data
   data.contents.push(...newPieces);
-  setProgress(80,'Saving to cloud...');
-  await new Promise(r=>setTimeout(r,50));
-  await saveNow(data);
+
+  // Save brand+users+settings to localStorage (small)
+  // Skip localStorage for contents if too many pieces (quota risk)
+  const dataForLocal = JSON.parse(JSON.stringify(data));
+  if(newPieces.length > 100){
+    // Keep only existing contents (not new ones) in localStorage to avoid quota crash
+    // Supabase will be the source of truth for the new pieces
+    dataForLocal.contents = data.contents.filter(c => !newPieces.find(n=>n.id===c.id));
+  }
+  _dataCache=null;_dataCacheKey=null;
+  try{ localStorage.setItem(KEY, JSON.stringify(dataForLocal)); }catch(e){}
+
+  // Save directly to Supabase in chunks — bypass saveNow to avoid localStorage quota
+  setProgress(60,'Saving brand...');
+  await new Promise(r=>setTimeout(r,30));
+
+  if(CLOUD_CONFIG.ENABLED){
+    try{
+      const now=new Date().toISOString();
+      const by=S.user?.name||'?';
+      // Save brand + users + settings first
+      const uP=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
+      const bP=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
+      const sP=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
+      await Promise.all([
+        fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uP)}),
+        fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bP)}),
+        fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sP)}),
+      ]);
+
+      // Save contents in chunks of 25
+      const allC = data.contents.filter(c=>c&&c.id);
+      const CHUNK = 25;
+      for(let ci=0; ci<allC.length; ci+=CHUNK){
+        const chunk = allC.slice(ci, ci+CHUNK);
+        const pct = 60 + Math.round((ci/allC.length)*35);
+        setProgress(pct, `Saving contents ${ci+1}–${Math.min(ci+CHUNK,allC.length)} of ${allC.length}...`);
+        await fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),
+          body:JSON.stringify(chunk.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))});
+        await new Promise(r=>setTimeout(r,80)); // small gap between chunks
+      }
+
+      // Now store full data in localStorage (it includes all contents)
+      _dataCache=null;_dataCacheKey=null;
+      try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){
+        // If still too big, just keep without new contents — Supabase has them
+        try{ localStorage.setItem(KEY, JSON.stringify(dataForLocal)); }catch(_){}
+      }
+
+      broadcastPing([],by).catch(()=>{});
+    }catch(e){
+      console.error('Brand save error:',e);
+      showAIToast('⚠ Save error: '+e.message);
+    }
+  } else {
+    // No Supabase — just use localStorage
+    _dataCache=null;_dataCacheKey=null;
+    try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){
+      showAIToast('⚠ Storage full — some content may not be saved locally');
+    }
+  }
 
   setProgress(100,'Done!');
-  await new Promise(r=>setTimeout(r,400));
+  await new Promise(r=>setTimeout(r,300));
   closeModal();
-  S.brand=id;
-  render();
+  nav('brand', id);
   showAIToast(`✅ "${name}" created · ${totalCreated} pieces across ${months.length} months`);
 }
 
@@ -10380,18 +10437,33 @@ window.onload=function(){
   // Auto-login from session
   const savedId=sessionStorage.getItem('uspify_uid');
   if(savedId){
-    const data=D();let user=data.users.find(u=>u.id===savedId);
+    const HARDCODED=[
+      {id:'caleb',name:'Caleb',role:'admin',pass:'caleb'},
+      {id:'carmen',name:'Carmen',role:'admin',pass:'carmen'},
+      {id:'developer',name:'Developer',role:'admin',pass:'developer'},
+      {id:'jack',name:'Jack',role:'senior',pass:'jack'},
+      {id:'hualu',name:'Hualu',role:'designer',pass:'hualu'},
+      {id:'leonard',name:'Leonard',role:'content_creator',pass:'leonard'},
+      {id:'lunox_client',name:'Lunox',role:'client',pass:'lunox',brandId:'lunox'},
+    ];
+    const hc=HARDCODED.find(u=>u.id===savedId);
+    const data=D();
+    const stored=data.users.find(u=>u.id===savedId);
+    const user=stored?{...stored,pass:(hc||{}).pass||stored.pass,role:(hc||stored).role}:hc;
     if(user){
-      // Force admin role for leonard regardless of stored role
-      if(user.id==='leonard') user={...user,role:'admin'};
       S.user=user;
+      // Restore last page/brand
+      const _pg=sessionStorage.getItem('uspify_page');
+      const _br=sessionStorage.getItem('uspify_brand');
       if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+      else{if(_pg)S.page=_pg;if(_br)S.brand=_br||null;}
       document.getElementById('login-screen').style.display='none';
       document.getElementById('app').style.display='flex';
-      // Show loading while fetching from Supabase
-      const root=document.getElementById('page-root');
-      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
-      initCloudSync().then(()=>{render();initAI();}).catch(()=>{render();initAI();});
+      // Render immediately from cache — no spinner, no waiting
+      render();
+      try{initAI();}catch(x){}
+      // Sync from Supabase in background
+      if(typeof initCloudSync==='function') initCloudSync();
       return;
     }
   }
