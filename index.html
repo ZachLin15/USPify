@@ -1334,13 +1334,11 @@ async function cloudLoad(retries=2, delay=300){
   }
 }
 
-// Track which content IDs were modified since last cloud save
+// Track which content IDs were modified since last cloud save (for broadcastPing)
 let _dirtyContentIds=new Set();
-let _dirtyAll=false; // true = save everything (brands/users changed)
 
 function markDirty(contentId){
   if(contentId) _dirtyContentIds.add(contentId);
-  else _dirtyAll=true;
 }
 
 async function cloudSave(data){
@@ -1349,41 +1347,31 @@ async function cloudSave(data){
   _cloudSyncing=true;
   setSyncStatus('saving','Saving…');
 
-  // Snapshot and clear dirty set before async work
+  // Snapshot dirty IDs for broadcastPing, then clear
   const dirtyIds=new Set(_dirtyContentIds);
-  const saveAll=_dirtyAll;
   _dirtyContentIds=new Set();
-  _dirtyAll=false;
 
   try{
     const now=new Date().toISOString();
     const by=S.user?.name||'?';
-    const reqs=[];
 
-    // Always save settings (lightweight — single row)
+    // Always save users + brands + settings (small, fast)
+    const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
+    const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
     const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
-    reqs.push(fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}));
 
-    // Only save users/brands when they actually changed
-    if(saveAll){
-      const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
-      const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
-      reqs.push(fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}));
-      reqs.push(fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}));
-    }
-
-    // Only save dirty content items (workflow actions touch 1-2 items at a time)
-    let cItems=(data.contents||[]).filter(c=>c&&c.id&&(saveAll||dirtyIds.has(c.id)));
-    if(!cItems.length&&!saveAll){
-      // Fallback: if nothing marked dirty but save was called, save all
-      cItems=(data.contents||[]).filter(c=>c&&c.id);
-    }
+    // ALWAYS save ALL contents — never risk losing content by partial saves.
+    // Chunked at 50 rows per request for reliability.
+    const allContents=(data.contents||[]).filter(c=>c&&c.id);
     const chunks=[];
-    for(let i=0;i<cItems.length;i+=50) chunks.push(cItems.slice(i,i+50));
-    chunks.forEach(ch=>{
-      const payload=ch.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now}));
-      reqs.push(fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),body:JSON.stringify(payload)}));
-    });
+    for(let i=0;i<allContents.length;i+=50) chunks.push(allContents.slice(i,i+50));
+
+    const reqs=[
+      fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}),
+      fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}),
+      fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}),
+      ...chunks.map(ch=>fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),body:JSON.stringify(ch.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))})),
+    ];
 
     const results=await Promise.all(reqs);
     const failed=results.filter(r=>!r.ok);
@@ -1391,7 +1379,6 @@ async function cloudSave(data){
       const t=await failed[0].text();
       if(failed[0].status>=500&&!data.__retried){
         data.__retried=true;
-        _dirtyAll=true; // retry everything
         setTimeout(()=>{_cloudSyncing=false;cloudSave(data);},500);
         return;
       }
@@ -1404,8 +1391,6 @@ async function cloudSave(data){
   }catch(e){
     setSyncStatus('error','Save failed');
     console.error('Supabase save:',e.message);
-    // Re-queue dirty items on failure
-    _dirtyAll=true;
   }finally{
     _cloudSyncing=false;
     if(_pendingSave){const p=_pendingSave;_pendingSave=null;cloudSave(p);}
@@ -1468,6 +1453,14 @@ function initRealtimeSync(){
           const savedBy=fresh.__savedBy;
           _dataCache=null;_dataCacheKey=null;
           reapplyDefaultPasswords(fresh.users);
+          // Merge: keep any localStorage content not yet in Supabase
+          // This prevents local-only items from being wiped by a pull
+          try{
+            const local=JSON.parse(localStorage.getItem(KEY)||'{}');
+            const freshIds=new Set((fresh.contents||[]).map(c=>c.id));
+            const localOnly=(local.contents||[]).filter(c=>c&&c.id&&!freshIds.has(c.id));
+            if(localOnly.length) fresh.contents=[...(fresh.contents||[]),...localOnly];
+          }catch(_){}
           localStorage.setItem(KEY,JSON.stringify(fresh));
           if(S.user){
             const fu=fresh.users.find(u=>u.id===S.user.id);
@@ -1633,6 +1626,13 @@ async function initCloudSync(){
     const cloudData=await cloudLoad();
     if(cloudData&&cloudData.users?.length){
       reapplyDefaultPasswords(cloudData.users);
+      // Merge: keep localStorage-only content not yet in Supabase
+      try{
+        const local=JSON.parse(localStorage.getItem(KEY)||'{}');
+        const cloudIds=new Set((cloudData.contents||[]).map(c=>c.id));
+        const localOnly=(local.contents||[]).filter(c=>c&&c.id&&!cloudIds.has(c.id));
+        if(localOnly.length) cloudData.contents=[...(cloudData.contents||[]),...localOnly];
+      }catch(_){}
       const prevStr=localStorage.getItem(KEY)||'';
       const newStr=JSON.stringify(cloudData);
       if(newStr!==prevStr){
