@@ -1477,7 +1477,7 @@ function showTaskNotification(c, task, fromName){
   let _seenTaskIds=new Set(); // tracks tasks already toasted to this user
 
   async function pullIfChanged(){
-    if(_pulling||_initSyncing) return;
+    if(_pulling||_initSyncing||_cloudSyncing) return; // skip if save in progress
     _pulling=true;
     try{
       const fresh=await cloudLoad(2, 500); // 2 retries, 500ms delay
@@ -1610,10 +1610,7 @@ async function initCloudSync(){
     localStorage.setItem(KEY,JSON.stringify(cloudData));
     if(S.user){
       const freshUser=cloudData.users.find(u=>u.id===S.user.id);
-      if(freshUser){
-        if(S.user.id==='leonard'||freshUser.id==='leonard') freshUser.role='admin';
-        S.user=freshUser;
-      }
+      if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
     }
     if(typeof render==='function') render();
   }
@@ -3399,11 +3396,11 @@ function renderClientPost(){
   </div>`;
 }
 
-function approveContent(id,nextStatusId){
+async function approveContent(id,nextStatusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  save(data);render();
+  await saveNow(data,c.id);render();
 }
 function openReviseModal(id){
   const data=D();
@@ -3419,13 +3416,13 @@ function openReviseModal(id){
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="doRevise('${id}')">Request revision</button></div>`);
 }
-function doRevise(id){
+async function doRevise(id){
   const statusId=document.getElementById('rv-status').value;
   const amendType=document.getElementById('rv-type').value;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(amendType){c.statusId=amendType;c.statusHistory.push({statusId:amendType,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});}
   else{c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});}
-  save(data);closeModal();render();
+  await saveNow(data,c.id);closeModal();render();
 }
 
 // ===================== CALENDAR =====================
@@ -8286,7 +8283,7 @@ function confirmDeleteContent(id){
       <button class="btn btn-danger" onclick="deleteContent('${id}')">🗑 Yes, remove it</button>
     </div>`);
 }
-function deleteContent(id){
+async function deleteContent(id){
   const data=D();
   const c=data.contents.find(x=>x.id===id);
   if(c){
@@ -8294,27 +8291,24 @@ function deleteContent(id){
     if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
     data.deletionLog.push({
       logId:'dl'+Math.random().toString(36).slice(2,9),
-      contentId:id,
-      title:c.title,
-      brandName:b.name,
-      brandColor:b.color,
-      type:c.type||'',
-      statusId:c.statusId||'',
-      deletedBy:S.user.name,
-      deletedById:S.user.id,
+      contentId:id,title:c.title,
+      brandName:b.name,brandColor:b.color,
+      type:c.type||'',statusId:c.statusId||'',
+      deletedBy:S.user.name,deletedById:S.user.id,
       deletedAt:new Date().toISOString().split('T')[0],
       dismissedBy:[]
     });
   }
-  data.contents=data.contents.filter(c=>c.id!==id);
-  save(data);
-  // Delete from Supabase cloud
+  data.contents=data.contents.filter(x=>x.id!==id);
+  // saveNow: upload immediately so other browsers get fresh data on pull
+  await saveNow(data);
+  // Also physically delete from Supabase (saveNow won't upsert deleted row)
   if(CLOUD_CONFIG.ENABLED&&CLOUD_CONFIG.URL!=='YOUR_SUPABASE_PROJECT_URL'){
     fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=eq.${id}`,{method:'DELETE',headers:_sbUH()})
-      .catch(e=>console.error('Cloud delete content failed:',e.message));
+      .catch(e=>console.error('Cloud delete failed:',e.message));
   }
   closeModal();closeDetail();render();
-  showAIToast(`🗑 Content removed — admins notified`);
+  showAIToast('🗑 Content removed');
 }
 
 function sendWhatsApp(id){
