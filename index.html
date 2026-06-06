@@ -1343,7 +1343,12 @@ function initRealtimeSync(){
 
   // ── Hash to detect real data changes ─────────────────────────────────────
   function dataHash(data){
-    try{ return (data.contents||[]).length+'|'+(data.brands||[]).length+'|'+(data.scheduleBlocks||[]).length+'|'+((data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).join('')).slice(0,200); }catch(e){ return ''; }
+    try{
+      const brands=(data.brands||[]).map(b=>b.id+b.name).sort().join(',');
+      const contents=(data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).sort().join('').slice(0,300);
+      const settings=(data.scheduleBlocks||[]).length+'|'+(data.deletionLog||[]).length;
+      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${brands}|${contents}|${settings}`;
+    }catch(e){ return String(Date.now()); }
   }
 
   // ── Pull fresh data and re-render if changed ─────────────────────────────
@@ -1355,6 +1360,7 @@ function initRealtimeSync(){
         if(h!==lastHash){
           lastHash=h;
           const savedBy=fresh.__savedBy;
+          _dataCache=null; _dataCacheKey=null; // invalidate D() cache
           localStorage.setItem(KEY,JSON.stringify(fresh));
           // Refresh S.user preserving admin override
           if(S.user){
@@ -1412,7 +1418,7 @@ function initRealtimeSync(){
   function startPolling(){
     if(pollTimer) return; // already polling
     setSyncStatus('idle','Polling…');
-    pollTimer=setInterval(pullIfChanged, 15000);
+    pollTimer=setInterval(pullIfChanged, 8000);
   }
 
   // Heartbeat sender every 25s to keep WS alive
@@ -1426,6 +1432,7 @@ async function initCloudSync(){
   // SUPABASE = SOURCE OF TRUTH. Always overwrite localStorage cache on startup.
   const cloudData=await cloudLoad();
   if(cloudData&&cloudData.users?.length){
+    _dataCache=null; _dataCacheKey=null; // invalidate D() cache
     localStorage.setItem(KEY,JSON.stringify(cloudData));
     if(S.user){
       const freshUser=cloudData.users.find(u=>u.id===S.user.id);
