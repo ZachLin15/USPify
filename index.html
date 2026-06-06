@@ -2018,7 +2018,26 @@ function D(){
 let _saveDebounceTimer=null;
 function save(data, dirtyContentId){
   _dataCache=null;_dataCacheKey=null;
-  localStorage.setItem(KEY,JSON.stringify(data));
+  try{
+    localStorage.setItem(KEY,JSON.stringify(data));
+  }catch(e){
+    if(e.name==='QuotaExceededError'||e.code===22){
+      // localStorage full — strip blob URLs and try again
+      console.warn('localStorage quota exceeded, stripping large data...');
+      try{
+        const slim=JSON.parse(JSON.stringify(data));
+        slim.contents.forEach(c=>{
+          (c.ideationVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!(img.url||'').startsWith('blob:'));});
+          (c.designVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!(img.url||'').startsWith('blob:'));});
+        });
+        localStorage.setItem(KEY,JSON.stringify(slim));
+        showAIToast('⚠ Images not saved locally — upload to Drive for permanent storage');
+      }catch(e2){
+        console.error('localStorage save failed even after stripping:',e2);
+        showAIToast('⚠ Storage full — please clear browser cache');
+      }
+    } else { throw e; }
+  }
   if(dirtyContentId) markDirty(dirtyContentId);
   clearTimeout(_saveDebounceTimer);
   _saveDebounceTimer=setTimeout(()=>cloudSave(data), 150);
@@ -2026,7 +2045,15 @@ function save(data, dirtyContentId){
 
 async function saveNow(data, dirtyContentId){
   _dataCache=null;_dataCacheKey=null;
-  localStorage.setItem(KEY,JSON.stringify(data));
+  try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){
+    if(e.name==='QuotaExceededError'||e.code===22){
+      const slim=JSON.parse(JSON.stringify(data));
+      slim.contents.forEach(c=>{
+        (c.ideationVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!(img.url||'').startsWith('blob:'));});
+      });
+      try{localStorage.setItem(KEY,JSON.stringify(slim));}catch(_){}
+    }
+  }
   if(dirtyContentId) markDirty(dirtyContentId);
   clearTimeout(_saveDebounceTimer);
   await cloudSave(data);
@@ -6918,11 +6945,22 @@ function renderIdeationPanel(c, id){
       }).join('')
     :`<div class="empty-msg" style="padding:14px 0;text-align:left;font-size:13px">No management comments yet for ${idea.label}.</div>`;
 
-  const refImagesHTML=(idea.refImages||[]).map((img,idx)=>`
-    <div class="ref-img-card">
+  const refImagesHTML=(idea.refImages||[]).map((img,i)=>{
+    if(img.isDriveLink){
+      // Drive link reference — show as a clickable card, not an image
+      return `<div class="ref-img-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--blud);border:1px solid var(--blu);padding:10px;min-height:80px;cursor:pointer" onclick="window.open('${img.url}','_blank')">
+        <span style="font-size:24px">📁</span>
+        <span style="font-size:11px;font-weight:700;color:var(--blu);text-align:center;word-break:break-word;max-width:100px">${img.name}</span>
+        <span style="font-size:10px;color:var(--t3);font-family:'DM Mono',monospace">Drive ↗</span>
+        <button class="ref-img-del" onclick="event.stopPropagation();deleteRefImage('${id}',${verIdx},${i})" style="top:4px;right:4px">\u2715</button>
+      </div>`;
+    }
+    return `<div class="ref-img-card">
       <img src="${img.url}" onerror="this.parentElement.style.background='var(--s3)';this.style.display='none'" alt="ref">
-      <button class="ref-img-del" onclick="deleteRefImage('${id}',${verIdx},${idx})">\u2715</button>
-    </div>`).join('');
+      ${img.size?`<span style="position:absolute;bottom:4px;left:4px;font-size:10px;background:rgba(0,0,0,0.6);color:#fff;padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace">${img.size}</span>`:''}
+      <button class="ref-img-del" onclick="deleteRefImage('${id}',${verIdx},${i})">\u2715</button>
+    </div>`;
+  }).join('');
 
   // Version tabs
   const tabsHTML=versions.map((v,i)=>{
@@ -7101,22 +7139,128 @@ function _readRefImageFiles(id, verIdx, files){
   const versions=getIdeationVersions(c);
   _saveIdeaTextFields(c, versions, verIdx);
   if(!versions[verIdx].refImages) versions[verIdx].refImages=[];
-  let pending=files.length;
+
+  const MAX_SIZE=5*1024*1024; // 5MB limit
+  const tooBig=[];
+  const okFiles=[];
+
   Array.from(files).forEach(file=>{
-    if(!file.type.startsWith('image/')) { pending--; if(!pending){save(data);const panel=document.getElementById('dp-ideation');if(panel)panel.innerHTML=renderIdeationPanel(c,id);} return; }
-    const reader=new FileReader();
-    reader.onload=function(e){
-      versions[verIdx].refImages.push({url:e.target.result, addedAt:new Date().toISOString().split('T')[0], name:file.name});
-      pending--;
-      if(!pending){
-        c.ideationVersions=versions;
-        save(data);
-        const panel=document.getElementById('dp-ideation');
-        if(panel) panel.innerHTML=renderIdeationPanel(c,id);
-      }
-    };
-    reader.readAsDataURL(file);
+    if(!file.type.startsWith('image/')) return; // skip non-images
+    if(file.size>MAX_SIZE){
+      tooBig.push(file.name);
+    } else {
+      okFiles.push(file);
+    }
   });
+
+  // Show Drive prompt for oversized files
+  if(tooBig.length){
+    _showDriveUploadPrompt(id, verIdx, tooBig);
+    if(!okFiles.length) return; // all files too big — nothing else to do
+  }
+
+  // Process files under 5MB normally
+  if(!okFiles.length) return;
+  let pending=okFiles.length;
+  okFiles.forEach(file=>{
+    const blobUrl=URL.createObjectURL(file);
+    versions[verIdx].refImages.push({
+      url:blobUrl,
+      isBlobUrl:true,
+      addedAt:new Date().toISOString().split('T')[0],
+      name:file.name,
+      size:file.size>=1024*1024
+        ?(Math.round(file.size/1024/1024*10)/10)+'MB'
+        :Math.round(file.size/1024)+'KB'
+    });
+    pending--;
+    if(!pending){
+      c.ideationVersions=versions;
+      const dataToSave=JSON.parse(JSON.stringify(data));
+      dataToSave.contents.forEach(ct=>{
+        (ct.ideationVersions||[]).forEach(v=>{
+          v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl);
+        });
+      });
+      save(dataToSave);
+      const panel=document.getElementById('dp-ideation');
+      if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+    }
+  });
+}
+
+function _showDriveUploadPrompt(id, verIdx, fileNames){
+  // Show a modal asking user to upload to Google Drive and paste the link
+  const fileList=fileNames.map(n=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--b1)"><span style="font-size:16px">📄</span><span style="font-size:14px;color:var(--t1)">${n}</span><span style="font-size:12px;color:var(--red);font-family:'DM Mono',monospace;margin-left:auto">Too large (&gt;5MB)</span></div>`).join('');
+
+  openModal(`
+    <div class="modal-title" style="color:var(--amb)">
+      📁 File Too Large — Use Google Drive
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+
+    <div style="background:var(--ambd);border:1px solid var(--amb);border-radius:var(--r);padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;color:var(--amb);margin-bottom:4px">⚠ ${fileNames.length} file${fileNames.length>1?'s':''} exceed the 5MB limit</div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.6">Please upload to Google Drive and paste the share link below. This keeps the app fast and your files safe.</div>
+    </div>
+
+    <div style="margin-bottom:14px">${fileList}</div>
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--t2);margin-bottom:8px">How to get a Drive link:</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;line-height:1.7">
+        <div>1. Go to <a href="https://drive.google.com" target="_blank" style="color:var(--blu)">drive.google.com ↗</a></div>
+        <div>2. Upload your file${fileNames.length>1?'s':''}</div>
+        <div>3. Right-click → "Get link" → "Anyone with the link"</div>
+        <div>4. Copy and paste below</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label style="font-size:13px;font-weight:700;color:var(--t2);display:block;margin-bottom:6px">Google Drive Link</label>
+      <input class="form-input" id="drive-ref-link-input" type="url"
+        placeholder="https://drive.google.com/file/d/..."
+        style="font-size:14px">
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label style="font-size:13px;font-weight:700;color:var(--t2);display:block;margin-bottom:6px">Label (optional)</label>
+      <input class="form-input" id="drive-ref-label-input" type="text"
+        placeholder="e.g. Reference video, Mood board..."
+        style="font-size:14px">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Skip</button>
+      <a href="https://drive.google.com" target="_blank" class="btn btn-info btn-sm">Open Drive ↗</a>
+      <button class="btn btn-ac" onclick="_saveDriveRefLink('${id}',${verIdx})">Save Link</button>
+    </div>
+  `);
+}
+
+function _saveDriveRefLink(id, verIdx){
+  const linkEl=document.getElementById('drive-ref-link-input');
+  const labelEl=document.getElementById('drive-ref-label-input');
+  const link=(linkEl?.value||'').trim();
+  if(!link){alert('Please enter a Google Drive link.');return;}
+
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const versions=getIdeationVersions(c);
+  if(!versions[verIdx].refImages) versions[verIdx].refImages=[];
+
+  const label=(labelEl?.value||'').trim()||'Drive reference';
+  versions[verIdx].refImages.push({
+    url:link,
+    isDriveLink:true,
+    name:label,
+    addedAt:new Date().toISOString().split('T')[0],
+  });
+  c.ideationVersions=versions;
+  save(data);
+  closeModal();
+  const panel=document.getElementById('dp-ideation');
+  if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+  showAIToast('✓ Drive link saved as reference image');
 }
 
 function handleRefFileSelect(id, verIdx, input){
