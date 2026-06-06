@@ -9061,8 +9061,10 @@ async function saveNewBrand(){
   const quotaLabels={wallPost:'Wall Posts',wpCarousel:'Carousel',wpVideo:'Video',wpReels:'Reels',wpImage:'Single Image',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
   // Build month list for whole contract year
+  // contractStart is YYYY-MM-DD from date input — take only YYYY-MM for month iteration
   const months=[];
-  let cur=new Date(contractStart+'-01');const end=new Date(contractEnd+'-01');
+  let cur=new Date(contractStart.slice(0,7)+'-01T12:00:00');
+  const end=new Date(contractEnd.slice(0,7)+'-01T12:00:00');
   while(cur<=end){months.push(cur.toISOString().slice(0,7));cur.setMonth(cur.getMonth()+1);}
 
   // Build base templates (per-month, numbered)
