@@ -1266,38 +1266,51 @@ function setSyncStatus(status,msg){
   el.innerHTML=`<span style="color:${colors[status]||'var(--t3)'};font-size:12px;font-family:'DM Mono',monospace">${icons[status]||'☁️'} ${msg||status}</span>`;
 }
 
-async function cloudLoad(){
+async function cloudLoad(retries=3, delay=1000){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
-  try{
-    setSyncStatus('loading','Loading…');
-    const [uR,bR,cR,sR]=await Promise.all([
-      fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store'}),
-      fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store'}),
-      fetch(_sbUrl('uspify_contents'),{headers:_sbH(),cache:'no-store'}),
-      fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store'}),
-    ]);
-    if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP error');
-    const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
-    const settings=sRows[0]?.data||{};
-    const data={
-      users:uRows.map(r=>r.data).filter(x=>x&&x.id),
-      brands:bRows.map(r=>r.data).filter(x=>x&&x.id),
-      contents:cRows.map(r=>r.data).filter(x=>x&&x.id),
-      statuses:settings.statuses||[],
-      scheduleBlocks:settings.scheduleBlocks||[],
-      adMetrics:settings.adMetrics||[],
-      tasks:settings.tasks||[],
-      deletedBrandIds:settings.deletedBrandIds||[],
-      deletionLog:settings.deletionLog||[],
-      __savedBy:settings.__savedBy||'',
-    };
-    if(!data.users.length&&!data.brands.length) return null;
-    setSyncStatus('live','Live ✓');
-    return data;
-  }catch(e){
-    setSyncStatus('error','Load failed');
-    console.warn('Supabase load:',e.message);
-    return null;
+  for(let attempt=1; attempt<=retries; attempt++){
+    try{
+      setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading…');
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(), 10000); // 10s timeout
+      const [uR,bR,cR,sR]=await Promise.all([
+        fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
+        fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
+        fetch(_sbUrl('uspify_contents'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
+        fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
+      ]);
+      clearTimeout(timeout);
+      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP '+[uR,bR,cR,sR].find(r=>!r.ok)?.status);
+      const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
+      const settings=sRows[0]?.data||{};
+      const data={
+        users:uRows.map(r=>r.data).filter(x=>x&&x.id),
+        brands:bRows.map(r=>r.data).filter(x=>x&&x.id),
+        contents:cRows.map(r=>r.data).filter(x=>x&&x.id),
+        statuses:settings.statuses||[],
+        scheduleBlocks:settings.scheduleBlocks||[],
+        adMetrics:settings.adMetrics||[],
+        tasks:settings.tasks||[],
+        deletedBrandIds:settings.deletedBrandIds||[],
+        deletionLog:settings.deletionLog||[],
+        __savedBy:settings.__savedBy||'',
+      };
+      if(!data.users.length&&!data.brands.length) return null;
+      setSyncStatus('live','Live ✓');
+      return data;
+    }catch(e){
+      console.warn(`Supabase load attempt ${attempt}/${retries}:`,e.message);
+      if(attempt===retries){
+        // All retries failed — fall back to cached localStorage data
+        setSyncStatus('error','Load failed — using cached data');
+        const cached=localStorage.getItem(KEY);
+        if(cached){ try{ return JSON.parse(cached); }catch(_){} }
+        return null;
+      }
+      // Wait before retrying (1s, 2s, 4s)
+      setSyncStatus('idle',`Load failed, retrying…`);
+      await new Promise(r=>setTimeout(r, delay*Math.pow(2,attempt-1)));
+    }
   }
 }
 
@@ -1324,7 +1337,17 @@ async function cloudSave(data){
     ];
     const results=await Promise.all(reqs);
     const failed=results.filter(r=>!r.ok);
-    if(failed.length){const t=await failed[0].text();throw new Error('HTTP '+failed[0].status+' '+t.slice(0,80));}
+    if(failed.length){
+      const t=await failed[0].text();
+      const err=new Error('HTTP '+failed[0].status+' '+t.slice(0,80));
+      // Retry once after 1 second on server errors (5xx)
+      if(failed[0].status>=500&&!data.__retried){
+        data.__retried=true;
+        setTimeout(()=>{_cloudSyncing=false;cloudSave(data);},1000);
+        return;
+      }
+      throw err;
+    }
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),2000);
   }catch(e){
@@ -1352,7 +1375,7 @@ function initRealtimeSync(){
 
   async function pullIfChanged(){
     try{
-      const fresh=await cloudLoad();
+      const fresh=await cloudLoad(2, 500); // 2 retries, 500ms delay
       if(fresh&&fresh.users?.length){
         const h=dataHash(fresh);
         if(h!==lastHash){
