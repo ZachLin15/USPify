@@ -1981,9 +1981,11 @@ function D(){
     const cStart=b.contractStart||today2;
     const cEnd=b.contractEnd||today2;
     const months=[];
-    let cur=new Date(cStart.slice(0,7)+'-01');
-    const endD=new Date(cEnd.slice(0,7)+'-01');
-    while(cur<=endD){months.push(cur.toISOString().slice(0,7));cur.setMonth(cur.getMonth()+1);}
+    {
+      const _cs=cStart.slice(0,7);const _ce=cEnd.slice(0,7);
+      let [_y,_m]=_cs.split('-').map(Number);const [_ey,_em]=_ce.split('-').map(Number);
+      while(_y<_ey||(_y===_ey&&_m<=_em)){months.push(_y+'-'+String(_m).padStart(2,'0'));_m++;if(_m>12){_m=1;_y++;}}
+    }
     if(!months.length) months.push(today2.slice(0,7));
 
     months.forEach(month=>{
@@ -8728,6 +8730,74 @@ function autoInsertBrandContent(data, brandId){
   return created;
 }
 
+// Generate content for ALL months in contract period (not just current month)
+function autoInsertAllMonths(data, brandId){
+  const b=getBrand(data,brandId);
+  if(!b||!b.templates||!b.templates.length) return 0;
+  const contractStart=b.contractStart||new Date().toISOString().split('T')[0];
+  const contractEnd=b.contractEnd||new Date().toISOString().split('T')[0];
+
+  // Build full month list using pure string arithmetic
+  const months=[];
+  {
+    const _cs=contractStart.slice(0,7);
+    const _ce=contractEnd.slice(0,7);
+    let [_y,_m]=_cs.split('-').map(Number);
+    const [_ey,_em]=_ce.split('-').map(Number);
+    while(_y<_ey||(_y===_ey&&_m<=_em)){
+      months.push(_y+'-'+String(_m).padStart(2,'0'));
+      _m++;if(_m>12){_m=1;_y++;}
+    }
+  }
+  if(!months.length){
+    console.warn('autoInsertAllMonths: 0 months built. contractStart=',contractStart,'contractEnd=',contractEnd);
+    showAIToast('⚠ No months found between '+contractStart+' and '+contractEnd+' — check contract dates');
+    return 0;
+  }
+
+  const today=new Date().toISOString().split('T')[0];
+  let created=0;
+
+  months.forEach(month=>{
+    const[yr,mo]=month.split('-').map(Number);
+    const daysInMonth=new Date(yr,mo,0).getDate();
+    const totalPieces=b.templates.length;
+    const interval=Math.max(1,Math.floor(daysInMonth/totalPieces));
+    const monthLabel=new Date(month+'-01T12:00:00').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+
+    b.templates.forEach((t,i)=>{
+      const pieceTitle=`${t.title} — ${monthLabel}`;
+      // Skip if already exists
+      if(data.contents.find(c=>c.brandId===brandId&&c.title===pieceTitle)) return;
+
+      let dayNum=Math.min(daysInMonth,3+(i*interval));
+      let postingDate=`${month}-${String(dayNum).padStart(2,'0')}`;
+      postingDate=nextBusinessDay(postingDate);
+      if(!postingDate.startsWith(month)){
+        postingDate=`${month}-${String(Math.min(daysInMonth,28)).padStart(2,'0')}`;
+      }
+
+      const isVid=(t.type==='Video'||t.type==='Reels');
+      data.contents.push({
+        id:'ct'+uid(),brandId,
+        title:pieceTitle,type:t.type,cat:t.cat||'carousel',
+        assignees:[],statusId:'ideation',
+        postingDate,
+        driveLink:'',copywriting:'',comments:[],
+        statusHistory:[{statusId:'ideation',changedBy:S.user?.id||'system',changedAt:today}],
+        dueDates:{
+          hualu:addWorkingDays(postingDate,isVid?-4:-3),
+          leonard:addWorkingDays(postingDate,isVid?-7:-5),
+          jack:''
+        },
+        workflowTasks:[],pic:{}
+      });
+      created++;
+    });
+  });
+  return created;
+}
+
 // ===================== EDIT CONTENT =====================
 function openEditContentModal(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -8960,9 +9030,13 @@ function openBrandInfoModal(brandId){
     </div>
     <div class="form-row"><label class="form-label">Shooting dates (comma separated YYYY-MM-DD)</label><input class="form-input" id="bi-shoot" type="text" value="${shootingStr}"></div>
     <div class="form-row"><label class="form-label">Content templates (one per line: Title|Type) — used by Generate Month</label><textarea class="form-textarea" id="bi-templates" placeholder="WP#1|Video&#10;Ad#1|Video&#10;TikTok#1|Video&#10;Carousel#1|Carousel" style="min-height:120px">${templatesStr}</textarea></div>
-    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBrandInfo('${brandId}')">Save</button></div>`,null,'wide');
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn btn-sm" onclick="saveBrandInfo('${brandId}',true)" title="Generate content for all missing months in contract period">🗓 Save & Fill Missing Months</button>
+      <button class="btn btn-ac" onclick="saveBrandInfo('${brandId}')">Save</button>
+    </div>`,null,'wide');
 }
-function saveBrandInfo(brandId){
+function saveBrandInfo(brandId, fillAllMonths){
   const data=D();const idx=data.brands.findIndex(b=>b.id===brandId);if(idx<0)return;
   const templatesRaw=document.getElementById('bi-templates').value.trim().split('\n').filter(Boolean);
   const templates=templatesRaw.map(l=>{const p=l.split('|');return{title:(p[0]||'').trim(),type:(p[1]||'Carousel').trim()};});
@@ -8984,9 +9058,27 @@ function saveBrandInfo(brandId){
     contractStart:document.getElementById('bi-cstart').value,
     contractEnd:document.getElementById('bi-cend').value,
     shootingDates,templates};
-  const newPieces=autoInsertBrandContent(data,brandId);
+  // Validate contract dates before generating
+  const _cStart=document.getElementById('bi-cstart')?.value;
+  const _cEnd=document.getElementById('bi-cend')?.value;
+  if(fillAllMonths&&(!_cStart||!_cEnd)){
+    alert('Please set Contract Start and Contract End dates before generating content.');
+    return;
+  }
+  let newPieces=0;
+  if(fillAllMonths){
+    newPieces=autoInsertAllMonths(data,brandId);
+    if(newPieces===0){
+      const _s=data.brands[idx].contractStart;
+      const _e=data.brands[idx].contractEnd;
+      showAIToast(`⚠ No new content created — all months from ${_s} to ${_e} already have content`);
+      save(data);closeModal();render();return;
+    }
+  } else {
+    newPieces=autoInsertBrandContent(data,brandId);
+  }
   save(data);closeModal();render();
-  if(newPieces>0) showAIToast(`✅ Brand settings saved · ${newPieces} new content piece${newPieces!==1?'s':''} added to tracker`);
+  if(newPieces>0) showAIToast(`✅ Brand settings saved · ${newPieces} new content piece${newPieces!==1?'s':''} added`);
   else showAIToast('✅ Brand settings saved');
 }
 
@@ -9048,6 +9140,7 @@ async function saveNewBrand(){
   const contractEnd=document.getElementById('nb-cend').value;
   const driveLink=document.getElementById('nb-drive').value.trim();
   const infoSummary=document.getElementById('nb-info').value.trim();
+  console.log('[saveNewBrand] contractStart=',contractStart,'contractEnd=',contractEnd);
   if(!contractStart||!contractEnd){alert('Please set contract start and end dates.');return;}
 
   const quota=wallPosts2+ads+tiktoks;
@@ -9060,12 +9153,18 @@ async function saveNewBrand(){
   const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,video:0,carousel:0};
   const quotaLabels={wallPost:'Wall Posts',wpCarousel:'Carousel',wpVideo:'Video',wpReels:'Reels',wpImage:'Single Image',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
-  // Build month list for whole contract year
-  // contractStart is YYYY-MM-DD from date input — take only YYYY-MM for month iteration
+  // Build month list using pure string arithmetic — no Date objects, no timezone bugs
   const months=[];
-  let cur=new Date(contractStart.slice(0,7)+'-01T12:00:00');
-  const end=new Date(contractEnd.slice(0,7)+'-01T12:00:00');
-  while(cur<=end){months.push(cur.toISOString().slice(0,7));cur.setMonth(cur.getMonth()+1);}
+  {
+    const _cs=contractStart.slice(0,7); // 'YYYY-MM'
+    const _ce=contractEnd.slice(0,7);   // 'YYYY-MM'
+    let [_y,_m]=_cs.split('-').map(Number);
+    const [_ey,_em]=_ce.split('-').map(Number);
+    while(_y<_ey||(_y===_ey&&_m<=_em)){
+      months.push(_y+'-'+String(_m).padStart(2,'0'));
+      _m++;if(_m>12){_m=1;_y++;}
+    }
+  }
 
   // Build base templates (per-month, numbered)
   function buildMonthTemplates(monthLabel){
@@ -9081,7 +9180,12 @@ async function saveNewBrand(){
   }
 
   // Show progress modal
+  console.log('[saveNewBrand] months built:',months.length,'months →',months);
   closeModal();
+  if(!months.length){
+    alert('Could not build month list. Please check contract dates ('+contractStart+' → '+contractEnd+')');
+    return;
+  }
   openModal(`<div class="modal-title">🤖 Creating "${name}" — Generating content…<button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="font-size:14px;color:var(--t2);margin-bottom:14px;line-height:1.7" id="nb-progress-msg">
       Asking AI to plan <strong>${quota}</strong> pieces × <strong>${months.length}</strong> months = <strong>${quota*months.length}</strong> content pieces…
