@@ -942,7 +942,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
     {id:'developer',name:'Developer',role:'admin',pass:'developer'},
     {id:'jack',name:'Jack',role:'senior',pass:'jack'},
     {id:'hualu',name:'Hualu',role:'designer',pass:'hualu'},
-    {id:'leonard',name:'Leonard',role:'admin',pass:'leonard'},
+    {id:'leonard',name:'Leonard',role:'content_creator',pass:'leonard'},
     {id:'lunox_client',name:'Lunox',role:'client',pass:'lunox',brandId:'lunox'}
   ];
   function miniGetUsers(){
@@ -1273,14 +1273,14 @@ var _USPIFY_DEFAULT_CREDS = [
   {id:'developer',  pass:'developer', role:'admin'},
   {id:'jack',       pass:'jack',      role:'senior'},
   {id:'hualu',      pass:'hualu',     role:'designer'},
-  {id:'leonard',    pass:'leonard',   role:'admin'},
+  {id:'leonard',    pass:'leonard',   role:'content_creator'},
   {id:'lunox_client',pass:'lunox',   role:'client'},
 ];
 function reapplyDefaultPasswords(users){
   if(!Array.isArray(users)) return users;
   _USPIFY_DEFAULT_CREDS.forEach(function(dc){
     var u = users.find(function(x){return x&&x.id===dc.id;});
-    if(u){u.pass=dc.pass;u.role=dc.role;if(dc.id==='leonard')u.role='admin';}
+    if(u){u.pass=dc.pass;u.role=dc.role;}
   });
   return users;
 }
@@ -1406,7 +1406,7 @@ function initRealtimeSync(){
           localStorage.setItem(KEY,JSON.stringify(fresh));
           if(S.user){
             const fu=fresh.users.find(u=>u.id===S.user.id);
-            if(fu){if(fu.id==='leonard')fu.role='admin';S.user=fu;}
+            if(fu){S.user=fu;}
           }
           render();
           if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
@@ -1514,8 +1514,7 @@ async function initCloudSync(){
     if(S.user){
       const freshUser=cloudData.users.find(u=>u.id===S.user.id);
       if(freshUser){
-        if(S.user.id==='leonard'||freshUser.id==='leonard') freshUser.role='admin';
-        S.user=freshUser;
+            S.user=freshUser;
       }
     }
     if(typeof render==='function') render();
@@ -1634,7 +1633,7 @@ function getDefault(){
       {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
       {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack',assignedStatuses:['senior_approval']},
       {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu',assignedStatuses:['design','video_editing']},
-      {id:'leonard',name:'Leonard',role:'admin',title:'Admin',init:'L',color:'#3acca0',pass:'leonard',assignedStatuses:['ideation','script']},
+      {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard',assignedStatuses:['ideation','script']},
       {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
     ],
     brands:[
@@ -2018,7 +2017,7 @@ function progressBar(pct,color,width){return `<div style="display:flex;align-ite
 // Admin check — includes leonard by user ID so he always has full access
 function isAdminUser(user){
   if(!user) return false;
-  return user.role==='admin' || user.id==='leonard';
+  return user.role==='admin';
 }
 function toggleLoginPw(){
   const inp=document.getElementById('li-pass');
@@ -2050,28 +2049,22 @@ function doLogin(){
   const name=nameEl.value.trim().toLowerCase();
   const pass=passEl.value.trim();
 
-  // HARDCODED credentials — always work on any browser, even with empty localStorage
   const HARDCODED=[
     {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
     {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
     {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
     {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack'},
     {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
-    {id:'leonard',name:'Leonard',role:'admin',title:'Admin',init:'L',color:'#3acca0',pass:'leonard'},
+    {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard'},
     {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
   ];
 
-  // Check hardcoded credentials first (works on any browser, any state)
   const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
   if(!hc||hc.pass!==pass){
     if(errEl)errEl.textContent='Invalid name or password.';
     return;
   }
 
-  // Force admin for leonard regardless of stored role
-  if(hc.id==='leonard') hc.role='admin';
-
-  // Try to enrich with full profile from localStorage/cloud data
   const data=D();
   const stored=data.users.find(u=>u.id===hc.id);
   const user=stored?{...stored,pass:hc.pass,role:hc.role}:hc;
@@ -2082,13 +2075,11 @@ function doLogin(){
   document.getElementById('app').style.display='flex';
   if(user.role==='client'){S.page='client_approvals';S.brand=null;}
 
-  // Show loading spinner, then sync from cloud before rendering
   const root=document.getElementById('page-root');
   if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
 
   if(typeof initCloudSync==='function'){
     initCloudSync().then(function(){
-      // After cloud sync, re-apply correct user from fresh data
       const d2=D();
       const freshUser=d2.users.find(u=>u.id===hc.id);
       if(freshUser){freshUser.pass=hc.pass;freshUser.role=hc.role;S.user=freshUser;}
@@ -10032,7 +10023,7 @@ window.onload=function(){
     const data=D();let user=data.users.find(u=>u.id===savedId);
     if(user){
       // Force admin role for leonard regardless of stored role
-      if(user.id==='leonard') user={...user,role:'admin'};
+      
       S.user=user;
       if(user.role==='client'){S.page='client_approvals';S.brand=null;}
       document.getElementById('login-screen').style.display='none';
