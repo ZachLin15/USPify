@@ -1343,6 +1343,7 @@ function markDirty(contentId){
 
 async function cloudSave(data){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
+  if(_initSyncing){_pendingSave=data;return;} // block saves during initial cloud load
   if(_cloudSyncing){_pendingSave=data;return;}
   _cloudSyncing=true;
   setSyncStatus('saving','Saving…');
@@ -1442,49 +1443,45 @@ function initRealtimeSync(){
   }
 
   async function pullIfChanged(){
-    if(_pulling) return; // skip if already pulling
+    if(_pulling||_initSyncing) return; // skip if already pulling or init in progress
     _pulling=true;
     try{
       const fresh=await cloudLoad(1, 200);
-      if(fresh&&fresh.users?.length){
-        const h=dataHash(fresh);
-        if(h!==lastHash){
-          lastHash=h;
-          const savedBy=fresh.__savedBy;
-          _dataCache=null;_dataCacheKey=null;
-          reapplyDefaultPasswords(fresh.users);
-          // Supabase is source of truth — overwrite localStorage directly
-          localStorage.setItem(KEY,JSON.stringify(fresh));
-          if(S.user){
-            const fu=fresh.users.find(u=>u.id===S.user.id);
-            if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}
-          }
+      if(!fresh||!fresh.users?.length){_pulling=false;return;}
 
-          // If the user is actively editing inside the detail overlay,
-          // skip re-rendering the detail panel to avoid wiping textareas.
-          // Only update the sidebar/topbar counts so they stay fresh.
-          const detailOpen=document.getElementById('detail-overlay')?.classList.contains('open');
-          const activeEl=document.activeElement;
-          const isTyping=activeEl&&(activeEl.tagName==='TEXTAREA'||activeEl.tagName==='INPUT')&&activeEl.id&&(
-            activeEl.id.startsWith('idea-')||
-            activeEl.id.startsWith('copy-ver-')||
-            activeEl.id.startsWith('design-')||
-            activeEl.id.startsWith('video-')||
-            activeEl.id.startsWith('shoot-')
-          );
+      const h=dataHash(fresh);
+      if(h===lastHash){_pulling=false;return;} // nothing changed
 
-          if(detailOpen&&isTyping){
-            // User is mid-edit — update sidebar/topbar silently, skip full render
-            try{renderSidebar();}catch(e){}
-            try{renderTopbar();}catch(e){}
-          } else {
-            render();
-          }
+      lastHash=h;
+      const savedBy=fresh.__savedBy;
+      _dataCache=null;_dataCacheKey=null;
+      reapplyDefaultPasswords(fresh.users);
+      localStorage.setItem(KEY,JSON.stringify(fresh));
 
-          if(savedBy&&savedBy!==S.user?.name){
-            showAIToast('🔄 Updated by '+savedBy);
-          }
-        }
+      if(S.user){
+        const fu=fresh.users.find(u=>u.id===S.user.id);
+        if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}
+      }
+
+      // Protect active textareas from being wiped mid-edit
+      const detailOpen=document.getElementById('detail-overlay')?.classList.contains('open');
+      const activeEl=document.activeElement;
+      const isTyping=detailOpen&&activeEl&&(activeEl.tagName==='TEXTAREA'||activeEl.tagName==='INPUT')&&activeEl.id&&(
+        activeEl.id.startsWith('idea-')||
+        activeEl.id.startsWith('copy-ver-')||
+        activeEl.id.startsWith('copy-comment-')||
+        activeEl.id.startsWith('design-')||
+        activeEl.id.startsWith('video-')||
+        activeEl.id.startsWith('shoot-')
+      );
+
+      if(isTyping){
+        // Mid-edit: refresh sidebar/topbar counts only — do NOT re-render detail panel
+        try{renderSidebar();}catch(e){}
+        try{renderTopbar();}catch(e){}
+      } else {
+        render();
+        if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
       }
     }catch(e){}
     finally{ _pulling=false; }
@@ -1608,32 +1605,37 @@ function initRealtimeSync(){
   connectWS();
 }
 
+let _initSyncing=false; // blocks cloudSave during initial load
+
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
+  _initSyncing=true; // block any saves while we load from Supabase
 
   // Step 1: Render immediately from localStorage cache (feels instant)
   if(typeof render==='function'){try{render();}catch(e){}}
 
-  // Step 2: Load from Supabase in background and refresh if data changed
+  // Step 2: Load from Supabase — this is the source of truth
   try{
     const cloudData=await cloudLoad();
     if(cloudData&&cloudData.users?.length){
       reapplyDefaultPasswords(cloudData.users);
-      // Supabase is source of truth — no merge needed
-      const prevStr=localStorage.getItem(KEY)||'';
-      const newStr=JSON.stringify(cloudData);
-      if(newStr!==prevStr){
-        _dataCache=null; _dataCacheKey=null;
-        localStorage.setItem(KEY,newStr);
-        if(S.user){
-          const freshUser=cloudData.users.find(u=>u.id===S.user.id);
-          if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
-        }
-        if(typeof render==='function'){try{render();}catch(e){}}
+      _dataCache=null; _dataCacheKey=null;
+      localStorage.setItem(KEY,JSON.stringify(cloudData));
+      if(S.user){
+        const freshUser=cloudData.users.find(u=>u.id===S.user.id);
+        if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
       }
+      if(typeof render==='function'){try{render();}catch(e){}}
     }
   }catch(e){
-    console.warn('initCloudSync background load failed:',e.message);
+    console.warn('initCloudSync load failed:',e.message);
+  }finally{
+    _initSyncing=false; // allow saves again
+    // Flush any save that was queued during init
+    if(_pendingSave){
+      const p=_pendingSave;_pendingSave=null;
+      setTimeout(()=>cloudSave(p),100);
+    }
   }
 
   initRealtimeSync();
@@ -1943,9 +1945,12 @@ function D(){
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
 
   // Migration: auto-insert content for every month of the contract year
-  // Detects stale content (no month label) and replaces with full-year content
+  // ONLY runs when Supabase is NOT configured (local-only mode)
+  // When Supabase is enabled, cloudLoad() is the source of truth — never auto-generate here
   const today2=new Date().toISOString().split('T')[0];
   let migratedPieces=0;
+  const _supabaseEnabled=!!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL&&window.USPIFY_CONFIG.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'&&window.USPIFY_CONFIG.SUPABASE_URL!=='%%SUPABASE_URL%%');
+  if(!_supabaseEnabled){ // only migrate when running without Supabase
   data.brands.forEach(b=>{
     if(!b.templates||!b.templates.length) return;
     const existing=data.contents.filter(c=>c.brandId===b.id);
@@ -2015,6 +2020,7 @@ function D(){
     });
   });
   if(migratedPieces>0) localStorage.setItem(KEY,JSON.stringify(data));
+  } // end !_supabaseEnabled
 
   // Migration: ensure each content has required fields
   data.contents.forEach(c=>{
