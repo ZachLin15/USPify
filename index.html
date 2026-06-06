@@ -1285,34 +1285,17 @@ function reapplyDefaultPasswords(users){
   return users;
 }
 
-async function _wakeSupabase(){
-  // Ping Supabase with a tiny request to wake it from free-tier pause.
-  // This runs BEFORE the real fetch so the real one doesn't timeout.
-  try{
-    await fetch(CLOUD_CONFIG.URL+'/rest/v1/uspify_settings?id=eq.main&select=id',{
-      headers:_sbH(), cache:'no-store',
-      signal:AbortSignal.timeout?AbortSignal.timeout(20000):undefined
-    });
-  }catch(e){ /* ignore — just a warm-up */ }
-}
-
 async function cloudLoad(retries=3, delay=1000, skipWakeup=false){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
   for(let attempt=1; attempt<=retries; attempt++){
     try{
-      if(attempt===1){
-        if(!skipWakeup){
-          setSyncStatus('loading','Connecting…');
-          await _wakeSupabase(); // wake Supabase — needed on cold start
-          setSyncStatus('loading','Loading…');
-        }
-      } else {
-        setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
-      }
+      if(attempt===1) setSyncStatus('loading','Loading…');
+      else setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
 
       const controller=new AbortController();
-      // 20s timeout per attempt — free tier cold start takes up to 15s
-      const timeout=setTimeout(()=>controller.abort(), 20000);
+      // 8s timeout — Supabase typically responds in 1-3s when active
+      // On cold start it may take up to 8s; retries handle the rest
+      const timeout=setTimeout(()=>controller.abort(), 8000);
       const [uR,bR,cR,sR]=await Promise.all([
         fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
@@ -1472,7 +1455,7 @@ function initRealtimeSync(){
     if(_pulling||_initSyncing) return; // skip if already pulling or init in progress
     _pulling=true;
     try{
-      const fresh=await cloudLoad(2, 300, true); // skipWakeup — Supabase is awake
+      const fresh=await cloudLoad(2, 300, true); // skipWakeup (param kept for compat)
       if(!fresh||!fresh.users?.length){_pulling=false;return;}
 
       const h=dataHash(fresh);
@@ -1636,17 +1619,20 @@ let _initSyncing=false; // blocks cloudSave during initial load
 
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
-  _initSyncing=true; // block any saves while we load from Supabase
+  _initSyncing=true;
 
-  // Step 1: Render immediately from localStorage cache (feels instant)
+  // Step 1: Show cached data instantly — no waiting
   if(typeof render==='function'){try{render();}catch(e){}}
 
-  // Step 2: Load from Supabase — this is the source of truth
+  // Step 2: Start realtime sync immediately (don't wait for load)
+  initRealtimeSync();
+
+  // Step 3: Load fresh data from Supabase in background
   try{
     const cloudData=await cloudLoad();
     if(cloudData&&cloudData.users?.length){
       reapplyDefaultPasswords(cloudData.users);
-      _dataCache=null; _dataCacheKey=null;
+      _dataCache=null;_dataCacheKey=null;
       localStorage.setItem(KEY,JSON.stringify(cloudData));
       if(S.user){
         const freshUser=cloudData.users.find(u=>u.id===S.user.id);
@@ -1657,15 +1643,9 @@ async function initCloudSync(){
   }catch(e){
     console.warn('initCloudSync load failed:',e.message);
   }finally{
-    _initSyncing=false; // allow saves again
-    // Flush any save that was queued during init
-    if(_pendingSave){
-      const p=_pendingSave;_pendingSave=null;
-      setTimeout(()=>cloudSave(p),100);
-    }
+    _initSyncing=false;
+    if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
   }
-
-  initRealtimeSync();
 }
 
 
