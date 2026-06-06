@@ -1684,10 +1684,12 @@ function getDefault(){
 }
 
 // ===================== DATA ACCESS =====================
+// D() cache — invalidated on every save(), avoids repeated JSON.parse in same render cycle
+let _dataCache=null, _dataCacheKey=null;
 function D(){
-  // localStorage is a SHORT-LIVED CACHE only — Supabase is the source of truth.
-  // D() reads from cache for speed. initCloudSync() and pullIfChanged() keep it fresh.
-  let r=localStorage.getItem(KEY);
+  const raw=localStorage.getItem(KEY);
+  if(_dataCache && _dataCacheKey===raw) return _dataCache; // return cached parse
+  _dataCacheKey=raw;
   if(!r){
     // No cache yet — return a minimal shell so the app can render a loading state
     // Supabase data will arrive via initCloudSync() shortly
@@ -1831,12 +1833,18 @@ function D(){
     }
   });
 
+  _dataCache=data;
   return data;
 }
-// save() writes to localStorage CACHE first (instant UI update),
-// then persists to Supabase (source of truth) asynchronously.
-// Supabase always wins on conflicts — initCloudSync overwrites cache on load.
-function save(data){localStorage.setItem(KEY,JSON.stringify(data));cloudSave(data);}
+
+let _saveDebounceTimer=null;
+function save(data){
+  _dataCache=null;_dataCacheKey=null; // invalidate cache
+  localStorage.setItem(KEY,JSON.stringify(data));
+  // Debounce cloudSave — if multiple saves happen within 500ms, only send the last one
+  clearTimeout(_saveDebounceTimer);
+  _saveDebounceTimer=setTimeout(()=>cloudSave(data), 500);
+}
 function uid(){return Math.random().toString(36).slice(2,9);}
 
 // ===================== HELPERS =====================
@@ -2033,6 +2041,12 @@ function render(){
   if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
   else document.body.classList.remove('light-mode');
   renderSidebar();renderTopbar();renderPage();
+}
+
+// Lighter re-render — only updates page content, skips sidebar & topbar rebuild
+// Use for: filter changes, tab switches, type/cat changes that don't affect sidebar
+function renderPageOnly(){
+  requestAnimationFrame(()=>{ try{ renderPage(); }catch(e){ render(); } });
 }
 
 function renderSidebar(){
@@ -2794,8 +2808,8 @@ function renderTracker(){
 
   return tabs+filterRow+html;
 }
-function setTrackerTab(t){S.trackerTab=t;S.trackerFilterType='all';S.trackerFilterStatus='all';S.trackerMonth=new Date().toISOString().slice(0,7);renderPage();}
-function sortBy(col){if(!S.brandTableSort)S.brandTableSort={col:'postingDate',dir:'asc'};if(S.brandTableSort.col===col){S.brandTableSort.dir=S.brandTableSort.dir==='asc'?'desc':'asc';}else{S.brandTableSort.col=col;S.brandTableSort.dir='asc';}renderPage();}
+function setTrackerTab(t){S.trackerTab=t;S.trackerFilterType='all';S.trackerFilterStatus='all';S.trackerMonth=new Date().toISOString().slice(0,7);renderPageOnly();}
+function sortBy(col){if(!S.brandTableSort)S.brandTableSort={col:'postingDate',dir:'asc'};if(S.brandTableSort.col===col){S.brandTableSort.dir=S.brandTableSort.dir==='asc'?'desc':'asc';}else{S.brandTableSort.col=col;S.brandTableSort.dir='asc';}renderPageOnly();}
 
 function toggleContentCat(contentId, newCat){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
@@ -2803,7 +2817,7 @@ function toggleContentCat(contentId, newCat){
   // Sync type to match category
   if(newCat==='wallPost') c.type=c.type||'Carousel'; // keep existing type
   else if(newCat==='videoAds'||newCat==='tiktok') c.type='Video';
-  save(data);renderPage();
+  save(data);renderPageOnly();
   showAIToast(`✓ Category changed to ${newCat}`);
 }
 
@@ -2821,7 +2835,7 @@ function toggleContentType(contentId, newType){
   if((c.cat==='videoAds'||c.cat==='tiktok')&&newType==='Carousel'){
     c.type='Video'; // force back — these cats can't be Carousel
   }
-  save(data);renderPage();
+  save(data);renderPageOnly();
   showAIToast(`✓ Changed to ${c.type}`);
 }
 
@@ -3499,7 +3513,7 @@ function calNavPrev(){
   else if(S.calView==='week') d.setDate(d.getDate()-7);
   else d.setMonth(d.getMonth()-1);
   S.calDate=d.toISOString().split('T')[0];
-  renderPage();
+  renderPageOnly();
 }
 function calNavNext(){
   const d=new Date(S.calDate+'T12:00:00');
@@ -3507,7 +3521,7 @@ function calNavNext(){
   else if(S.calView==='week') d.setDate(d.getDate()+7);
   else d.setMonth(d.getMonth()+1);
   S.calDate=d.toISOString().split('T')[0];
-  renderPage();
+  renderPageOnly();
 }
 
 function calDropTodoMonth(e,dateStr){
@@ -3643,7 +3657,7 @@ function brandCalNav(dir){
   const d=new Date((S.brandCalDate||new Date().toISOString().split('T')[0])+'T12:00:00');
   d.setMonth(d.getMonth()+dir);
   S.brandCalDate=d.toISOString().split('T')[0];
-  renderPage();
+  renderPageOnly();
 }
 function getWeekDates(offset){const today=new Date();const dow=today.getDay();const mon=new Date(today);mon.setDate(today.getDate()-(dow===0?6:dow-1)+offset*7);return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});}
 function calTodoDragStart(e, contentId){
