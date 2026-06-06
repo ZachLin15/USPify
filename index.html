@@ -2187,7 +2187,8 @@ function progressBar(pct,color,width){return `<div style="display:flex;align-ite
 // Admin check — includes leonard by user ID so he always has full access
 function isAdminUser(user){
   if(!user) return false;
-  return user.role==='admin';
+  // Senior has same visibility as admin (sees all content)
+  return user.role==='admin'||user.role==='senior';
 }
 function toggleLoginPw(){
   const inp=document.getElementById('li-pass');
@@ -2329,8 +2330,8 @@ function renderSidebar(){
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
     {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length},
-    ...(isAdmin?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
-    ...(isAdmin?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
+    ...(isAdmin||S.user.role==='senior'?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
+    ...(isAdmin||S.user.role==='senior'?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
     {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
     {id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'},
