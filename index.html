@@ -1387,7 +1387,10 @@ function initRealtimeSync(){
   function dataHash(data){
     try{
       const brands=(data.brands||[]).map(b=>b.id+b.name).sort().join(',');
-      const contents=(data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).sort().join('').slice(0,300);
+      // Include statusId, assignees, workflowTask count so approval submissions trigger re-render
+      const contents=(data.contents||[]).map(c=>
+        c.id+c.statusId+(c.postingDate||'')+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
+      ).sort().join('').slice(0,600);
       const settings=(data.scheduleBlocks||[]).length+'|'+(data.deletionLog||[]).length;
       return `${(data.brands||[]).length}|${(data.contents||[]).length}|${brands}|${contents}|${settings}`;
     }catch(e){ return String(Date.now()); }
@@ -1418,7 +1421,7 @@ function initRealtimeSync(){
   function startPolling(){
     if(pollTimer) return;
     setSyncStatus('idle','Polling…');
-    pollTimer=setInterval(pullIfChanged, 8000);
+    pollTimer=setInterval(pullIfChanged, 3000);
   }
 
   function stopPolling(){
@@ -1453,7 +1456,8 @@ function initRealtimeSync(){
                 {event:'*',schema:'public',table:'uspify_users'},
                 {event:'*',schema:'public',table:'uspify_settings'},
               ]
-            }
+            },
+            access_token: CLOUD_CONFIG.ANON_KEY
           },
           ref:'1'
         });
@@ -1470,7 +1474,11 @@ function initRealtimeSync(){
           // Ignore join confirmations and other system messages
           if(msg.event==='phx_reply') return;
           // Any postgres change → pull fresh data
-          if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
+          // Supabase Realtime sends: event='postgres_changes', or legacy INSERT/UPDATE/DELETE
+          const isDbChange = msg.event==='postgres_changes'
+            || msg.event==='INSERT' || msg.event==='UPDATE' || msg.event==='DELETE'
+            || (msg.payload?.data?.type && ['INSERT','UPDATE','DELETE'].includes(msg.payload.data.type));
+          if(isDbChange){
             await pullIfChanged();
           }
         }catch(err){}
@@ -1496,6 +1504,11 @@ function initRealtimeSync(){
 
   // Client-side heartbeat every 25s to keep connection alive
   setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 25000);
+
+  // Pull immediately when tab becomes visible (user switches back)
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible') pullIfChanged();
+  });
 
   // Initial hash from current data
   try{ lastHash=dataHash(D()); }catch(e){}
@@ -2182,8 +2195,8 @@ function renderSidebar(){
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
     {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length},
-    ...(isAdmin?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
-    ...(isAdmin?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
+    ...(isAdmin||S.user.role==='senior'?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
+    ...(isAdmin||S.user.role==='senior'?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
     {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
     {id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'},
@@ -3205,7 +3218,7 @@ function renderBrandPage(){
 
 // ===================== APPROVALS =====================
 function renderApprovals(){
-  if(S.user.role!=='admin')return'<div class="empty-msg">Admin only.</div>';
+  if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
   const sa=data.contents.filter(c=>c.statusId==='senior_approval');
   const ca=data.contents.filter(c=>c.statusId==='client_approval');
@@ -3239,7 +3252,7 @@ function renderApprovals(){
 }
 // ===================== CLIENT POST PAGE =====================
 function renderClientPost(){
-  if(S.user.role!=='admin')return'<div class="empty-msg">Admin only.</div>';
+  if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
   const items=data.contents.filter(c=>c.statusId==='client_approval');
   if(!items.length){
