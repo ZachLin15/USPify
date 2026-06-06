@@ -1248,7 +1248,36 @@ function setSyncStatus(status,msg){
   const el=document.getElementById('sync-status');if(!el)return;
   const icons={idle:'☁️',saving:'⏳',saved:'✅',loading:'🔄',error:'⚠️',live:'🟢'};
   const colors={idle:'var(--t3)',saving:'var(--amb)',saved:'var(--ac)',loading:'var(--blu)',error:'var(--red)',live:'var(--ac)'};
-  el.innerHTML=`<span style="color:${colors[status]||'var(--t3)'};font-size:12px;font-family:'DM Mono',monospace">${icons[status]||'☁️'} ${msg||status}</span>`;
+  const enabled=CLOUD_CONFIG.ENABLED;
+  if(!enabled){
+    el.innerHTML=`<span style="color:var(--red);font-size:12px;font-family:'DM Mono',monospace" title="Supabase not configured">⚠️ No sync</span>`;
+    return;
+  }
+  el.innerHTML=`<span style="color:${colors[status]||'var(--t3)'};font-size:12px;font-family:'DM Mono',monospace;cursor:pointer" title="Click to force sync" onclick="forceSyncNow()">${icons[status]||'☁️'} ${msg||status}</span>`;
+}
+
+async function forceSyncNow(){
+  showAIToast('🔄 Force syncing...');
+  setSyncStatus('loading','Syncing...');
+  try{
+    const fresh=await cloudLoad(1,200);
+    if(fresh&&fresh.users?.length){
+      reapplyDefaultPasswords(fresh.users);
+      _dataCache=null;_dataCacheKey=null;
+      localStorage.setItem(KEY,JSON.stringify(fresh));
+      if(S.user){const fu=fresh.users.find(u=>u.id===S.user.id);if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}}
+      render();
+      setSyncStatus('live','Live ✓');
+      showAIToast('✅ Sync OK — '+fresh.contents.length+' contents loaded');
+    } else {
+      setSyncStatus('error','Load failed');
+      showAIToast('⚠ Sync failed — check console for details');
+    }
+  }catch(e){
+    setSyncStatus('error','Error');
+    showAIToast('⚠ Sync error: '+e.message);
+    console.error('forceSyncNow error:',e);
+  }
 }
 
 
@@ -1307,6 +1336,8 @@ async function cloudLoad(retries=3, delay=1000){
       console.warn(`Supabase load attempt ${attempt}/${retries}:`,e.message);
       if(attempt===retries){
         // All retries failed — fall back to cached localStorage data
+        console.error('cloudLoad all retries failed');
+        showAIToast('⚠ Could not load from Supabase — working offline');
         setSyncStatus('idle','⚡ Offline mode');
         const cached=localStorage.getItem(KEY);
         if(cached){ try{ return JSON.parse(cached); }catch(_){} }
@@ -1362,8 +1393,10 @@ async function cloudSave(data){
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     broadcastPing([...dirtyIds],by).catch(()=>{});
   }catch(e){
-    setSyncStatus('error','Save failed');
-    console.error('Supabase save:',e.message);
+    setSyncStatus('error','Sync error');
+    console.error('Supabase save error:',e.message,e);
+    // Show visible error so user knows exactly what went wrong
+    showAIToast('⚠ Sync error: '+e.message.slice(0,80));
   }finally{
     _cloudSyncing=false;
     if(_pendingSave){const p=_pendingSave;_pendingSave=null;cloudSave(p);}
