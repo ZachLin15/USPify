@@ -1356,7 +1356,9 @@ function markDirty(id){if(id)_dirtyContentIds.add(id);}
 
 async function cloudSave(data){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
-  if(_initSyncing){_pendingSave=data;return;}
+  // Only block saves during init if we have no data yet (first load on fresh browser)
+  // Don't block if we already have cached data — saves should go through
+  if(_initSyncing&&!localStorage.getItem(KEY)){_pendingSave=data;return;}
   if(_cloudSyncing){_pendingSave=data;return;}
   _cloudSyncing=true;
   setSyncStatus('saving','Saving...');
@@ -1392,6 +1394,7 @@ async function cloudSave(data){
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     broadcastPing([...dirtyIds],by).catch(()=>{});
+    console.log('[cloudSave] OK — saved',allC.length,'contents to Supabase');
   }catch(e){
     setSyncStatus('error','Sync error');
     console.error('Supabase save error:',e.message,e);
@@ -1421,10 +1424,11 @@ function initRealtimeSync(){
 
   function dataHash(data){
     try{
-      const brands=(data.brands||[]).map(b=>b.id+b.name).sort().join(',');
-      const contents=(data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).sort().join('').slice(0,300);
-      const settings=(data.scheduleBlocks||[]).length+'|'+(data.deletionLog||[]).length;
-      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${brands}|${contents}|${settings}`;
+      const contents=(data.contents||[]).map(c=>
+        c.id+c.statusId+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
+      ).sort().join('').slice(0,600);
+      const settings=(data.deletionLog||[]).length;
+      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${contents}|${settings}`;
     }catch(e){ return String(Date.now()); }
   }
 
@@ -1510,7 +1514,7 @@ function showTaskNotification(c, task, fromName){
   let _seenTaskIds=new Set(); // tracks tasks already toasted to this user
 
   async function pullIfChanged(){
-    if(_pulling||_initSyncing||_cloudSyncing) return; // skip if save in progress
+    if(_pulling||_initSyncing) return; // skip if already pulling or initialising
     _pulling=true;
     try{
       const fresh=await cloudLoad(2, 500); // 2 retries, 500ms delay
@@ -1587,7 +1591,8 @@ function showTaskNotification(c, task, fromName){
           // Any postgres change → pull fresh data
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            if(by!==S.user?.name) pullIfChanged();
+            console.log('[WS] broadcast from',by,'— my name:',S.user?.name);
+            if(by!==S.user?.name) setTimeout(pullIfChanged,300);
             return;
           }
           if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
@@ -2077,6 +2082,7 @@ function save(data, dirtyContentId){
 }
 
 async function saveNow(data, dirtyContentId){
+  console.log('[saveNow] called, dirtyContentId=',dirtyContentId);
   _dataCache=null;_dataCacheKey=null;
   try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){
     if(e.name==='QuotaExceededError'||e.code===22){
