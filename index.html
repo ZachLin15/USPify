@@ -971,11 +971,17 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
       }
       var ls=document.getElementById('login-screen');var app=document.getElementById('app');
       if(ls)ls.style.display='none';if(app)app.style.display='flex';
-      // Render immediately from cache — no spinner
-      if(typeof render==='function'){try{render();}catch(e){}}
-      if(typeof initAI==='function'){try{initAI();}catch(x){}}
-      // Sync Supabase in background
-      if(typeof initCloudSync==='function'){initCloudSync();}
+      // If cache exists → render instantly. If not → wait for Supabase (first login)
+      var _cr=null;try{var _raw=localStorage.getItem(LOGIN_KEY);if(_raw){var _d=JSON.parse(_raw);_cr=(_d&&_d.users&&_d.users.length>0)?_d:null;}}catch(_){}
+      if(_cr){
+        if(typeof render==='function'){try{render();}catch(e){}}
+        if(typeof initAI==='function'){try{initAI();}catch(x){}}
+        if(typeof initCloudSync==='function'){initCloudSync();}
+      }else{
+        var _root=document.getElementById('page-root');
+        if(_root)_root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:DM Mono,monospace">Connecting…</div></div>';
+        if(typeof initCloudSync==='function'){initCloudSync().then(function(){if(typeof render==='function'){try{render();}catch(e){}}if(typeof initAI==='function'){try{initAI();}catch(x){}}}).catch(function(){if(typeof render==='function'){try{render();}catch(e){}}});}
+      }
     }else{if(errEl)errEl.textContent='Invalid name or password.';}
   };
   window.resetAppData=function(){
@@ -1610,13 +1616,10 @@ async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
   _initSyncing=true;
 
-  // Step 1: Show cached data instantly — no waiting
-  if(typeof render==='function'){try{render();}catch(e){}}
-
-  // Step 2: Start realtime sync immediately (don't wait for load)
+  // Start realtime sync immediately
   initRealtimeSync();
 
-  // Step 3: Load fresh data from Supabase in background
+  // Load from Supabase
   try{
     const cloudData=await cloudLoad();
     if(cloudData&&cloudData.users?.length){
@@ -1627,10 +1630,13 @@ async function initCloudSync(){
         const freshUser=cloudData.users.find(u=>u.id===S.user.id);
         if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
       }
-      if(typeof render==='function'){try{render();}catch(e){}}
+      // Render now that we have real data
+      if(S.user&&typeof render==='function'){try{render();}catch(e){}}
     }
   }catch(e){
     console.warn('initCloudSync load failed:',e.message);
+    // Still try to render from whatever cache we have
+    if(S.user&&typeof render==='function'){try{render();}catch(e){}}
   }finally{
     _initSyncing=false;
     if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
@@ -2212,11 +2218,18 @@ function doLogin(){
   document.getElementById('app').style.display='flex';
   if(user.role==='client'){S.page='client_approvals';S.brand=null;}
 
-  // Render immediately from cache — instant UI
-  try{render();}catch(e){}
-  try{initAI();}catch(x){}
-  // Sync from Supabase in background
-  if(typeof initCloudSync==='function') initCloudSync();
+  // Cache exists → instant render. No cache → wait for Supabase
+  const _cc=localStorage.getItem(KEY);
+  let _hasC=false;try{const _p=JSON.parse(_cc||'{}');_hasC=!!(_p.users&&_p.users.length);}catch(_){}
+  if(_hasC){
+    try{render();}catch(e){}
+    try{initAI();}catch(x){}
+    if(typeof initCloudSync==='function') initCloudSync();
+  }else{
+    const _r2=document.getElementById('page-root');
+    if(_r2)_r2.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Connecting…</div></div>';
+    if(typeof initCloudSync==='function'){initCloudSync().then(()=>{try{render();}catch(e){}try{initAI();}catch(x){}}).catch(()=>{try{render();}catch(e){}try{initAI();}catch(x){}});}
+  }
 }
 function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
 
@@ -2275,6 +2288,8 @@ function nav(page,brandId){
 
 // ===================== RENDER =====================
 function render(){
+  // Don't render if no user is logged in
+  if(!S.user) return;
   // Restore theme
   if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
   else document.body.classList.remove('light-mode');
