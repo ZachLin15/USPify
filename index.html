@@ -1453,14 +1453,7 @@ function initRealtimeSync(){
           const savedBy=fresh.__savedBy;
           _dataCache=null;_dataCacheKey=null;
           reapplyDefaultPasswords(fresh.users);
-          // Merge: keep any localStorage content not yet in Supabase
-          // This prevents local-only items from being wiped by a pull
-          try{
-            const local=JSON.parse(localStorage.getItem(KEY)||'{}');
-            const freshIds=new Set((fresh.contents||[]).map(c=>c.id));
-            const localOnly=(local.contents||[]).filter(c=>c&&c.id&&!freshIds.has(c.id));
-            if(localOnly.length) fresh.contents=[...(fresh.contents||[]),...localOnly];
-          }catch(_){}
+          // Supabase is source of truth — overwrite localStorage directly
           localStorage.setItem(KEY,JSON.stringify(fresh));
           if(S.user){
             const fu=fresh.users.find(u=>u.id===S.user.id);
@@ -1626,13 +1619,7 @@ async function initCloudSync(){
     const cloudData=await cloudLoad();
     if(cloudData&&cloudData.users?.length){
       reapplyDefaultPasswords(cloudData.users);
-      // Merge: keep localStorage-only content not yet in Supabase
-      try{
-        const local=JSON.parse(localStorage.getItem(KEY)||'{}');
-        const cloudIds=new Set((cloudData.contents||[]).map(c=>c.id));
-        const localOnly=(local.contents||[]).filter(c=>c&&c.id&&!cloudIds.has(c.id));
-        if(localOnly.length) cloudData.contents=[...(cloudData.contents||[]),...localOnly];
-      }catch(_){}
+      // Supabase is source of truth — no merge needed
       const prevStr=localStorage.getItem(KEY)||'';
       const newStr=JSON.stringify(cloudData);
       if(newStr!==prevStr){
