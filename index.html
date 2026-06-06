@@ -1423,14 +1423,13 @@ function initRealtimeSync(){
 
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
+  // SUPABASE = SOURCE OF TRUTH. Always overwrite localStorage cache on startup.
   const cloudData=await cloudLoad();
   if(cloudData&&cloudData.users?.length){
     localStorage.setItem(KEY,JSON.stringify(cloudData));
-    // Refresh S.user from fresh cloud data, but preserve isAdminUser logic
     if(S.user){
       const freshUser=cloudData.users.find(u=>u.id===S.user.id);
       if(freshUser){
-        // If isAdminUser says this user should be admin, force the role
         if(S.user.id==='leonard'||freshUser.id==='leonard') freshUser.role='admin';
         S.user=freshUser;
       }
@@ -1560,6 +1559,7 @@ function getDefault(){
         quota:25,
         driveLink:'https://drive.google.com/drive/folders/1r4hdb_bXi2RcTJiRmEfjaQauSkWJgaPo',
         brandGuide:'https://drive.google.com/drive/folders/1LDvTV9zHKplNkAyQav2wknj62_QVEXLI',
+        facebookUrl:'https://www.facebook.com/lunoxmattress',
         infoSummary:'Lunox is a sleep & spine wellness brand. USP: Science-backed ergonomic products for better sleep quality.',
         shootingDates:[],
         quotaBreakdown:{wallPost:8,videoAds:5,tiktok:12,carousel:0,video:0},
@@ -1685,21 +1685,33 @@ function getDefault(){
 
 // ===================== DATA ACCESS =====================
 function D(){
+  // localStorage is a SHORT-LIVED CACHE only — Supabase is the source of truth.
+  // D() reads from cache for speed. initCloudSync() and pullIfChanged() keep it fresh.
   let r=localStorage.getItem(KEY);
-  if(!r){const d=getDefault();localStorage.setItem(KEY,JSON.stringify(d));return d;}
+  if(!r){
+    // No cache yet — return a minimal shell so the app can render a loading state
+    // Supabase data will arrive via initCloudSync() shortly
+    const d={users:[],brands:[],contents:[],statuses:getDefault().statuses,
+      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[]};
+    return d;
+  }
   let data;
-  try{data=JSON.parse(r);}catch(e){const d=getDefault();localStorage.setItem(KEY,JSON.stringify(d));return d;}
+  try{data=JSON.parse(r);}catch(e){
+    localStorage.removeItem(KEY);
+    return {users:[],brands:[],contents:[],statuses:getDefault().statuses,
+      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[]};
+  }
 
   // Guard: ensure top-level arrays always exist (prevent .filter/.map crashes)
   if(!Array.isArray(data.users)) data.users=[];
   if(!Array.isArray(data.brands)) data.brands=[];
-  if(!Array.isArray(data.statuses)) data.statuses=[];
+  if(!Array.isArray(data.statuses)||!data.statuses.length) data.statuses=getDefault().statuses;
   if(!Array.isArray(data.contents)) data.contents=[];
-  if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=getDefault().scheduleBlocks;
-  if(!Array.isArray(data.adMetrics)) data.adMetrics=getDefault().adMetrics;
+  if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=[];
+  if(!Array.isArray(data.adMetrics)) data.adMetrics=[];
   if(!Array.isArray(data.tasks)) data.tasks=[];
   if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
-  // Guard: strip any null/corrupt entries that could crash .name/.color access
+  if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
   data.users=data.users.filter(x=>x&&x.id);
   data.brands=data.brands.filter(x=>x&&x.id);
   data.statuses=data.statuses.filter(x=>x&&x.id);
@@ -1724,19 +1736,9 @@ function D(){
     }
   });
 
-  // Migration: sync brand fields from defaults — only for brands that haven't been customised
-  const defaultBrands=getDefault().brands;
+  // Brands come from Supabase only — do NOT seed defaults here
+  // This prevents users from seeing different brand lists based on localStorage state
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
-  defaultBrands.forEach(db=>{
-    if(data.deletedBrandIds.includes(db.id)) return;
-    const eb=data.brands.find(b=>b.id===db.id);
-    if(!eb){
-      data.brands.push(db);
-    } else {
-      // Only sync templates — do NOT overwrite quota/breakdown/contract that admin may have customised
-      if(!eb.templates||!eb.templates.length) eb.templates=db.templates;
-    }
-  });
 
   // Migration: auto-insert content for every month of the contract year
   // Detects stale content (no month label) and replaces with full-year content
@@ -1831,6 +1833,9 @@ function D(){
 
   return data;
 }
+// save() writes to localStorage CACHE first (instant UI update),
+// then persists to Supabase (source of truth) asynchronously.
+// Supabase always wins on conflicts — initCloudSync overwrites cache on load.
 function save(data){localStorage.setItem(KEY,JSON.stringify(data));cloudSave(data);}
 function uid(){return Math.random().toString(36).slice(2,9);}
 
@@ -2897,7 +2902,22 @@ function renderBrandPage(){
   }else{
     contents=[...contents].sort((a,c2)=>(!a.postingDate?1:!c2.postingDate?-1:a.postingDate.localeCompare(c2.postingDate)));
   }
+  const socialLinks=(b.facebookUrl||b.instagramUrl||b.tiktokUrl)?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    ${b.facebookUrl?`<a href="${b.facebookUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#1877f222;border:1px solid #1877f244;border-radius:var(--r);font-size:13px;font-weight:600;color:#1877f2;text-decoration:none;transition:all .12s" onmouseover="this.style.background='#1877f233'" onmouseout="this.style.background='#1877f222'">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877f2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+      ${b.name} Facebook
+    </a>`:``}
+    <a href="https://business.facebook.com" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#0866ff22;border:1px solid #0866ff44;border-radius:var(--r);font-size:13px;font-weight:600;color:#0866ff;text-decoration:none;transition:all .12s" onmouseover="this.style.background='#0866ff33'" onmouseout="this.style.background='#0866ff22'">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+      Meta Business Suite
+    </a>
+    ${b.driveLink?`<a href="${b.driveLink}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--blud);border:1px solid var(--blu)44;border-radius:var(--r);font-size:13px;font-weight:600;color:var(--blu);text-decoration:none;transition:all .12s">
+      📁 Drive Folder
+    </a>`:``}
+  </div>`:``;
+
   const infoBar=b.infoSummary?`<div style="background:${b.color}11;border:1px solid ${b.color}33;border-radius:var(--r);padding:10px 14px;margin-bottom:12px;font-size:15px;line-height:1.6;color:var(--t2)">${b.infoSummary}</div>`:'';
+
   const isAdmin=isAdminUser(S.user)||S.user.role==='developer';
 
   function makeRow(c){
@@ -3044,7 +3064,7 @@ function renderBrandPage(){
 
   const sidebarBtn=`<button onclick="toggleSidebar()" title="Toggle sidebar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;color:var(--t2);cursor:pointer;font-family:'DM Mono',monospace;transition:all .12s;margin-bottom:10px" onmouseenter="this.style.borderColor='var(--ac)';this.style.color='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">☰ Toggle sidebar</button>`;
 
-  return sidebarBtn+stats+infoBar+filterRow+`<div class="panel" style="overflow:hidden">
+  return sidebarBtn+stats+socialLinks+infoBar+filterRow+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
@@ -8536,6 +8556,7 @@ function openBrandInfoModal(brandId){
       <div><label class="form-label">Drive folder</label><input class="form-input" id="bi-drive" type="url" value="${b.driveLink||''}" placeholder="https://drive.google.com/..."></div>
     </div>
     <div class="form-row"><label class="form-label">Brand guide link</label><input class="form-input" id="bi-guide" type="url" value="${b.brandGuide||''}" placeholder="https://drive.google.com/..."></div>
+    <div class="form-row"><label class="form-label">🔵 Facebook Page URL</label><input class="form-input" id="bi-facebook" type="url" value="${b.facebookUrl||''}" placeholder="https://www.facebook.com/yourpage"></div>
     <div class="form-row"><label class="form-label">Info summary</label><textarea class="form-textarea" id="bi-info">${b.infoSummary||''}</textarea></div>
     <div style="margin:4px 0 6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Monthly Quota Breakdown</div>
     <div class="form-row-2">
@@ -8571,6 +8592,7 @@ function saveBrandInfo(brandId){
     quota,quotaBreakdown,quotaLabels,
     driveLink:document.getElementById('bi-drive').value.trim(),
     brandGuide:document.getElementById('bi-guide').value.trim(),
+    facebookUrl:document.getElementById('bi-facebook').value.trim(),
     infoSummary:document.getElementById('bi-info').value.trim(),
     color:document.getElementById('bi-color').value,
     contractStart:document.getElementById('bi-cstart').value,
