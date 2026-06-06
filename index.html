@@ -952,7 +952,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
         DEFAULT_USERS.forEach(function(du){var ex=data.users.find(function(u){return u.id===du.id;});if(ex){ex.pass=du.pass;ex.role=du.role;ex.name=du.name;}else{data.users.push(du);}});
         return data.users;
       }}
-    }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+    }catch(e){}
     return DEFAULT_USERS;
   }
   window.doLogin=function(){
@@ -971,17 +971,10 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
       }
       var ls=document.getElementById('login-screen');var app=document.getElementById('app');
       if(ls)ls.style.display='none';if(app)app.style.display='flex';
-      // If cache exists → render instantly. If not → wait for Supabase (first login)
-      var _cr=null;try{var _raw=localStorage.getItem(LOGIN_KEY);if(_raw){var _d=JSON.parse(_raw);_cr=(_d&&_d.users&&_d.users.length>0)?_d:null;}}catch(_){}
-      if(_cr){
-        if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
-        if(typeof initAI==='function'){try{initAI();}catch(x){}}
-        if(typeof initCloudSync==='function'){initCloudSync();}
-      }else{
-        var _root=document.getElementById('page-root');
-        if(_root)_root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:DM Mono,monospace">Connecting…</div></div>';
-        if(typeof initCloudSync==='function'){initCloudSync().then(function(){if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}if(typeof initAI==='function'){try{initAI();}catch(x){}}}).catch(function(){if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}});}
-      }
+      // Render immediately, sync in background
+      if(typeof render==='function') render();
+      if(typeof initAI==='function'){try{initAI();}catch(x){}}
+      if(typeof initCloudSync==='function') initCloudSync();
     }else{if(errEl)errEl.textContent='Invalid name or password.';}
   };
   window.resetAppData=function(){
@@ -1169,8 +1162,8 @@ window.addEventListener('unhandledrejection',function(e){
 });
 
 function hardReset(){
-  try{localStorage.removeItem('uspify_v3');}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
-  try{sessionStorage.clear();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+  try{localStorage.removeItem('uspify_v3');}catch(e){}
+  try{sessionStorage.clear();}catch(e){}
   location.reload();
 }
 
@@ -1280,17 +1273,13 @@ function reapplyDefaultPasswords(users){
   return users;
 }
 
-async function cloudLoad(retries=3, delay=1000, skipWakeup=false){
+async function cloudLoad(retries=3, delay=1000){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
   for(let attempt=1; attempt<=retries; attempt++){
     try{
-      if(attempt===1) setSyncStatus('loading','Loading…');
-      else setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
-
+      setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading…');
       const controller=new AbortController();
-      // 8s timeout — Supabase typically responds in 1-3s when active
-      // On cold start it may take up to 8s; retries handle the rest
-      const timeout=setTimeout(()=>controller.abort(), 8000);
+      const timeout=setTimeout(()=>controller.abort(), 8000); // 8s timeout
       const [uR,bR,cR,sR]=await Promise.all([
         fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
@@ -1298,10 +1287,7 @@ async function cloudLoad(retries=3, delay=1000, skipWakeup=false){
         fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
       ]);
       clearTimeout(timeout);
-      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok){
-        const bad=[uR,bR,cR,sR].find(r=>!r.ok);
-        throw new Error('HTTP '+bad?.status);
-      }
+      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP '+[uR,bR,cR,sR].find(r=>!r.ok)?.status);
       const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
       const settings=sRows[0]?.data||{};
       const data={
@@ -1317,66 +1303,53 @@ async function cloudLoad(retries=3, delay=1000, skipWakeup=false){
         __savedBy:settings.__savedBy||'',
       };
       reapplyDefaultPasswords(data.users);
-      if(!data.users.length&&!data.brands.length) return null;
+    if(!data.users.length&&!data.brands.length) return null;
       setSyncStatus('live','Live ✓');
       return data;
     }catch(e){
       console.warn(`Supabase load attempt ${attempt}/${retries}:`,e.message);
       if(attempt===retries){
-        // All retries exhausted — silently use cached localStorage data
-        // Don't show a scary error: the app works fine from cache
+        // All retries failed — fall back to cached localStorage data
         setSyncStatus('idle','⚡ Offline mode');
         const cached=localStorage.getItem(KEY);
         if(cached){ try{ return JSON.parse(cached); }catch(_){} }
         return null;
       }
-      // Progressive delay: 1s, 2s before retrying
-      setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
-      await new Promise(r=>setTimeout(r, delay * attempt));
+      // Wait before retrying (1s, 2s, 4s)
+      setSyncStatus('idle',`Load failed, retrying…`);
+      await new Promise(r=>setTimeout(r, delay));
     }
   }
 }
 
-// Track which content IDs were modified since last cloud save (for broadcastPing)
+// Track dirty content IDs for broadcastPing
 let _dirtyContentIds=new Set();
-
-function markDirty(contentId){
-  if(contentId) _dirtyContentIds.add(contentId);
-}
+function markDirty(id){if(id)_dirtyContentIds.add(id);}
 
 async function cloudSave(data){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
-  if(_initSyncing){_pendingSave=data;return;} // block saves during initial cloud load
+  if(_initSyncing){_pendingSave=data;return;}
   if(_cloudSyncing){_pendingSave=data;return;}
   _cloudSyncing=true;
   setSyncStatus('saving','Saving…');
-
-  // Snapshot dirty IDs for broadcastPing, then clear
   const dirtyIds=new Set(_dirtyContentIds);
   _dirtyContentIds=new Set();
-
   try{
     const now=new Date().toISOString();
     const by=S.user?.name||'?';
-
-    // Always save users + brands + settings (small, fast)
     const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
     const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
     const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
-
-    // ALWAYS save ALL contents — never risk losing content by partial saves.
-    // Chunked at 50 rows per request for reliability.
-    const allContents=(data.contents||[]).filter(c=>c&&c.id);
+    // ALWAYS save ALL contents — never partial saves
+    const allC=(data.contents||[]).filter(c=>c&&c.id);
     const chunks=[];
-    for(let i=0;i<allContents.length;i+=50) chunks.push(allContents.slice(i,i+50));
-
+    for(let i=0;i<allC.length;i+=50) chunks.push(allC.slice(i,i+50));
     const reqs=[
       fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}),
       fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}),
       fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}),
       ...chunks.map(ch=>fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),body:JSON.stringify(ch.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))})),
     ];
-
     const results=await Promise.all(reqs);
     const failed=results.filter(r=>!r.ok);
     if(failed.length){
@@ -1390,9 +1363,7 @@ async function cloudSave(data){
     }
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
-    // Note: broadcast already fired in save() — this is just a safety net
-    // for cases where cloudSave is called directly (retries etc.)
-    broadcastPing([...dirtyIds], by).catch(()=>{});
+    broadcastPing([...dirtyIds],by).catch(()=>{});
   }catch(e){
     setSyncStatus('error','Save failed');
     console.error('Supabase save:',e.message);
@@ -1402,93 +1373,53 @@ async function cloudSave(data){
   }
 }
 
-// ── Broadcast a "data changed" ping to all connected browsers ──────────
-// Called after every cloudSave so Jack/Hualu see changes within ~100ms
 async function broadcastPing(contentIds, savedBy){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
   try{
-    // Use Supabase REST broadcast endpoint (no WS needed for sending)
-    await fetch(
-      CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',
-      {
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'apikey':CLOUD_CONFIG.ANON_KEY,
-          'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,
-        },
-        body:JSON.stringify({
-          messages:[{
-            topic:'uspify-updates',
-            event:'data_changed',
-            payload:{by:savedBy||'?', ids:contentIds||[], ts:Date.now()}
-          }]
-        })
-      }
-    );
-  }catch(e){
-    // Broadcast is best-effort — polling is the fallback
-  }
+    await fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
+      body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by:savedBy||'?',ids:contentIds||[],ts:Date.now()}}]})
+    });
+  }catch(e){}
 }
 
 function initRealtimeSync(){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
 
-  let ws, pollTimer, lastHash='', reconnectDelay=2000, heartbeatRef=0;
-  let _pulling=false; // prevent concurrent pulls
+  let ws, pollTimer, lastHash='', reconnectDelay=3000, heartbeatRef=0;
 
   function dataHash(data){
     try{
-      const contents=(data.contents||[]).map(c=>
-        c.id+c.statusId+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
-      ).sort().join('').slice(0,800);
-      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${contents}`;
+      const brands=(data.brands||[]).map(b=>b.id+b.name).sort().join(',');
+      const contents=(data.contents||[]).map(c=>c.id+c.statusId+(c.postingDate||'')).sort().join('').slice(0,300);
+      const settings=(data.scheduleBlocks||[]).length+'|'+(data.deletionLog||[]).length;
+      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${brands}|${contents}|${settings}`;
     }catch(e){ return String(Date.now()); }
   }
 
+  let _pulling=false;
   async function pullIfChanged(){
-    if(_pulling||_initSyncing) return; // skip if already pulling or init in progress
+    if(_pulling||_initSyncing) return;
     _pulling=true;
     try{
-      const fresh=await cloudLoad(2, 300, true); // skipWakeup (param kept for compat)
-      if(!fresh||!fresh.users?.length){_pulling=false;return;}
-
-      const h=dataHash(fresh);
-      if(h===lastHash){_pulling=false;return;} // nothing changed
-
-      lastHash=h;
-      const savedBy=fresh.__savedBy;
-      _dataCache=null;_dataCacheKey=null;
-      reapplyDefaultPasswords(fresh.users);
-      localStorage.setItem(KEY,JSON.stringify(fresh));
-
-      if(S.user){
-        const fu=fresh.users.find(u=>u.id===S.user.id);
-        if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}
+      const fresh=await cloudLoad(2, 500); // 2 retries, 500ms delay
+      if(fresh&&fresh.users?.length){
+        const h=dataHash(fresh);
+        if(h!==lastHash){
+          lastHash=h;
+          const savedBy=fresh.__savedBy;
+          _dataCache=null;_dataCacheKey=null;
+          localStorage.setItem(KEY,JSON.stringify(fresh));
+          if(S.user){
+            const fu=fresh.users.find(u=>u.id===S.user.id);
+            if(fu){S.user=fu;}
+          }
+          render();
+          if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
+        }
       }
-
-      // Protect active textareas from being wiped mid-edit
-      const detailOpen=document.getElementById('detail-overlay')?.classList.contains('open');
-      const activeEl=document.activeElement;
-      const isTyping=detailOpen&&activeEl&&(activeEl.tagName==='TEXTAREA'||activeEl.tagName==='INPUT')&&activeEl.id&&(
-        activeEl.id.startsWith('idea-')||
-        activeEl.id.startsWith('copy-ver-')||
-        activeEl.id.startsWith('copy-comment-')||
-        activeEl.id.startsWith('design-')||
-        activeEl.id.startsWith('video-')||
-        activeEl.id.startsWith('shoot-')
-      );
-
-      if(isTyping){
-        // Mid-edit: refresh sidebar/topbar counts only — do NOT re-render detail panel
-        try{renderSidebar();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
-        try{renderTopbar();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
-      } else {
-        render();
-        if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
-      }
-    }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
-    finally{ _pulling=false; }
+    }catch(e){}finally{_pulling=false;}
   }
 
   function startPolling(){
@@ -1502,80 +1433,44 @@ function initRealtimeSync(){
   }
 
   function sendMsg(msg){
-    try{if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg));}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+    try{if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg));}catch(e){}
   }
 
   function connectWS(){
     try{
-      // vsn=1.0.0 = Supabase Realtime v2 (confusingly named)
       const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')
         +'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
       ws=new WebSocket(wsUrl);
 
       ws.onopen=()=>{
-        reconnectDelay=2000;
+        reconnectDelay=3000;
         stopPolling();
         setSyncStatus('live','Live ✓');
 
-        // Channel 1: Broadcast — receives pings sent by broadcastPing()
-        // This is the fast path (<100ms) for workflow submissions
-        sendMsg({
-          topic:'realtime:uspify-updates',
-          event:'phx_join',
-          payload:{
-            config:{broadcast:{self:false},presence:{key:''}},
-            access_token:CLOUD_CONFIG.ANON_KEY
-          },
-          ref:'1'
-        });
-
-        // Channel 2: Postgres changes — catches any save that missed broadcast
-        // Acts as belt-and-suspenders fallback
-        sendMsg({
-          topic:'realtime:uspify-db',
-          event:'phx_join',
-          payload:{
-            config:{
-              broadcast:{self:false},
-              postgres_changes:[
-                {event:'UPDATE',schema:'public',table:'uspify_contents'},
-                {event:'UPDATE',schema:'public',table:'uspify_settings'},
-              ]
-            },
-            access_token:CLOUD_CONFIG.ANON_KEY
-          },
-          ref:'2'
-        });
+        // Join a single channel that listens to all table changes
+        sendMsg({topic:'realtime:uspify-updates',event:'phx_join',payload:{config:{broadcast:{self:false}},access_token:CLOUD_CONFIG.ANON_KEY},ref:'1'});
+        sendMsg({topic:'realtime:uspify-db',event:'phx_join',payload:{config:{broadcast:{self:false},postgres_changes:[{event:'UPDATE',schema:'public',table:'uspify_contents'},{event:'UPDATE',schema:'public',table:'uspify_settings'}]},access_token:CLOUD_CONFIG.ANON_KEY},ref:'2'});
       };
 
       ws.onmessage=async(e)=>{
         try{
           const msg=JSON.parse(e.data);
-
           // Reply to server heartbeats
           if(msg.event==='heartbeat'){
             sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)});
             return;
           }
-          // Skip join confirmations
+          // Ignore join confirmations and other system messages
           if(msg.event==='phx_reply') return;
-
-          // Broadcast ping from another user's save → pull immediately
+          // Any postgres change → pull fresh data
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            if(typeof _logNotifReceived==='function') _logNotifReceived(by);
-            // Only pull if SOMEONE ELSE saved - never pull our own saves
-            if(by!==S.user?.name){
-              pullIfChanged();
-            }
+            if(by!==S.user?.name) pullIfChanged();
             return;
           }
-
-          // Postgres change event (fallback)
-          const isDbChange=msg.event==='postgres_changes'
-            ||(msg.payload?.data?.type&&['INSERT','UPDATE','DELETE'].includes(msg.payload.data.type));
-          if(isDbChange) pullIfChanged();
-
+          if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
+            await pullIfChanged();
+          }
         }catch(err){}
       };
 
@@ -1583,64 +1478,48 @@ function initRealtimeSync(){
         setSyncStatus('idle','Reconnecting…');
         startPolling();
         setTimeout(connectWS, reconnectDelay);
-        reconnectDelay=Math.min(reconnectDelay*1.5, 15000);
+        reconnectDelay=Math.min(reconnectDelay*2, 30000);
       };
 
       ws.onerror=()=>{
-        setSyncStatus('error','Sync error — using polling');
+        setSyncStatus('error','Sync error');
         startPolling();
       };
 
     }catch(err){
-      setSyncStatus('error','RT failed — using polling');
+      setSyncStatus('error','RT failed');
       startPolling();
     }
   }
 
-  // Heartbeat every 20s to keep WS alive
-  setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 20000);
+  // Client-side heartbeat every 25s to keep connection alive
+  setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 25000);
 
-  // Pull immediately when tab gets focus
-  document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible') pullIfChanged();
-  });
-  window.addEventListener('focus', pullIfChanged);
+  // Initial hash from current data
+  try{ lastHash=dataHash(D()); }catch(e){}
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullIfChanged();});
+  window.addEventListener('focus',pullIfChanged);
 
-  try{ lastHash=dataHash(D()); }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
   connectWS();
 }
 
-let _initSyncing=false; // blocks cloudSave during initial load
-
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
-  _initSyncing=true;
-
-  // Start realtime sync immediately
-  initRealtimeSync();
-
-  // Load from Supabase
-  try{
-    const cloudData=await cloudLoad();
-    if(cloudData&&cloudData.users?.length){
-      reapplyDefaultPasswords(cloudData.users);
-      _dataCache=null;_dataCacheKey=null;
-      localStorage.setItem(KEY,JSON.stringify(cloudData));
-      if(S.user){
-        const freshUser=cloudData.users.find(u=>u.id===S.user.id);
-        if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
+  // SUPABASE = SOURCE OF TRUTH. Always overwrite localStorage cache on startup.
+  const cloudData=await cloudLoad();
+  if(cloudData&&cloudData.users?.length){
+    _dataCache=null; _dataCacheKey=null; // invalidate D() cache
+    localStorage.setItem(KEY,JSON.stringify(cloudData));
+    if(S.user){
+      const freshUser=cloudData.users.find(u=>u.id===S.user.id);
+      if(freshUser){
+        if(S.user.id==='leonard'||freshUser.id==='leonard') freshUser.role='admin';
+        S.user=freshUser;
       }
-      // Render now that we have real data
-      if(S.user&&typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
     }
-  }catch(e){
-    console.warn('initCloudSync load failed:',e.message);
-    // Still try to render from whatever cache we have
-    if(S.user&&typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
-  }finally{
-    _initSyncing=false;
-    if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
+    if(typeof render==='function') render();
   }
+  initRealtimeSync();
 }
 
 
@@ -1726,7 +1605,7 @@ function getStageDaysForUser(statusId, role){
 // Recalculate and update due dates when posting date changes
 function updateDueDatesFromPosting(c){
   if(!c.postingDate) return;
-  const isVideo=c.type==='Video'||c.type==='Reels';
+  const isVideo=c.type==='Video';
   c.dueDates=c.dueDates||{};
   c.dueDates.hualu=addWorkingDays(c.postingDate, isVideo?-4:-3);
   c.dueDates.leonard=addWorkingDays(c.postingDate, isVideo?-7:-5);
@@ -1946,14 +1825,11 @@ function D(){
   // This prevents users from seeing different brand lists based on localStorage state
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
 
-  // Migration: auto-insert content for every month of the contract year
-  // ONLY runs when Supabase is NOT configured (local-only mode)
-  // When Supabase is enabled, cloudLoad() is the source of truth — never auto-generate here
+  // Migration: only runs when Supabase is NOT enabled (local mode)
   const today2=new Date().toISOString().split('T')[0];
   let migratedPieces=0;
-  const _supabaseEnabled=!!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL&&window.USPIFY_CONFIG.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'&&window.USPIFY_CONFIG.SUPABASE_URL!=='%%SUPABASE_URL%%');
-  if(!_supabaseEnabled){ // only migrate when running without Supabase
-  data.brands.forEach(b=>{
+  const _sbOn=!!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL&&!window.USPIFY_CONFIG.SUPABASE_URL.includes('%%')&&window.USPIFY_CONFIG.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL');
+  if(!_sbOn) data.brands.forEach(b=>{
     if(!b.templates||!b.templates.length) return;
     const existing=data.contents.filter(c=>c.brandId===b.id);
 
@@ -1997,7 +1873,7 @@ function D(){
           postingDate=d.toISOString().split('T')[0];
         }
         if(!postingDate.startsWith(month)) postingDate=`${month}-${String(Math.min(daysInMonth,28)).padStart(2,'0')}`;
-        const isVid=(t.type==='Video')||(t.type==='Reels')||(t.cat==='videoAds')||(t.cat==='tiktok');
+        const isVid=(t.type==='Video')||(t.cat==='videoAds')||(t.cat==='tiktok');
         const hualuDueStr=addWorkingDays(postingDate,isVid?-4:-3);
         const leonardDueStr=addWorkingDays(postingDate,isVid?-7:-5);
         // Derive category from template prefix/cat — locked permanently so renaming doesn't change it
@@ -2021,8 +1897,7 @@ function D(){
       });
     });
   });
-  if(migratedPieces>0) localStorage.setItem(KEY,JSON.stringify(data));
-  } // end !_supabaseEnabled
+  if(migratedPieces>0) localStorage.setItem(KEY,JSON.stringify(data)); }// end !_sbOn
 
   // Migration: ensure each content has required fields
   data.contents.forEach(c=>{
@@ -2047,29 +1922,20 @@ function D(){
 
 let _saveDebounceTimer=null;
 function save(data, dirtyContentId){
-  _dataCache=null;_dataCacheKey=null; // invalidate cache
+  _dataCache=null;_dataCacheKey=null;
   localStorage.setItem(KEY,JSON.stringify(data));
   if(dirtyContentId) markDirty(dirtyContentId);
-  else markDirty(null);
-  // Debounce upload (batches rapid saves like typing)
   clearTimeout(_saveDebounceTimer);
   _saveDebounceTimer=setTimeout(()=>cloudSave(data), 150);
 }
 
-// saveNow: for workflow button clicks — uploads to Supabase FIRST, then broadcasts
-// This guarantees Jack pulls fresh data (not old data) when he receives the ping
 async function saveNow(data, dirtyContentId){
   _dataCache=null;_dataCacheKey=null;
   localStorage.setItem(KEY,JSON.stringify(data));
   if(dirtyContentId) markDirty(dirtyContentId);
-  else markDirty(null);
-  clearTimeout(_saveDebounceTimer); // cancel any pending debounced save
-  // Upload to Supabase immediately (no debounce)
+  clearTimeout(_saveDebounceTimer);
   await cloudSave(data);
-  // Broadcast AFTER data is safely in Supabase
-  if(CLOUD_CONFIG.ENABLED && S.user?.name){
-    broadcastPing(dirtyContentId?[dirtyContentId]:[], S.user.name).catch(()=>{});
-  }
+  if(CLOUD_CONFIG.ENABLED&&S.user?.name) broadcastPing(dirtyContentId?[dirtyContentId]:[],S.user.name).catch(()=>{});
 }
 function uid(){return Math.random().toString(36).slice(2,9);}
 
@@ -2191,7 +2057,6 @@ function doLogin(){
   if(!nameEl||!passEl)return;
   const name=nameEl.value.trim().toLowerCase();
   const pass=passEl.value.trim();
-
   const HARDCODED=[
     {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
     {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
@@ -2201,35 +2066,19 @@ function doLogin(){
     {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard'},
     {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
   ];
-
   const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
-  if(!hc||hc.pass!==pass){
-    if(errEl)errEl.textContent='Invalid name or password.';
-    return;
-  }
-
+  if(!hc||hc.pass!==pass){if(errEl)errEl.textContent='Invalid name or password.';return;}
   const data=D();
   const stored=data.users.find(u=>u.id===hc.id);
   const user=stored?{...stored,pass:hc.pass,role:hc.role}:hc;
-
   S.user=user;
   sessionStorage.setItem('uspify_uid',user.id);
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   if(user.role==='client'){S.page='client_approvals';S.brand=null;}
-
-  // Cache exists → instant render. No cache → wait for Supabase
-  const _cc=localStorage.getItem(KEY);
-  let _hasC=false;try{const _p=JSON.parse(_cc||'{}');_hasC=!!(_p.users&&_p.users.length);}catch(_){}
-  if(_hasC){
-    try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
-    try{initAI();}catch(x){}
-    if(typeof initCloudSync==='function') initCloudSync();
-  }else{
-    const _r2=document.getElementById('page-root');
-    if(_r2)_r2.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Connecting…</div></div>';
-    if(typeof initCloudSync==='function'){initCloudSync().then(()=>{try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}try{initAI();}catch(x){}}).catch(()=>{try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}try{initAI();}catch(x){}});}
-  }
+  render();
+  try{initAI();}catch(x){}
+  if(typeof initCloudSync==='function') initCloudSync();
 }
 function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
 
@@ -2279,8 +2128,7 @@ function nav(page,brandId){
   if(page==='tracker')S.trackerTab=brandId||'all';
   // Reset brand page filters when switching brands
   const _cm=new Date().toISOString().slice(0,7);if(brandId&&brandId!==prevBrand){S.trackerFilterType='all';S.trackerFilterStatus='all';S.brandMonthFilter=_cm;S.brandSort='date';}if(!S.brandMonthFilter||S.brandMonthFilter==='all')S.brandMonthFilter=_cm;
-  // Persist page/brand so refresh restores the same view
-  try{sessionStorage.setItem('uspify_page',page);sessionStorage.setItem('uspify_brand',brandId||'');}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+  try{sessionStorage.setItem('uspify_page',page);sessionStorage.setItem('uspify_brand',brandId||'');}catch(e){}
   closeModal();
   if(page!=='brand') closeSidebar();
   render();
@@ -2288,18 +2136,10 @@ function nav(page,brandId){
 
 // ===================== RENDER =====================
 function render(){
-  if(!S.user) return;
-  try{
-    if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
-    else document.body.classList.remove('light-mode');
-    renderSidebar();
-    renderTopbar();
-    renderPage();
-  }catch(e){
-    const _er=document.getElementById('page-root');
-    if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:13px;background:#1a1a1a;white-space:pre-wrap">RENDER ERROR — please screenshot this and report:\n'+String(e)+'\n'+(e.stack||'')+'</pre>';
-    console.error('render() error:',e);
-  }
+  if(!S.user) return; // never render without a logged-in user
+  if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
+  else document.body.classList.remove('light-mode');
+  renderSidebar();renderTopbar();renderPage();
 }
 
 // Lighter re-render — only updates page content, skips sidebar & topbar rebuild
@@ -2328,8 +2168,8 @@ function renderSidebar(){
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
     {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length},
-    ...(isAdmin||S.user.role==='senior'?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
-    ...(isAdmin||S.user.role==='senior'?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
+    ...(isAdmin?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
+    ...(isAdmin?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
     {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
     {id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'},
@@ -2389,8 +2229,7 @@ function renderTopbar(){
   else if(S.page==='responsibilities'){title='Responsibilities';sub='Assign PIC to each workflow stage per employee';}
   else if(S.page==='team'){title='Team';sub='Workload, tasks & auto-progress';}
   else if(S.page==='set_password'){title='Set Password';sub='Change your login password';}
-  document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}
-    ${isAdminUser(S.user)||S.user.role==='senior'?`<button onclick="openNotifTestPanel()" title="Test notifications" style="background:var(--purd);border:1px solid var(--pur);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:13px;color:var(--pur);font-family:'DM Mono',monospace;font-weight:700;transition:all .12s" onmouseenter="this.style.background='var(--pur)';this.style.color='#fff'" onmouseleave="this.style.background='var(--purd)';this.style.color='var(--pur)'">🔔 Test</button>`:''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
+  document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
 }
 
 function toggleTheme(){
@@ -3354,66 +3193,34 @@ function renderBrandPage(){
 function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
-
-  // ALL senior approval statuses — the old flow used 'senior_approval',
-  // the new flow uses senior_approval_ideation / _video / _copy
-  const ALL_SENIOR_STATUSES=['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'];
-  const sa=data.contents.filter(c=>ALL_SENIOR_STATUSES.includes(c.statusId));
+  const sa=data.contents.filter(c=>c.statusId==='senior_approval');
   const ca=data.contents.filter(c=>c.statusId==='client_approval');
-
-  // Stage label & next status per approval type
-  const STAGE_META={
-    'senior_approval':          {icon:'🔍', label:'Copy / General',   color:'var(--amb)', nextStatus:'client_approval', btnLabel:'Approve → Client'},
-    'senior_approval_ideation': {icon:'💡', label:'Ideation / Script', color:'var(--blu)', nextStatus:'_ideation',       btnLabel:'Approve → Design/Shoot'},
-    'senior_approval_video':    {icon:'✂️', label:'Video / Design',    color:'var(--ora)', nextStatus:'_video',          btnLabel:'Approve → Copywriting'},
-    'senior_approval_copy':     {icon:'✍️', label:'Copywriting',       color:'var(--tel)', nextStatus:'client_approval', btnLabel:'Approve → Client'},
-  };
-
-  function apprItem(c){
-    const b=getBrand(data,c.brandId);
-    const last=c.statusHistory[c.statusHistory.length-1];
+  function apprItem(c,nextId,label){
+    const b=getBrand(data,c.brandId);const last=c.statusHistory[c.statusHistory.length-1];
     const submitter=last?getUser(data,last.changedBy):{name:'?'};
-    const meta=STAGE_META[c.statusId]||STAGE_META['senior_approval'];
-    const tabTarget=c.statusId==='senior_approval_ideation'?'dp-ideation':
-                    c.statusId==='senior_approval_video'?((c.type==='Video'||c.type==='Reels')?'dp-video':'dp-design'):
-                    c.statusId==='senior_approval_copy'?'dp-copy':'dp-comments';
-    // Smart approve action based on status
-    const onApprove=c.statusId==='senior_approval_ideation'
-      ? `wfApproveIdeationForVideo('${c.id}')`
-      : c.statusId==='senior_approval_video'
-      ? `wfApproveVideo('${c.id}')`
-      : c.statusId==='senior_approval_copy'
-      ? `wfSeniorApprove('${c.id}')`
-      : `approveContent('${c.id}','client_approval')`;
     return `<div class="appr-item">
-      <div class="appr-icon" style="background:${meta.color}22;font-size:18px">${meta.icon}</div>
+      <div class="appr-icon" style="background:${b.color}22">${c.type==='Video'?'\u25B6':'\u25A6'}</div>
       <div class="appr-info">
-        <div class="appr-name" onclick="openContentDetail('${c.id}','${tabTarget}')">${c.title}</div>
-        <div class="appr-meta">
-          ${brandBadge(b)}
-          <span class="sbadge" style="background:${meta.color}22;color:${meta.color};margin-left:4px">${meta.label}</span>
-          · 📅 ${fmt(c.postingDate)}
-        </div>
-        <div class="appr-meta" style="margin-top:2px">Submitted by <strong>${submitter.name}</strong> · ${last?fmt(last.changedAt):''}</div>
+        <div class="appr-name" onclick="openContentDetail('${c.id}')">${c.title}</div>
+        <div class="appr-meta">${brandBadge(b)} · Posting ${fmt(c.postingDate)}</div>
+        <div class="appr-meta" style="margin-top:2px">By ${submitter.name} · ${last?fmt(last.changedAt):''}</div>
         ${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)">Drive ↗</a>`:''}
       </div>
       <div class="appr-actions">
-        <button class="btn-approve" onclick="${onApprove}">${meta.btnLabel}</button>
+        <button class="btn-approve" onclick="approveContent('${c.id}','${nextId}')">${label}</button>
         <button class="btn-revise" onclick="openReviseModal('${c.id}')">Revise</button>
-        <button class="btn btn-ghost btn-sm" onclick="openContentDetail('${c.id}','${tabTarget}')">View →</button>
       </div>
     </div>`;
   }
-
   return `<div class="two-col">
-    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">⏳ Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
-    <div class="pb">${sa.length?sa.map(c=>apprItem(c)).join(''):`<div class="empty-msg">All clear ✓</div>`}</div></div>
-    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--pnk)">🤝 Client Approval</div><div class="ph-sub">${ca.length} pending</div></div>
+    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
+    <div class="pb">${sa.length?sa.map(c=>apprItem(c,'client_approval','Approve →')).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
+    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--pnk)">Client Approval</div><div class="ph-sub">${ca.length} pending</div></div>
     <div class="pb">${ca.length?ca.map(c=>{
       const clientEntry=c.statusHistory.slice().reverse().find(h=>h.statusId==='client_approval');
       const mover=clientEntry?getUser(data,clientEntry.changedBy):{name:'?'};
-      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c)}</div>`;
-    }).join(''):`<div class="empty-msg">All clear ✓</div>`}</div></div>
+      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c,'posted','Mark Posted')}</div>`;
+    }).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
   </div>`;
 }
 // ===================== CLIENT POST PAGE =====================
@@ -3494,11 +3301,11 @@ function renderClientPost(){
   </div>`;
 }
 
-async function approveContent(id,nextStatusId){
+function approveContent(id,nextStatusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  await saveNow(data, c.id);render();
+  save(data);render();
 }
 function openReviseModal(id){
   const data=D();
@@ -3841,7 +3648,7 @@ function initCalendarInteractions(){
     const top=(now.getHours()-7)*90+(now.getMinutes()/60)*90;
     // Scroll the page to show current time (offset by topbar ~72px)
     setTimeout(()=>{window.scrollTo({top:Math.max(0,top+72-200),behavior:'smooth'});},80);
-  }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+  }catch(e){}
 }
 
 function renderBrandCalendar(){
@@ -5580,7 +5387,7 @@ CAROUSEL_FLOW.forEach((s,i)=>s.flowKey='cf'+i);
 // getProgressForFlowPipeline — used only for the flow pipeline visual (uses VIDEO_FLOW steps)
 function getProgressForFlowPipeline(c){
   if(!c)return 0;
-  const flow=c.type==='Video'?VIDEO_FLOW:CAROUSEL_FLOW;
+  const flow=(c.type==='Video'||c.type==='Reels')?VIDEO_FLOW:CAROUSEL_FLOW;
   const idx=getFlowCurrentIndex(flow,c.statusHistory,c.statusId);
   return flow[idx]?flow[idx].step:0;
 }
@@ -5747,8 +5554,8 @@ function getDefaultTabForContent(c){
     'ideation':'dp-ideation',
     'script':'dp-copy',
     'design':'dp-design',
-    'shoot': (c.type==='Video'||c.type==='Reels')?'dp-shoot':'dp-ideation',
-    'video_editing': (c.type==='Video'||c.type==='Reels')?'dp-video':'dp-design',
+    'shoot': isVideo?'dp-shoot':'dp-ideation',
+    'video_editing': isVideo?'dp-video':'dp-design',
     'copywriting':'dp-copy',
     'senior_approval':'dp-copy',
     'senior_approval_ideation':'dp-ideation',
@@ -5770,7 +5577,7 @@ function renderDetailPage(id, forceTab){
   const days=daysUntil(c.postingDate);
 
   // Choose flow
-  const flow = (c.type==='Video'||c.type==='Reels') ? VIDEO_FLOW : CAROUSEL_FLOW;
+  const flow = c.type==='Video' ? VIDEO_FLOW : CAROUSEL_FLOW;
 
   // --- TOPBAR ---
   document.getElementById('detail-title').innerHTML='';
@@ -5810,7 +5617,7 @@ function renderDetailPage(id, forceTab){
 
   // Smart default tab — type-aware, supports forceTab override
   const defaultTab = forceTab || getDefaultTabForContent(c);
-  const isVideoType = c.type==='Video'||c.type==='Reels';
+  const isVideoType = c.type==='Video';
 
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
   if(c.jobKind==='task'){
@@ -6036,7 +5843,7 @@ function openReverseFlowConfirm(id){
     </div>`);
 }
 
-async function executeReverseFlow(id, prevStatusId){
+function executeReverseFlow(id, prevStatusId){
   const reason=document.getElementById('reverse-reason')?.value.trim();
   if(!reason){alert('Please enter a reason for reversing the flow.');return;}
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -6059,7 +5866,7 @@ async function executeReverseFlow(id, prevStatusId){
     if(!c.workflowTasks)c.workflowTasks=[];
     c.workflowTasks.push({id:'wt'+uid(),assigneeId:picUser.id,status:'open',statusId:prevStatusId,label:`${prev.name} (reversed)`,openedAt:today});
   }
-  await saveNow(data, c.id);closeModal();renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);closeModal();renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`⬅ Reversed to ${prev.name}${picUser?' — '+picUser.name+' reassigned':''}`);
 }
 function driveEmbedUrl(url){
@@ -6132,7 +5939,7 @@ function autosaveCopyVersion(id){
   _autoSaveTimers['cv_'+id]=setTimeout(()=>{
     saveCopyVersion(id,getCopyVerIdx(id));
     setAutosaveStatus('saved','✓ autosaved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },200); // fast save beats pullIfChanged
+  },900);
 }
 
 function submitCopyForReview(id,verIdx){
@@ -6149,7 +5956,7 @@ function submitCopyForReview(id,verIdx){
   showAIToast(`📤 Copy ${v[verIdx].label} submitted — senior notified`);
 }
 
-async function approveCopyVersion(id,verIdx){
+function approveCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
@@ -6158,10 +5965,10 @@ async function approveCopyVersion(id,verIdx){
   c.statusId='senior_approval_copy';c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✅ Copy ${v[verIdx].label} approved by ${S.user.name}.${note?' Note: '+note:''} → Senior Approval.`,type:'copy',createdAt:new Date().toISOString().split('T')[0]});
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
 }
 
-async function amendCopyVersion(id,verIdx){
+function amendCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
@@ -6177,7 +5984,7 @@ async function amendCopyVersion(id,verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
 }
 
 function renderCopywritingPanel(c,id){
@@ -6569,7 +6376,7 @@ function autosaveVideoField(id, field, val){
     c[field]=val;save(data);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },200); // fast save beats pullIfChanged
+  },900);
 }
 
 function saveVideoNotes(id){
@@ -6879,7 +6686,7 @@ function autosaveDesignNotes(id, verIdx){
   },900);
 }
 
-async function approveDesign(id, verIdx){
+function approveDesign(id, verIdx){
   saveWfReviewComment(id,'Senior Approved — Design');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
@@ -6901,11 +6708,11 @@ async function approveDesign(id, verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Design approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-async function amendDesign(id, verIdx){
+function amendDesign(id, verIdx){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining what needs to be amended.');return;}
@@ -6926,11 +6733,11 @@ async function amendDesign(id, verIdx){
   c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Design amendment — ${designer.name} notified`);
 }
 
-async function designerSubmitForReview(id, verIdx){
+function designerSubmitForReview(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
   if(!versions[verIdx].link){alert('Please upload a design file first.');return;}
@@ -6956,7 +6763,7 @@ async function designerSubmitForReview(id, verIdx){
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[senior.id];
-  await saveNow(data, c.id);
+  save(data);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`\uD83D\uDCE4 Design ${versions[verIdx].label} submitted \u2014 ${senior.name} notified`);
 }
@@ -7275,20 +7082,20 @@ function setAutosaveStatus(status, label){
 }
 
 function autosaveCopywriting(id){
-  setAutosaveStatus('saving','saving…');
+  setAutosaveStatus('saving','saving\u2026');
   clearTimeout(_autoSaveTimers['copy_'+id]);
   _autoSaveTimers['copy_'+id]=setTimeout(()=>{
     const inp=document.getElementById('copy-input-'+id);
     if(!inp)return;
     const data=D();const c=data.contents.find(x=>x.id===id);
-    if(c){c.copywriting=inp.value;save(data,c.id);}
+    if(c){c.copywriting=inp.value;save(data);}
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },200);
+  },900);
 }
 
 function autosaveIdeation(id){
-  setAutosaveStatus('saving','saving…');
+  setAutosaveStatus('saving','saving\u2026');
   clearTimeout(_autoSaveTimers['idea_'+id]);
   _autoSaveTimers['idea_'+id]=setTimeout(()=>{
     const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7296,10 +7103,10 @@ function autosaveIdeation(id){
     const verIdx=getIdeaVerIndex(id);
     _saveIdeaTextFields(c,versions,verIdx);
     c.ideationVersions=versions;
-    save(data, c.id);
+    save(data);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
-  },200); // 200ms so it saves BEFORE pullIfChanged can wipe the textarea
+  },900);
 }
 
 // ===================== WORKFLOW ENGINE =====================
@@ -7480,8 +7287,6 @@ function renderWorkflowActionBox(data, c){
   const designer=getDesigner(data,c);
   const creator=getContentCreator(data,c);
   const senior=getSenior(data,c);
-  // Video & Reels both need shooting → VIDEO_FLOW
-  // Carousel & Single Image → CAROUSEL_FLOW (design only)
   const isVideo=c.type==='Video'||c.type==='Reels';
   const isCarousel=!isVideo;
 
@@ -7722,18 +7527,18 @@ function renderWorkflowActionBox(data, c){
 
   return withHistory('');
 }
-async function wfMarkPosted(id){
+function wfMarkPosted(id){
   saveWfReviewComment(id,'Client Approved — Posted');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   c.statusId='posted';
   c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
   (c.workflowTasks||[]).filter(t=>t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🚀 Marked as posted!');
 }
 
-async function wfClientAmend(id){
+function wfClientAmend(id){
   saveWfReviewComment(id,'Client Requested Changes');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
@@ -7746,7 +7551,7 @@ async function wfClientAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🔄 Sent back for revisions');
 }
 
@@ -7777,7 +7582,7 @@ function wfSaveVideoLink(id){
 }
 
 // VIDEO: submit script for approval
-async function wfSubmitScript(id){
+function wfSubmitScript(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.scriptPendingApproval=true;
   const senior=getSenior(data,c);
@@ -7809,7 +7614,7 @@ async function wfSubmitIdeationForVideo(id){
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  await await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Ideation submitted — ${senior.name} notified to review`);
 }
 
@@ -7894,7 +7699,7 @@ async function wfAmendIdeationForVideo(id){
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
 }
 
-async function markTaskDone(id){
+function markTaskDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
   c.taskDone=true;
@@ -7906,12 +7711,12 @@ async function markTaskDone(id){
   // Dismiss amendment notif if any
   if(!c.amendNotifDismissed)c.amendNotifDismissed={};
   c.amendNotifDismissed[S.user.id]=true;
-  await saveNow(data, c.id);
+  save(data);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('✅ Task marked as done!');
 }
 
-async function wfApproveVideo(id){
+function wfApproveVideo(id){
   saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -7925,11 +7730,11 @@ async function wfApproveVideo(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Video approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-async function wfAmendVideo(id){
+function wfAmendVideo(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -7945,7 +7750,7 @@ async function wfAmendVideo(id){
   c.statusId='video_editing';
   c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Video amendment — ${designer.name} notified`);
 }
 
@@ -8011,22 +7816,20 @@ async function carouselSubmitDesign(id){
   showAIToast(`📤 Design submitted — ${senior.name} notified to review`);
 }
 
-async async function wfSubmitCopy(id){
+async function wfSubmitCopy(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const senior=getSenior(data,c);
   const today=new Date().toISOString().split('T')[0];
-  // Close Leonard's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   c.statusId='senior_approval_copy';
   c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  notifyApproved(c, senior, 'Copy ready for review ✍️', S.user.name);
-  await await saveNow(data, c.id); // upload + broadcast before re-render
-  renderDetailPage(id);renderSidebar();renderTopbar();
+  notifyApproved(c,senior,'Copy ready for review ✍️',S.user.name);
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Copy submitted — ${senior.name} notified`);
 }
 
-async function wfSeniorApprove(id){
+function wfSeniorApprove(id){
   saveWfReviewComment(id,'Senior Approved Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -8036,11 +7839,11 @@ async function wfSeniorApprove(id){
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Approved — moved to client approval`);
 }
 
-async function wfSeniorAmend(id){
+function wfSeniorAmend(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -8056,7 +7859,7 @@ async function wfSeniorAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
 }
 
@@ -8082,7 +7885,7 @@ async function getGdriveToken(){
           clearInterval(check);w.close();resolve(token);
         }
         if(w.closed){clearInterval(check);reject(new Error('Auth window closed'));}
-      }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+      }catch(e){}
     },500);
   });
 }
@@ -8099,7 +7902,7 @@ async function uploadFootageToDrive(event, id){
 
   c.footageFileName=file.name;
   c.footageFileSize=Math.round(file.size/1024/1024*10)/10+'MB';
-  await saveNow(data, c.id);
+  save(data);
 
   if(GDRIVE_CLIENT_ID==='YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'){
     // Not configured — show file selected + manual fallback
@@ -8159,7 +7962,7 @@ async function uploadFootageToDrive(event, id){
     });
 
     const driveLink=`https://drive.google.com/file/d/${result.id}/view`;
-    c.footageLink=driveLink;await saveNow(data, c.id);
+    c.footageLink=driveLink;save(data);
     if(progWrap) progWrap.style.display='none';
     if(statusEl) statusEl.innerHTML=`<span style="color:var(--ac)">✅ Uploaded: <strong>${file.name}</strong> (${c.footageFileSize})</span>`;
     const panel=document.getElementById('dp-shoot');
@@ -8300,24 +8103,20 @@ function wfAssignToDesigner(id){
 }
 
 // VIDEO: shooting done → designer to edit
-async function wfShootDone(id){
+function wfShootDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-footage-link-'+id);
   if(linkInp&&linkInp.value.trim()) c.footageLink=linkInp.value.trim();
   const designer=getDesigner(data,c);
-  const today=new Date().toISOString().split('T')[0];
-  // Close Leonard's open tasks
-  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
-  c.statusId='video_editing';
-  c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
-  c.assignees=[designer.id];
-  notifyApproved(c, designer, 'Footage ready — start editing! ✂️', S.user.name);
-  await saveNow(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
-  showAIToast(`✅ Shooting done — ${designer.name} notified to edit`);
+  const prev=[...c.assignees];
+  wfTransition(data,c,'video_editing',[designer.id],
+    `\uD83C\uDFAC Shooting done by ${S.user.name}.${c.footageLink?' Footage link added.':''} Assigned to ${designer.name} for video editing.`,prev);
+  save(data); renderDetailPage(id); renderSidebar(); renderTopbar();
+  showAIToast(`\u2705 Shooting done \u2014 ${designer.name} assigned to edit`);
 }
 
 // VIDEO: video editing done → senior review
-async function wfVideoDone(id){
+function wfVideoDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-video-link-'+id)||document.getElementById('video-edit-input-'+id);
   if(linkInp&&linkInp.value.trim()) c.videoEditLink=linkInp.value.trim();
@@ -8335,7 +8134,7 @@ async function wfVideoDone(id){
   c.statusId='senior_approval_video';
   c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  await saveNow(data, c.id); renderDetailPage(id); renderSidebar(); renderTopbar();
+  save(data); renderDetailPage(id); renderSidebar(); renderTopbar();
   showAIToast(`✅ Video submitted — ${senior.name} notified to review`);
 }
 
@@ -8347,7 +8146,7 @@ function switchDetailTab(el,showId){
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
   ['dt-overview','dt-copy','dt-comments','dt-history'].forEach(id=>{const d=document.getElementById(id);if(d)d.style.display=id===showId?'block':'none';});
 }
-function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.driveLink=inp.value.trim();save(data, c.id);renderDetailPage(id);}}
+function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.driveLink=inp.value.trim();save(data);renderDetailPage(id);}}
 function saveCopywriting(id){const inp=document.getElementById('copy-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.copywriting=inp.value;save(data);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);}}
 function saveComment(id){
   const text=document.getElementById('comment-input-'+id).value.trim();if(!text)return;
@@ -8356,7 +8155,7 @@ function saveComment(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
-  save(data, c.id);renderDetailPage(id);
+  save(data);renderDetailPage(id);
 }
 function saveCopyComment(id){
   const text=document.getElementById('copy-comment-input-'+id)?.value.trim();if(!text)return;
@@ -8364,12 +8163,12 @@ function saveCopyComment(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
-  save(data, c.id);renderDetailPage(id);
+  save(data);renderDetailPage(id);
 }
 function changeStatus(id,statusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c||c.statusId===statusId)return;
   c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  save(data, c.id);renderDetailPage(id);renderSidebar();
+  save(data);renderDetailPage(id);renderSidebar();
 }
 function confirmDeleteContent(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -9835,30 +9634,53 @@ function getAlertItems(data){
   const uid=S.user?.id;
   const role=S.user?.role;
   const items=[];
-  const seen=new Set();
-  function addItem(c){if(!c||seen.has(c.id))return;seen.add(c.id);items.push(c);}
 
-  // UNIVERSAL RULE: open workflowTask for this user = notification
-  data.contents.filter(c=>
-    c.statusId!=='posted'&&
-    (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
-  ).forEach(addItem);
+  // Shoot notifications for Leonard (content_creator)
+  if(role==='content_creator'||role==='admin'){
+    data.contents.filter(c=>
+      c.statusId==='shoot'&&c.shootNotified&&!(c.shootNotifDismissed||{})[uid]
+    ).forEach(c=>items.push(c));
+    // Copywriting notifications for Leonard
+    data.contents.filter(c=>
+      c.statusId==='copywriting'&&c.copyNotified&&!(c.copyNotifDismissed||{})[uid]
+    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+  }
 
-  // Senior/admin: also show all pending approval items (even without explicit task)
+  // Editing notifications for Hualu (designer) — footage ready to edit (video)
+  if(role==='designer'||role==='admin'){
+    data.contents.filter(c=>
+      c.statusId==='video_editing'&&c.designerAlerted&&!(c.editNotifDismissed||{})[uid]
+    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+
+    // Carousel design notifications — ideation approved, Hualu needs to start designing
+    data.contents.filter(c=>
+      c.type!=='Video' &&
+      c.statusId==='design' &&
+      !(c.designNotifDismissed||{})[uid] &&
+      (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.statusId==='design')
+    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
+  }
+
+  // All senior approval notifications for Jack (senior)
   if(role==='senior'||role==='admin'){
-    const SENIOR=['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'];
-    data.contents.filter(c=>SENIOR.includes(c.statusId)).forEach(addItem);
+    data.contents.filter(c=>
+      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')
+      &&!(c.seniorNotifDismissed||{})[uid]
+    ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
   }
 
-  // Admin: also show all client approvals
-  if(role==='admin'){
-    data.contents.filter(c=>c.statusId==='client_approval').forEach(addItem);
-  }
+  // Amendment notifications — for anyone whose work was rejected
+  data.contents.filter(c=>{
+    if((c.amendNotifDismissed||{})[uid])return false;
+    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
+  }).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
 
-  // Deletion notifications
+  // Deletion notifications for admins/seniors (someone removed content)
   if(role==='admin'||role==='senior'){
-    (data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid)
-      .forEach(e=>items.push({_isDeletion:true,...e}));
+    (data.deletionLog||[]).filter(entry=>
+      !entry.dismissedBy.includes(uid) &&
+      entry.deletedById!==uid // don't notify the person who deleted it
+    ).forEach(entry=>items.push({_isDeletion:true,...entry}));
   }
   return items;
 }
@@ -9875,83 +9697,328 @@ function renderNotifBell(data){
 function renderNotifPanel(){
   const data=D();
   const body=document.getElementById('notif-body');
-  const uid=S.user?.id;
   const role=S.user?.role;
-  let html='';
+  const uid=S.user?.id;
+  let sections=[];
 
-  const STATUS_ICON={'ideation':'💡','senior_approval_ideation':'💡','shoot':'🎬',
-    'video_editing':'✂️','design':'🎨','senior_approval_video':'🎨',
-    'copywriting':'✍️','senior_approval_copy':'✍️','senior_approval':'🔍',
-    'client_approval':'🤝','posted':'🚀'};
-  const STATUS_COLOR={'ideation':'var(--t3)','senior_approval_ideation':'var(--blu)',
-    'shoot':'var(--pur)','video_editing':'var(--ora)','design':'var(--blu)',
-    'senior_approval_video':'var(--ora)','copywriting':'var(--tel)',
-    'senior_approval_copy':'var(--tel)','senior_approval':'var(--amb)',
-    'client_approval':'var(--pnk)','posted':'var(--ac)'};
-
-  // All items this user needs to act on
-  const taskItems=data.contents.filter(c=>
-    c.statusId!=='posted'&&
-    (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open')
-  );
-  const seniorItems=(role==='senior'||role==='admin')
-    ?data.contents.filter(c=>
-        ['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'].includes(c.statusId)
-        &&!taskItems.find(x=>x.id===c.id))
-    :[];
-  const clientItems=role==='admin'
-    ?data.contents.filter(c=>c.statusId==='client_approval'&&!taskItems.find(x=>x.id===c.id))
-    :[];
-
-  const allItems=[...taskItems,...seniorItems,...clientItems];
-
-  if(allItems.length){
-    const rows=allItems.map(c=>{
-      const b=getBrand(data,c.brandId);
-      const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
-      const isAmend=openTask&&openTask.label&&openTask.label.includes('🔄');
-      const stColor=isAmend?'var(--red)':(STATUS_COLOR[c.statusId]||'var(--t3)');
-      const stIcon=isAmend?'🔄':(STATUS_ICON[c.statusId]||'📋');
-      const taskLabel=openTask?openTask.label.replace(/^[^ ]+ /,''):'Review needed';
-      const tabTarget=
-        c.statusId==='senior_approval_ideation'?'dp-ideation':
-        c.statusId==='senior_approval_video'?(c.type==='Video'?'dp-video':'dp-design'):
-        (c.statusId==='senior_approval_copy'||c.statusId==='copywriting')?'dp-copy':
-        c.statusId==='design'?'dp-design':
-        c.statusId==='video_editing'?'dp-video':
-        c.statusId==='shoot'?'dp-shoot':'dp-ideation';
-      return `<div class="np-item" style="border-left:3px solid ${stColor}" onclick="closeNotifPanel();openContentDetail('${c.id}','${tabTarget}')">
-        <div class="np-icon" style="background:${stColor}22;color:${stColor};font-size:18px;flex-shrink:0">${stIcon}</div>
-        <div class="np-info">
-          <div class="np-name">${c.title}</div>
-          <div class="np-meta">
-            <span style="color:${b.color};font-weight:700">${b.name}</span>
-            · <span style="color:${stColor};font-weight:600">${taskLabel}</span>
-            ${c.postingDate?`· 📅 ${fmt(c.postingDate)}`:''}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-    html+=`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">🔔 YOUR TASKS (${allItems.length})</div>${rows}`;
-  }
-
-  // Deletion notifications
-  if(role==='admin'||role==='senior'){
-    const dels=(data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid);
-    if(dels.length){
-      html+=`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 REMOVED (${dels.length})</div>`;
-      html+=dels.map(e=>`<div class="np-item" style="border-left:3px solid var(--red)">
-        <div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px">🗑</div>
-        <div class="np-info">
-          <div class="np-name" style="color:var(--red)">${e.title}</div>
-          <div class="np-meta"><span style="color:${e.brandColor||'#888'};font-weight:700">${e.brandName}</span> · Removed by <strong>${e.deletedBy}</strong> on ${e.deletedAt}</div>
-        </div>
-        <button onclick="event.stopPropagation();dismissDeletionNotif('${e.logId}')" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px">×</button>
-      </div>`).join('');
+  // ── 1. SHOOT NOTIFICATIONS for Leonard/content_creator ──────────────────
+  if(role==='content_creator'||role==='admin'){
+    const shootAlerts=data.contents.filter(c=>
+      c.statusId==='shoot'&&c.shootNotified&&
+      !(c.shootNotifDismissed||{})[uid]
+    );
+    if(shootAlerts.length){
+      sections.push(`<div class="np-section-header" style="background:var(--purd);color:var(--pur)">🎬 TIME TO SHOOT (${shootAlerts.length})</div>`
+        +shootAlerts.map(c=>{
+          const b=getBrand(data,c.brandId);
+          return `<div class="np-item" style="border-left:3px solid var(--pur)">
+            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">🎬</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissShootNotif('${c.id}');openContentDetail('${c.id}')">
+              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--s3);color:var(--t2);font-family:'DM Mono',monospace">${c.type==='Video'?'🎬 Video':'🃏 Carousel'}</span></div>
+              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">🎬 Shooting</span> · <span style="color:var(--pur);font-weight:700">Approved to shoot!</span><br>By ${c.shootNotifiedBy||'senior'} on ${fmt(c.shootNotifiedAt)}</div>
+            </div>
+            <button onclick="dismissShootNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`;
+        }).join(''));
+    }
+    // Copywriting notifications for Leonard
+    const copyAlerts=data.contents.filter(c=>
+      c.statusId==='copywriting'&&c.copyNotified&&!(c.copyNotifDismissed||{})[uid]
+    );
+    if(copyAlerts.length){
+      sections.push(`<div class="np-section-header" style="background:var(--teld);color:var(--tel)">✍️ TIME TO WRITE COPY (${copyAlerts.length})</div>`
+        +copyAlerts.map(c=>{
+          const b=getBrand(data,c.brandId);
+          return `<div class="np-item" style="border-left:3px solid var(--tel)">
+            <div class="np-icon" style="background:var(--teld);color:var(--tel);font-size:18px;cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">✍️</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissCopyNotif('${c.id}');openContentDetail('${c.id}')">
+              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(60,204,160,0.15);color:var(--tel);font-family:'DM Mono',monospace">${c.type}</span></div>
+              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✍️ Copywriting</span> · <span style="color:var(--tel);font-weight:700">Time to write copy!</span><br>Approved by ${c.copyNotifiedBy||'senior'} on ${fmt(c.copyNotifiedAt)}</div>
+            </div>
+            <button onclick="dismissCopyNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`;
+        }).join(''));
     }
   }
 
-  body.innerHTML=html||`<div class="np-empty">✅ All caught up!</div>`;
+  // ── 2. VIDEO EDITING NOTIFICATION for Hualu/designer ────────────────────
+  if(role==='designer'||role==='admin'){
+    const editAlerts=data.contents.filter(c=>
+      c.statusId==='video_editing'&&c.designerAlerted&&
+      !(c.editNotifDismissed||{})[uid]
+    );
+    if(editAlerts.length){
+      sections.push(`<div class="np-section-header" style="background:var(--orad);color:var(--ora)">✂️ FOOTAGE READY TO EDIT (${editAlerts.length})</div>`
+        +editAlerts.map(c=>{
+          const b=getBrand(data,c.brandId);
+          return `<div class="np-item" style="border-left:3px solid var(--ora)">
+            <div class="np-icon" style="background:var(--orad);color:var(--ora);font-size:18px;cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">✂️</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissEditNotif('${c.id}');openContentDetail('${c.id}')">
+              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(255,159,67,0.15);color:var(--ora);font-family:'DM Mono',monospace">${c.type}</span></div>
+              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">✂️ Video Editing</span> · <span style="color:var(--ora);font-weight:700">Footage ready — start editing!</span><br>${c.footageFileName||'Footage uploaded'}</div>
+            </div>
+            <button onclick="dismissEditNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`;
+        }).join(''));
+    }
+
+    // Carousel design notifications — ideation approved, time to design
+    const designAlerts=data.contents.filter(c=>
+      c.type!=='Video' &&
+      c.statusId==='design' &&
+      !(c.designNotifDismissed||{})[uid] &&
+      (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.statusId==='design')
+    );
+    if(designAlerts.length){
+      sections.push(`<div class="np-section-header" style="background:var(--purd);color:var(--pur)">🎨 CAROUSEL READY TO DESIGN (${designAlerts.length})</div>`
+        +designAlerts.map(c=>{
+          const b=getBrand(data,c.brandId);
+          return `<div class="np-item" style="border-left:3px solid var(--pur)">
+            <div class="np-icon" style="background:var(--purd);color:var(--pur);font-size:18px;cursor:pointer" onclick="dismissDesignNotif('${c.id}');openContentDetail('${c.id}','dp-design')">🎨</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissDesignNotif('${c.id}');openContentDetail('${c.id}','dp-design')">
+              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:var(--purd);color:var(--pur);font-family:'DM Mono',monospace">Carousel</span></div>
+              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--pur);font-weight:700">🎨 Ideation approved — start designing!</span></div>
+            </div>
+            <button onclick="dismissDesignNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`;
+        }).join(''));
+    }
+  }
+
+  // ── 3. SENIOR REVIEW NOTIFICATIONS for Jack/senior ──────────────────────
+  if(role==='senior'||role==='admin'){
+    const reviewItems=data.contents.filter(c=>
+      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')&&
+      !(c.seniorNotifDismissed||{})[uid]
+    );
+    const labelMap={'senior_approval_ideation':'📋 Script Review','senior_approval_video':'🎬 Video Review','senior_approval_copy':'✍️ Copy Review','senior_approval':'🔍 Review'};
+    const colorMap={'senior_approval_ideation':'var(--amb)','senior_approval_video':'var(--ora)','senior_approval_copy':'var(--tel)','senior_approval':'var(--amb)'};
+    if(reviewItems.length){
+      sections.push(`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">✅ AWAITING YOUR APPROVAL (${reviewItems.length})</div>`
+        +reviewItems.map(c=>{
+          const b=getBrand(data,c.brandId);const col=colorMap[c.statusId]||'var(--amb)';
+          const tabTarget=getDefaultTabForContent(c);
+          return `<div class="np-item" style="border-left:3px solid ${col}">
+            <div class="np-icon" style="background:${col}18;color:${col};font-size:18px;cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">✅</div>
+            <div class="np-info" style="cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">
+              <div class="np-name">${c.title} <span style="font-size:11px;padding:1px 5px;border-radius:3px;background:rgba(240,160,48,0.15);color:var(--amb);font-family:'DM Mono',monospace">${c.type}</span></div>
+              <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <span style="color:var(--t3);font-size:12px">${['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===0?'💡 Ideation':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===1?'🎨 Design':['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'].map(x=>c.statusId===x).indexOf(true)===2?'✍️ Copy':'📋'} Review</span> · <span style="color:${col};font-weight:700">${labelMap[c.statusId]||'Review needed'}</span></div>
+            </div>
+            <button onclick="dismissSeniorNotif('${c.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`;
+        }).join(''));
+    }
+  }
+
+  // ── 3.5. AMENDMENT NOTIFICATIONS — anyone whose work was rejected ────────
+  const amendAlerts=data.contents.filter(c=>{
+    if((c.amendNotifDismissed||{})[uid]) return false;
+    return (c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.label&&(t.label.includes('Amendment')||t.label.includes('amendment')));
+  });
+  if(amendAlerts.length){
+    const amendItems=amendAlerts.map(c=>{
+      const b=getBrand(data,c.brandId);
+      const rejectedBy=c.amendNotifiedBy||'Senior';
+      const amendNote=c.amendNote||'Please revise and resubmit.';
+      const recentComments=(c.comments||[]).filter(cm=>cm.text&&(cm.text.includes('Amendment')||cm.text.includes('amendment')||cm.text.includes('🔄'))).slice(-3);
+      let commentsHTML='';
+      if(recentComments.length){
+        commentsHTML=recentComments.map(cm=>{
+          const cu=getUser(data,cm.userId);
+          return '<div style="margin-top:5px;padding:5px 8px;background:var(--s1);border-radius:5px;border-left:2px solid var(--red)">'
+            +'<span style="font-size:11px;font-weight:700;color:'+cu.color+'">'+cu.init+' '+cu.name+'</span>'
+            +'<span style="font-size:11px;color:var(--t3);margin-left:6px">'+fmt(cm.createdAt)+'</span>'
+            +'<div style="font-size:12px;color:var(--t1);margin-top:2px">'+cm.text.replace(/^[🔄✅📤]\s*/,'')+'</div>'
+            +'</div>';
+        }).join('');
+      } else {
+        commentsHTML='<div style="margin-top:4px;padding:5px 8px;background:var(--redd);border-radius:5px">'
+          +'<span style="font-size:12px;color:var(--red)">'+amendNote+'</span>'
+          +'</div>';
+      }
+      return '<div class="np-item" style="border-left:3px solid var(--red);flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px">'
+        +'<div style="display:flex;align-items:center;gap:10px;width:100%">'
+          +'<div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;cursor:pointer;flex-shrink:0" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">🔄</div>'
+          +'<div class="np-info" style="cursor:pointer;flex:1" onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')">'
+            +'<div class="np-name" style="color:var(--red)">'+c.title+'</div>'
+            +'<div class="np-meta"><span style="color:'+b.color+';font-weight:700">'+b.name+'</span> &middot; <span style="color:var(--red);font-weight:700">Amendment by '+rejectedBy+'</span></div>'
+          +'</div>'
+          +'<button onclick="dismissAmendNotif(\'' +c.id+ '\')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0">×</button>'
+        +'</div>'
+        +'<div style="width:100%;padding:0 4px">'+commentsHTML+'</div>'
+        +'<div style="margin-top:5px;width:100%;text-align:right">'
+          +'<span onclick="dismissAmendNotif(\'' +c.id+ '\');openContentDetail(\'' +c.id+ '\')" style="font-size:12px;color:var(--blu);cursor:pointer;text-decoration:underline">View all comments →</span>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+    sections.push('<div class="np-section-header" style="background:var(--redd);color:var(--red)">🔄 AMENDMENT REQUIRED ('+amendAlerts.length+')</div>'+amendItems);
+  }
+
+  // ── 3.7. CONTENT DELETION NOTIFICATIONS (admin/senior only) ────────────────
+  if(role==='admin'||role==='senior'){
+    const deletions=(data.deletionLog||[]).filter(entry=>
+      !entry.dismissedBy.includes(uid) &&
+      entry.deletedById!==uid
+    );
+    if(deletions.length){
+      sections.push(`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 CONTENT REMOVED (${deletions.length})</div>`
+        +deletions.map(entry=>`
+          <div class="np-item" style="border-left:3px solid var(--red)">
+            <div class="np-icon" style="background:var(--redd);color:var(--red);font-size:18px;flex-shrink:0">🗑</div>
+            <div class="np-info" style="flex:1">
+              <div class="np-name" style="color:var(--red)">${entry.title}</div>
+              <div class="np-meta">
+                <span style="color:${entry.brandColor||'#888'};font-weight:700">${entry.brandName}</span>
+                · <span style="color:var(--t3)">${entry.type||''}</span>
+                · Removed by <strong>${entry.deletedBy}</strong> on ${entry.deletedAt}
+              </div>
+            </div>
+            <button onclick="dismissDeletionNotif('${entry.logId}')" title="Acknowledge" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`).join(''));
+    }
+  }
+
+  if(!sections.length){
+    body.innerHTML=`<div class="np-empty">✅ All good! No pending reviews or alerts.</div>`;
+    return;
+  }
+  body.innerHTML=sections.join('');
 }
 
->
+function dismissDeletionNotif(logId){
+  const data=D();
+  if(!Array.isArray(data.deletionLog)) return;
+  const entry=data.deletionLog.find(e=>e.logId===logId);
+  if(!entry) return;
+  if(!entry.dismissedBy.includes(S.user.id)) entry.dismissedBy.push(S.user.id);
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissDesignNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.designNotifDismissed)c.designNotifDismissed={};
+  c.designNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissShootNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.shootNotifDismissed)c.shootNotifDismissed={};
+  c.shootNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissEditNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.editNotifDismissed)c.editNotifDismissed={};
+  c.editNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissSeniorNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.seniorNotifDismissed)c.seniorNotifDismissed={};
+  c.seniorNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissAmendNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.amendNotifDismissed)c.amendNotifDismissed={};
+  c.amendNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+function dismissCopyNotif(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  if(!c.copyNotifDismissed)c.copyNotifDismissed={};
+  c.copyNotifDismissed[S.user.id]=true;
+  save(data);closeNotifPanel();renderTopbar();
+}
+
+function toggleNotifPanel(){
+  const panel=document.getElementById('notif-panel');
+  if(panel.classList.contains('open')){panel.classList.remove('open');return;}
+  renderNotifPanel();
+  panel.classList.add('open');
+  // Close when clicking outside
+  setTimeout(()=>document.addEventListener('click',outsideNotifClick,{once:true}),10);
+}
+
+function outsideNotifClick(e){
+  const panel=document.getElementById('notif-panel');
+  const btn=document.getElementById('notif-btn');
+  if(panel&&!panel.contains(e.target)&&btn&&!btn.contains(e.target)){
+    panel.classList.remove('open');
+  }
+}
+
+function closeNotifPanel(){
+  document.getElementById('notif-panel').classList.remove('open');
+}
+
+function sendSingleReminder(contentId){
+  const data=D();
+  const c=data.contents.find(x=>x.id===contentId);
+  if(!c)return;
+  const b=getBrand(data,c.brandId);
+  const prog=getProgressForContent(c);
+  const days=daysUntil(c.postingDate);
+  const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
+  const msg=encodeURIComponent(
+    `\uD83D\uDD14 *USPify Reminder*\n\n`+
+    `\uD83D\uDCCC *${c.title}*\n`+
+    `\uD83C\uDFF7 Brand: ${b.name}\n`+
+    `\uD83D\uDC65 Team: ${assigneeNames}\n`+
+    `\uD83D\uDCCA Progress: ${prog}% (needs to reach 60%+)\n`+
+    `\uD83D\uDCC5 Posting date: ${c.postingDate?fmtFull(c.postingDate):'Not set'}\n`+
+    `\u23F3 ${days<0?Math.abs(days)+'d overdue':days===999?'No deadline set':days+'d remaining'}\n\n`+
+    `Please update the status in USPify Portal.`
+  );
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+}
+
+function sendAllReminders(){
+  const data=D();
+  const alerts=getAlertItems(data);
+  if(!alerts.length){showAIToast('No items need reminders!');return;}
+  const lines=alerts.map(c=>{
+    const b=getBrand(data,c.brandId);
+    const prog=getProgressForContent(c);
+    const days=daysUntil(c.postingDate);
+    const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
+    return `\u2022 ${c.title} (${b.name}) \u2014 ${prog}% \u2014 ${days<0?Math.abs(days)+'d overdue':days+'d left'} \u2014 Team: ${assigneeNames}`;
+  }).join('\n');
+  const msg=encodeURIComponent(
+    `\uD83D\uDD14 *USPify \u2014 Progress Reminder*\n\n`+
+    `The following ${alerts.length} content piece${alerts.length>1?'s are':' is'} below 60% progress:\n\n`+
+    lines+
+    `\n\nPlease update statuses in the USPify Portal.`
+  );
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+  closeNotifPanel();
+}
+
+// ===================== INIT =====================
+window.onload=function(){
+  // Wire login keyboard events
+  const liPass=document.getElementById('li-pass');
+  const liName=document.getElementById('li-name');
+  if(liPass) liPass.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  if(liName) liName.addEventListener('keydown',e=>{if(e.key==='Enter')liPass&&liPass.focus();});
+  // Auto-login from session
+  const savedId=sessionStorage.getItem('uspify_uid');
+  if(savedId){
+    const data=D();let user=data.users.find(u=>u.id===savedId);
+    if(user){
+      // Force admin role for leonard regardless of stored role
+      if(user.id==='leonard') user={...user,role:'admin'};
+      S.user=user;
+      if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      // Show loading while fetching from Supabase
+      const root=document.getElementById('page-root');
+      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+      initCloudSync().then(()=>{render();initAI();}).catch(()=>{render();initAI();});
+      return;
+    }
+  }
+};
+</script>
+</body>
+</html>
