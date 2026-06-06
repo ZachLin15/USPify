@@ -1267,7 +1267,7 @@ function setSyncStatus(status,msg){
 }
 
 
-var _DEFAULT_CREDS = [
+var _USPIFY_DEFAULT_CREDS = [
   {id:'caleb',      pass:'caleb',     role:'admin'},
   {id:'carmen',     pass:'carmen',    role:'admin'},
   {id:'developer',  pass:'developer', role:'admin'},
@@ -1278,13 +1278,9 @@ var _DEFAULT_CREDS = [
 ];
 function reapplyDefaultPasswords(users){
   if(!Array.isArray(users)) return users;
-  _DEFAULT_CREDS.forEach(function(dc){
+  _USPIFY_DEFAULT_CREDS.forEach(function(dc){
     var u = users.find(function(x){return x&&x.id===dc.id;});
-    if(u){
-      u.pass = dc.pass;
-      u.role = dc.role;
-      if(dc.id==='leonard') u.role='admin';
-    }
+    if(u){u.pass=dc.pass;u.role=dc.role;if(dc.id==='leonard')u.role='admin';}
   });
   return users;
 }
@@ -2053,20 +2049,58 @@ function doLogin(){
   if(!nameEl||!passEl)return;
   const name=nameEl.value.trim().toLowerCase();
   const pass=passEl.value.trim();
-  const data=D();
-  const user=data.users.find(u=>u.name.toLowerCase()===name||u.id===name);
-  if(user&&user.pass===pass){
-    // Force admin role for leonard
-    if(user.id==='leonard') user.role='admin';
-    S.user=user;
-    sessionStorage.setItem('uspify_uid',user.id);
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='flex';
-    if(user.role==='client'){S.page='client_approvals';S.brand=null;}
-    try{render();}catch(e){console.error('render error:',e);}
-    try{initAI();}catch(e){console.error('initAI error:',e);}
-  }else{
+
+  // HARDCODED credentials — always work on any browser, even with empty localStorage
+  const HARDCODED=[
+    {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
+    {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
+    {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
+    {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack'},
+    {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
+    {id:'leonard',name:'Leonard',role:'admin',title:'Admin',init:'L',color:'#3acca0',pass:'leonard'},
+    {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
+  ];
+
+  // Check hardcoded credentials first (works on any browser, any state)
+  const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
+  if(!hc||hc.pass!==pass){
     if(errEl)errEl.textContent='Invalid name or password.';
+    return;
+  }
+
+  // Force admin for leonard regardless of stored role
+  if(hc.id==='leonard') hc.role='admin';
+
+  // Try to enrich with full profile from localStorage/cloud data
+  const data=D();
+  const stored=data.users.find(u=>u.id===hc.id);
+  const user=stored?{...stored,pass:hc.pass,role:hc.role}:hc;
+
+  S.user=user;
+  sessionStorage.setItem('uspify_uid',user.id);
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+
+  // Show loading spinner, then sync from cloud before rendering
+  const root=document.getElementById('page-root');
+  if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+
+  if(typeof initCloudSync==='function'){
+    initCloudSync().then(function(){
+      // After cloud sync, re-apply correct user from fresh data
+      const d2=D();
+      const freshUser=d2.users.find(u=>u.id===hc.id);
+      if(freshUser){freshUser.pass=hc.pass;freshUser.role=hc.role;S.user=freshUser;}
+      try{render();}catch(e){if(root)root.innerHTML='<div style="padding:24px;color:#ff5a5a;font-family:monospace">Render error: '+e.message+'</div>';}
+      try{initAI();}catch(x){}
+    }).catch(function(){
+      try{render();}catch(e){}
+      try{initAI();}catch(x){}
+    });
+  } else {
+    try{render();}catch(e){if(root)root.innerHTML='<div style="padding:24px;color:#ff5a5a;font-family:monospace">Render error: '+e.message+'</div>';}
+    try{initAI();}catch(x){}
   }
 }
 function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
