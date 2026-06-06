@@ -1399,6 +1399,8 @@ async function cloudSave(data){
     }
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
+    // Broadcast to all other browsers so they pull immediately
+    broadcastPing([...dirtyIds], by).catch(()=>{});
   }catch(e){
     setSyncStatus('error','Save failed');
     console.error('Supabase save:',e.message);
@@ -1410,26 +1412,55 @@ async function cloudSave(data){
   }
 }
 
+// ── Broadcast a "data changed" ping to all connected browsers ──────────
+// Called after every cloudSave so Jack/Hualu see changes within ~100ms
+async function broadcastPing(contentIds, savedBy){
+  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
+  try{
+    // Use Supabase REST broadcast endpoint (no WS needed for sending)
+    await fetch(
+      CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',
+      {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'apikey':CLOUD_CONFIG.ANON_KEY,
+          'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,
+        },
+        body:JSON.stringify({
+          messages:[{
+            topic:'uspify-updates',
+            event:'data_changed',
+            payload:{by:savedBy||'?', ids:contentIds||[], ts:Date.now()}
+          }]
+        })
+      }
+    );
+  }catch(e){
+    // Broadcast is best-effort — polling is the fallback
+  }
+}
+
 function initRealtimeSync(){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
 
-  let ws, pollTimer, lastHash='', reconnectDelay=3000, heartbeatRef=0;
+  let ws, pollTimer, lastHash='', reconnectDelay=2000, heartbeatRef=0;
+  let _pulling=false; // prevent concurrent pulls
 
   function dataHash(data){
     try{
-      const brands=(data.brands||[]).map(b=>b.id+b.name).sort().join(',');
-      // Include statusId, assignees, workflowTask count so approval submissions trigger re-render
       const contents=(data.contents||[]).map(c=>
-        c.id+c.statusId+(c.postingDate||'')+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
-      ).sort().join('').slice(0,600);
-      const settings=(data.scheduleBlocks||[]).length+'|'+(data.deletionLog||[]).length;
-      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${brands}|${contents}|${settings}`;
+        c.id+c.statusId+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
+      ).sort().join('').slice(0,800);
+      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${contents}`;
     }catch(e){ return String(Date.now()); }
   }
 
   async function pullIfChanged(){
+    if(_pulling) return; // skip if already pulling
+    _pulling=true;
     try{
-      const fresh=await cloudLoad(1, 200); // fast poll — 1 retry, 200ms
+      const fresh=await cloudLoad(1, 200);
       if(fresh&&fresh.users?.length){
         const h=dataHash(fresh);
         if(h!==lastHash){
@@ -1440,13 +1471,16 @@ function initRealtimeSync(){
           localStorage.setItem(KEY,JSON.stringify(fresh));
           if(S.user){
             const fu=fresh.users.find(u=>u.id===S.user.id);
-            if(fu){S.user=fu;}
+            if(fu){fu.pass=S.user.pass;fu.role=S.user.role;S.user=fu;}
           }
           render();
-          if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
+          if(savedBy&&savedBy!==S.user?.name){
+            showAIToast('🔄 Updated by '+savedBy);
+          }
         }
       }
     }catch(e){}
+    finally{ _pulling=false; }
   }
 
   function startPolling(){
@@ -1465,53 +1499,71 @@ function initRealtimeSync(){
 
   function connectWS(){
     try{
+      // vsn=1.0.0 = Supabase Realtime v2 (confusingly named)
       const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')
         +'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
       ws=new WebSocket(wsUrl);
 
       ws.onopen=()=>{
-        reconnectDelay=3000;
+        reconnectDelay=2000;
         stopPolling();
         setSyncStatus('live','Live ✓');
 
-        // Join a single channel that listens to all table changes
+        // Channel 1: Broadcast — receives pings sent by broadcastPing()
+        // This is the fast path (<100ms) for workflow submissions
         sendMsg({
-          topic:'realtime:db-changes',
+          topic:'realtime:uspify-updates',
+          event:'phx_join',
+          payload:{
+            config:{broadcast:{self:false},presence:{key:''}},
+            access_token:CLOUD_CONFIG.ANON_KEY
+          },
+          ref:'1'
+        });
+
+        // Channel 2: Postgres changes — catches any save that missed broadcast
+        // Acts as belt-and-suspenders fallback
+        sendMsg({
+          topic:'realtime:uspify-db',
           event:'phx_join',
           payload:{
             config:{
               broadcast:{self:false},
               postgres_changes:[
-                {event:'*',schema:'public',table:'uspify_contents'},
-                {event:'*',schema:'public',table:'uspify_brands'},
-                {event:'*',schema:'public',table:'uspify_users'},
-                {event:'*',schema:'public',table:'uspify_settings'},
+                {event:'UPDATE',schema:'public',table:'uspify_contents'},
+                {event:'UPDATE',schema:'public',table:'uspify_settings'},
               ]
             },
-            access_token: CLOUD_CONFIG.ANON_KEY
+            access_token:CLOUD_CONFIG.ANON_KEY
           },
-          ref:'1'
+          ref:'2'
         });
       };
 
       ws.onmessage=async(e)=>{
         try{
           const msg=JSON.parse(e.data);
+
           // Reply to server heartbeats
           if(msg.event==='heartbeat'){
             sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)});
             return;
           }
-          // Ignore join confirmations and other system messages
+          // Skip join confirmations
           if(msg.event==='phx_reply') return;
-          // Any postgres change → pull fresh data
-          // Supabase Realtime sends: event='postgres_changes', or legacy INSERT/UPDATE/DELETE
-          const isDbChange = msg.event==='postgres_changes'
-            || msg.event==='INSERT' || msg.event==='UPDATE' || msg.event==='DELETE'
-            || (msg.payload?.data?.type && ['INSERT','UPDATE','DELETE'].includes(msg.payload.data.type));
-          if(isDbChange){
-            await pullIfChanged();
+
+          // Broadcast ping from another user's save → pull immediately
+          if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
+            const by=msg.payload?.payload?.by||'?';
+            if(by!==S.user?.name) pullIfChanged();
+            return;
           }
+
+          // Postgres change event (fallback)
+          const isDbChange=msg.event==='postgres_changes'
+            ||(msg.payload?.data?.type&&['INSERT','UPDATE','DELETE'].includes(msg.payload.data.type));
+          if(isDbChange) pullIfChanged();
+
         }catch(err){}
       };
 
@@ -1519,31 +1571,30 @@ function initRealtimeSync(){
         setSyncStatus('idle','Reconnecting…');
         startPolling();
         setTimeout(connectWS, reconnectDelay);
-        reconnectDelay=Math.min(reconnectDelay*2, 30000);
+        reconnectDelay=Math.min(reconnectDelay*1.5, 15000);
       };
 
       ws.onerror=()=>{
-        setSyncStatus('error','Sync error');
+        setSyncStatus('error','Sync error — using polling');
         startPolling();
       };
 
     }catch(err){
-      setSyncStatus('error','RT failed');
+      setSyncStatus('error','RT failed — using polling');
       startPolling();
     }
   }
 
-  // Client-side heartbeat every 25s to keep connection alive
-  setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 25000);
+  // Heartbeat every 20s to keep WS alive
+  setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 20000);
 
-  // Pull immediately when tab becomes visible (user switches back)
-  document.addEventListener('visibilitychange', ()=>{
+  // Pull immediately when tab gets focus
+  document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible') pullIfChanged();
   });
+  window.addEventListener('focus', pullIfChanged);
 
-  // Initial hash from current data
   try{ lastHash=dataHash(D()); }catch(e){}
-
   connectWS();
 }
 
@@ -3266,34 +3317,66 @@ function renderBrandPage(){
 function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
-  const sa=data.contents.filter(c=>c.statusId==='senior_approval');
+
+  // ALL senior approval statuses — the old flow used 'senior_approval',
+  // the new flow uses senior_approval_ideation / _video / _copy
+  const ALL_SENIOR_STATUSES=['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'];
+  const sa=data.contents.filter(c=>ALL_SENIOR_STATUSES.includes(c.statusId));
   const ca=data.contents.filter(c=>c.statusId==='client_approval');
-  function apprItem(c,nextId,label){
-    const b=getBrand(data,c.brandId);const last=c.statusHistory[c.statusHistory.length-1];
+
+  // Stage label & next status per approval type
+  const STAGE_META={
+    'senior_approval':          {icon:'🔍', label:'Copy / General',   color:'var(--amb)', nextStatus:'client_approval', btnLabel:'Approve → Client'},
+    'senior_approval_ideation': {icon:'💡', label:'Ideation / Script', color:'var(--blu)', nextStatus:'_ideation',       btnLabel:'Approve → Design/Shoot'},
+    'senior_approval_video':    {icon:'✂️', label:'Video / Design',    color:'var(--ora)', nextStatus:'_video',          btnLabel:'Approve → Copywriting'},
+    'senior_approval_copy':     {icon:'✍️', label:'Copywriting',       color:'var(--tel)', nextStatus:'client_approval', btnLabel:'Approve → Client'},
+  };
+
+  function apprItem(c){
+    const b=getBrand(data,c.brandId);
+    const last=c.statusHistory[c.statusHistory.length-1];
     const submitter=last?getUser(data,last.changedBy):{name:'?'};
+    const meta=STAGE_META[c.statusId]||STAGE_META['senior_approval'];
+    const tabTarget=c.statusId==='senior_approval_ideation'?'dp-ideation':
+                    c.statusId==='senior_approval_video'?(c.type==='Video'?'dp-video':'dp-design'):
+                    c.statusId==='senior_approval_copy'?'dp-copy':'dp-comments';
+    // Smart approve action based on status
+    const onApprove=c.statusId==='senior_approval_ideation'
+      ? `wfApproveIdeationForVideo('${c.id}')`
+      : c.statusId==='senior_approval_video'
+      ? `wfApproveVideo('${c.id}')`
+      : c.statusId==='senior_approval_copy'
+      ? `wfSeniorApprove('${c.id}')`
+      : `approveContent('${c.id}','client_approval')`;
     return `<div class="appr-item">
-      <div class="appr-icon" style="background:${b.color}22">${c.type==='Video'?'\u25B6':'\u25A6'}</div>
+      <div class="appr-icon" style="background:${meta.color}22;font-size:18px">${meta.icon}</div>
       <div class="appr-info">
-        <div class="appr-name" onclick="openContentDetail('${c.id}')">${c.title}</div>
-        <div class="appr-meta">${brandBadge(b)} · Posting ${fmt(c.postingDate)}</div>
-        <div class="appr-meta" style="margin-top:2px">By ${submitter.name} · ${last?fmt(last.changedAt):''}</div>
+        <div class="appr-name" onclick="openContentDetail('${c.id}','${tabTarget}')">${c.title}</div>
+        <div class="appr-meta">
+          ${brandBadge(b)}
+          <span class="sbadge" style="background:${meta.color}22;color:${meta.color};margin-left:4px">${meta.label}</span>
+          · 📅 ${fmt(c.postingDate)}
+        </div>
+        <div class="appr-meta" style="margin-top:2px">Submitted by <strong>${submitter.name}</strong> · ${last?fmt(last.changedAt):''}</div>
         ${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)">Drive ↗</a>`:''}
       </div>
       <div class="appr-actions">
-        <button class="btn-approve" onclick="approveContent('${c.id}','${nextId}')">${label}</button>
+        <button class="btn-approve" onclick="${onApprove}">${meta.btnLabel}</button>
         <button class="btn-revise" onclick="openReviseModal('${c.id}')">Revise</button>
+        <button class="btn btn-ghost btn-sm" onclick="openContentDetail('${c.id}','${tabTarget}')">View →</button>
       </div>
     </div>`;
   }
+
   return `<div class="two-col">
-    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
-    <div class="pb">${sa.length?sa.map(c=>apprItem(c,'client_approval','Approve →')).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
-    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--pnk)">Client Approval</div><div class="ph-sub">${ca.length} pending</div></div>
+    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">⏳ Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
+    <div class="pb">${sa.length?sa.map(c=>apprItem(c)).join(''):`<div class="empty-msg">All clear ✓</div>`}</div></div>
+    <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--pnk)">🤝 Client Approval</div><div class="ph-sub">${ca.length} pending</div></div>
     <div class="pb">${ca.length?ca.map(c=>{
       const clientEntry=c.statusHistory.slice().reverse().find(h=>h.statusId==='client_approval');
       const mover=clientEntry?getUser(data,clientEntry.changedBy):{name:'?'};
-      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c,'posted','Mark Posted')}</div>`;
-    }).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
+      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c)}</div>`;
+    }).join(''):`<div class="empty-msg">All clear ✓</div>`}</div></div>
   </div>`;
 }
 // ===================== CLIENT POST PAGE =====================
