@@ -973,7 +973,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
       if(ls)ls.style.display='none';if(app)app.style.display='flex';
       // Show loading spinner while fetching from Supabase
       var root=document.getElementById('page-root');
-      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading… (may take a few seconds on first open)</div></div>';
       // Wait for Supabase to load before rendering
       if(typeof initCloudSync==='function'){
         initCloudSync().then(function(){
@@ -1250,7 +1250,7 @@ var KEY='uspify_v3';
 const CLOUD_CONFIG={
   get URL(){ return window.USPIFY_CONFIG?.SUPABASE_URL||'YOUR_SUPABASE_PROJECT_URL'; },
   get ANON_KEY(){ return window.USPIFY_CONFIG?.SUPABASE_ANON_KEY||'YOUR_SUPABASE_ANON_KEY'; },
-  get ENABLED(){ return !!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'); },
+  get ENABLED(){ return !!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL&&window.USPIFY_CONFIG.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'&&!window.USPIFY_CONFIG.SUPABASE_URL.includes('%%')); },
 };
 
 let _cloudSyncing=false,_pendingSave=null;
@@ -1285,13 +1285,37 @@ function reapplyDefaultPasswords(users){
   return users;
 }
 
-async function cloudLoad(retries=2, delay=300){
+async function _wakeSupabase(){
+  // Ping Supabase with a tiny request to wake it from free-tier pause.
+  // This runs BEFORE the real fetch so the real one doesn't timeout.
+  try{
+    await fetch(CLOUD_CONFIG.URL+'/rest/v1/uspify_settings?id=eq.main&select=id',{
+      headers:_sbH(), cache:'no-store',
+      signal:AbortSignal.timeout?AbortSignal.timeout(20000):undefined
+    });
+  }catch(e){ /* ignore — just a warm-up */ }
+}
+
+async function cloudLoad(retries=3, delay=1000){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
+  // Why load can fail:
+  // 1. Supabase free tier "pauses" after inactivity — needs 10-15s to wake up
+  // 2. Slow network / mobile connection timeout
+  // 3. Brief Supabase outage
+  // Solution: wake-up ping first, then 3 retries with 20s timeout each
   for(let attempt=1; attempt<=retries; attempt++){
     try{
-      setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading…');
+      if(attempt===1){
+        setSyncStatus('loading','Connecting…');
+        await _wakeSupabase(); // wake Supabase before the real fetch
+        setSyncStatus('loading','Loading…');
+      } else {
+        setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
+      }
+
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(), 5000); // 5s timeout
+      // 20s timeout per attempt — free tier cold start takes up to 15s
+      const timeout=setTimeout(()=>controller.abort(), 20000);
       const [uR,bR,cR,sR]=await Promise.all([
         fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
@@ -1299,7 +1323,10 @@ async function cloudLoad(retries=2, delay=300){
         fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
       ]);
       clearTimeout(timeout);
-      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP '+[uR,bR,cR,sR].find(r=>!r.ok)?.status);
+      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok){
+        const bad=[uR,bR,cR,sR].find(r=>!r.ok);
+        throw new Error('HTTP '+bad?.status);
+      }
       const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
       const settings=sRows[0]?.data||{};
       const data={
@@ -1315,21 +1342,22 @@ async function cloudLoad(retries=2, delay=300){
         __savedBy:settings.__savedBy||'',
       };
       reapplyDefaultPasswords(data.users);
-    if(!data.users.length&&!data.brands.length) return null;
+      if(!data.users.length&&!data.brands.length) return null;
       setSyncStatus('live','Live ✓');
       return data;
     }catch(e){
       console.warn(`Supabase load attempt ${attempt}/${retries}:`,e.message);
       if(attempt===retries){
-        // All retries failed — fall back to cached localStorage data
-        setSyncStatus('error','Load failed — using cached data');
+        // All retries exhausted — silently use cached localStorage data
+        // Don't show a scary error: the app works fine from cache
+        setSyncStatus('idle','⚡ Offline mode');
         const cached=localStorage.getItem(KEY);
         if(cached){ try{ return JSON.parse(cached); }catch(_){} }
         return null;
       }
-      // Wait before retrying (1s, 2s, 4s)
-      setSyncStatus('idle',`Load failed, retrying…`);
-      await new Promise(r=>setTimeout(r, delay));
+      // Progressive delay: 1s, 2s before retrying
+      setSyncStatus('loading',`Retrying… (${attempt}/${retries})`);
+      await new Promise(r=>setTimeout(r, delay * attempt));
     }
   }
 }
@@ -1446,7 +1474,7 @@ function initRealtimeSync(){
     if(_pulling||_initSyncing) return; // skip if already pulling or init in progress
     _pulling=true;
     try{
-      const fresh=await cloudLoad(1, 200);
+      const fresh=await cloudLoad(2, 500); // 2 retries for background poll
       if(!fresh||!fresh.users?.length){_pulling=false;return;}
 
       const h=dataHash(fresh);
@@ -2202,7 +2230,7 @@ function doLogin(){
   if(user.role==='client'){S.page='client_approvals';S.brand=null;}
 
   const root=document.getElementById('page-root');
-  if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
+  if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Loading… (may take a few seconds on first open)</div></div>';
 
   if(typeof initCloudSync==='function'){
     initCloudSync().then(function(){
