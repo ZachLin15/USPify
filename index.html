@@ -952,7 +952,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
         DEFAULT_USERS.forEach(function(du){var ex=data.users.find(function(u){return u.id===du.id;});if(ex){ex.pass=du.pass;ex.role=du.role;ex.name=du.name;}else{data.users.push(du);}});
         return data.users;
       }}
-    }catch(e){}
+    }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
     return DEFAULT_USERS;
   }
   window.doLogin=function(){
@@ -974,13 +974,13 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
       // If cache exists → render instantly. If not → wait for Supabase (first login)
       var _cr=null;try{var _raw=localStorage.getItem(LOGIN_KEY);if(_raw){var _d=JSON.parse(_raw);_cr=(_d&&_d.users&&_d.users.length>0)?_d:null;}}catch(_){}
       if(_cr){
-        if(typeof render==='function'){try{render();}catch(e){}}
+        if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
         if(typeof initAI==='function'){try{initAI();}catch(x){}}
         if(typeof initCloudSync==='function'){initCloudSync();}
       }else{
         var _root=document.getElementById('page-root');
         if(_root)_root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:DM Mono,monospace">Connecting…</div></div>';
-        if(typeof initCloudSync==='function'){initCloudSync().then(function(){if(typeof render==='function'){try{render();}catch(e){}}if(typeof initAI==='function'){try{initAI();}catch(x){}}}).catch(function(){if(typeof render==='function'){try{render();}catch(e){}}});}
+        if(typeof initCloudSync==='function'){initCloudSync().then(function(){if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}if(typeof initAI==='function'){try{initAI();}catch(x){}}}).catch(function(){if(typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}});}
       }
     }else{if(errEl)errEl.textContent='Invalid name or password.';}
   };
@@ -1169,8 +1169,8 @@ window.addEventListener('unhandledrejection',function(e){
 });
 
 function hardReset(){
-  try{localStorage.removeItem('uspify_v3');}catch(e){}
-  try{sessionStorage.clear();}catch(e){}
+  try{localStorage.removeItem('uspify_v3');}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+  try{sessionStorage.clear();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
   location.reload();
 }
 
@@ -1481,13 +1481,13 @@ function initRealtimeSync(){
 
       if(isTyping){
         // Mid-edit: refresh sidebar/topbar counts only — do NOT re-render detail panel
-        try{renderSidebar();}catch(e){}
-        try{renderTopbar();}catch(e){}
+        try{renderSidebar();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
+        try{renderTopbar();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
       } else {
         render();
         if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
       }
-    }catch(e){}
+    }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
     finally{ _pulling=false; }
   }
 
@@ -1502,7 +1502,7 @@ function initRealtimeSync(){
   }
 
   function sendMsg(msg){
-    try{if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg));}catch(e){}
+    try{if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg));}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
   }
 
   function connectWS(){
@@ -1606,7 +1606,7 @@ function initRealtimeSync(){
   });
   window.addEventListener('focus', pullIfChanged);
 
-  try{ lastHash=dataHash(D()); }catch(e){}
+  try{ lastHash=dataHash(D()); }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
   connectWS();
 }
 
@@ -1631,12 +1631,12 @@ async function initCloudSync(){
         if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
       }
       // Render now that we have real data
-      if(S.user&&typeof render==='function'){try{render();}catch(e){}}
+      if(S.user&&typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
     }
   }catch(e){
     console.warn('initCloudSync load failed:',e.message);
     // Still try to render from whatever cache we have
-    if(S.user&&typeof render==='function'){try{render();}catch(e){}}
+    if(S.user&&typeof render==='function'){try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}}
   }finally{
     _initSyncing=false;
     if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
@@ -2222,13 +2222,13 @@ function doLogin(){
   const _cc=localStorage.getItem(KEY);
   let _hasC=false;try{const _p=JSON.parse(_cc||'{}');_hasC=!!(_p.users&&_p.users.length);}catch(_){}
   if(_hasC){
-    try{render();}catch(e){}
+    try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
     try{initAI();}catch(x){}
     if(typeof initCloudSync==='function') initCloudSync();
   }else{
     const _r2=document.getElementById('page-root');
     if(_r2)_r2.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:20px"><div style="width:40px;height:40px;border:3px solid rgba(200,240,74,0.15);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:var(--t3);font-family:\'DM Mono\',monospace">Connecting…</div></div>';
-    if(typeof initCloudSync==='function'){initCloudSync().then(()=>{try{render();}catch(e){}try{initAI();}catch(x){}}).catch(()=>{try{render();}catch(e){}try{initAI();}catch(x){}});}
+    if(typeof initCloudSync==='function'){initCloudSync().then(()=>{try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}try{initAI();}catch(x){}}).catch(()=>{try{render();}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}try{initAI();}catch(x){}});}
   }
 }
 function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
@@ -2280,7 +2280,7 @@ function nav(page,brandId){
   // Reset brand page filters when switching brands
   const _cm=new Date().toISOString().slice(0,7);if(brandId&&brandId!==prevBrand){S.trackerFilterType='all';S.trackerFilterStatus='all';S.brandMonthFilter=_cm;S.brandSort='date';}if(!S.brandMonthFilter||S.brandMonthFilter==='all')S.brandMonthFilter=_cm;
   // Persist page/brand so refresh restores the same view
-  try{sessionStorage.setItem('uspify_page',page);sessionStorage.setItem('uspify_brand',brandId||'');}catch(e){}
+  try{sessionStorage.setItem('uspify_page',page);sessionStorage.setItem('uspify_brand',brandId||'');}catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
   closeModal();
   if(page!=='brand') closeSidebar();
   render();
@@ -2288,12 +2288,18 @@ function nav(page,brandId){
 
 // ===================== RENDER =====================
 function render(){
-  // Don't render if no user is logged in
   if(!S.user) return;
-  // Restore theme
-  if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
-  else document.body.classList.remove('light-mode');
-  renderSidebar();renderTopbar();renderPage();
+  try{
+    if(localStorage.getItem('uspify_theme')==='light') document.body.classList.add('light-mode');
+    else document.body.classList.remove('light-mode');
+    renderSidebar();
+    renderTopbar();
+    renderPage();
+  }catch(e){
+    const _er=document.getElementById('page-root');
+    if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:13px;background:#1a1a1a;white-space:pre-wrap">RENDER ERROR — please screenshot this and report:\n'+String(e)+'\n'+(e.stack||'')+'</pre>';
+    console.error('render() error:',e);
+  }
 }
 
 // Lighter re-render — only updates page content, skips sidebar & topbar rebuild
@@ -3835,7 +3841,7 @@ function initCalendarInteractions(){
     const top=(now.getHours()-7)*90+(now.getMinutes()/60)*90;
     // Scroll the page to show current time (offset by topbar ~72px)
     setTimeout(()=>{window.scrollTo({top:Math.max(0,top+72-200),behavior:'smooth'});},80);
-  }catch(e){}
+  }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
 }
 
 function renderBrandCalendar(){
@@ -8076,7 +8082,7 @@ async function getGdriveToken(){
           clearInterval(check);w.close();resolve(token);
         }
         if(w.closed){clearInterval(check);reject(new Error('Auth window closed'));}
-      }catch(e){}
+      }catch(e){const _er=document.getElementById('page-root');if(_er)_er.innerHTML='<pre style="color:#ff5a5a;padding:20px;font-size:12px;background:#1a1a1a">RENDER ERROR:\n'+e+'\n'+(e.stack||'')+'</pre>';console.error('render error:',e);}
     },500);
   });
 }
