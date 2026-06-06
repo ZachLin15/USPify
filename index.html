@@ -1248,11 +1248,6 @@ function setSyncStatus(status,msg){
   const el=document.getElementById('sync-status');if(!el)return;
   const icons={idle:'☁️',saving:'⏳',saved:'✅',loading:'🔄',error:'⚠️',live:'🟢'};
   const colors={idle:'var(--t3)',saving:'var(--amb)',saved:'var(--ac)',loading:'var(--blu)',error:'var(--red)',live:'var(--ac)'};
-  // Show DISABLED warning if Supabase not configured
-  if(!CLOUD_CONFIG.ENABLED && status==='idle'){
-    el.innerHTML=`<span style="color:var(--red);font-size:12px;font-family:'DM Mono',monospace" title="URL: ${CLOUD_CONFIG.URL}">⚠️ Sync OFF</span>`;
-    return;
-  }
   el.innerHTML=`<span style="color:${colors[status]||'var(--t3)'};font-size:12px;font-family:'DM Mono',monospace">${icons[status]||'☁️'} ${msg||status}</span>`;
 }
 
@@ -1279,7 +1274,7 @@ async function cloudLoad(retries=3, delay=1000){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
   for(let attempt=1; attempt<=retries; attempt++){
     try{
-      setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading…');
+      setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading...');
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(), 8000); // 8s timeout
       const [uR,bR,cR,sR]=await Promise.all([
@@ -1318,7 +1313,7 @@ async function cloudLoad(retries=3, delay=1000){
         return null;
       }
       // Wait before retrying (1s, 2s, 4s)
-      setSyncStatus('idle',`Load failed, retrying…`);
+      setSyncStatus('idle',`Load failed, retrying...`);
       await new Promise(r=>setTimeout(r, delay));
     }
   }
@@ -1329,15 +1324,11 @@ let _dirtyContentIds=new Set();
 function markDirty(id){if(id)_dirtyContentIds.add(id);}
 
 async function cloudSave(data){
-  // DEBUG: log every cloudSave call
-  const _dbg=(msg)=>{console.log('[cloudSave]',msg);};
-  if(!CLOUD_CONFIG.ENABLED){_dbg('SKIPPED: CLOUD_CONFIG.ENABLED=false URL='+CLOUD_CONFIG.URL);return;}
-  if(CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL'){_dbg('SKIPPED: URL is placeholder');return;}
-  if(_initSyncing){_dbg('QUEUED: _initSyncing=true');_pendingSave=data;return;}
-  if(_cloudSyncing){_dbg('QUEUED: _cloudSyncing=true');_pendingSave=data;return;}
-  _dbg('STARTING save to '+CLOUD_CONFIG.URL);
+  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
+  if(_initSyncing){_pendingSave=data;return;}
+  if(_cloudSyncing){_pendingSave=data;return;}
   _cloudSyncing=true;
-  setSyncStatus('saving','Saving…');
+  setSyncStatus('saving','Saving...');
   const dirtyIds=new Set(_dirtyContentIds);
   _dirtyContentIds=new Set();
   try{
@@ -1371,9 +1362,8 @@ async function cloudSave(data){
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     broadcastPing([...dirtyIds],by).catch(()=>{});
   }catch(e){
-    setSyncStatus('error','Save failed: '+e.message.slice(0,40));
-    console.error('Supabase save error:',e);
-    showAIToast('⚠ Save failed: '+e.message.slice(0,60));
+    setSyncStatus('error','Save failed');
+    console.error('Supabase save:',e.message);
   }finally{
     _cloudSyncing=false;
     if(_pendingSave){const p=_pendingSave;_pendingSave=null;cloudSave(p);}
@@ -1523,7 +1513,7 @@ function showTaskNotification(c, task, fromName){
 
   function startPolling(){
     if(pollTimer) return;
-    setSyncStatus('idle','Polling…');
+    setSyncStatus('idle','Polling...');
     pollTimer=setInterval(pullIfChanged, 3000);
   }
 
