@@ -1241,7 +1241,7 @@ const CLOUD_CONFIG={
   get ENABLED(){ return !!(window.USPIFY_CONFIG?.SYNC_ENABLED&&window.USPIFY_CONFIG?.SUPABASE_URL&&window.USPIFY_CONFIG.SUPABASE_URL!=='YOUR_SUPABASE_PROJECT_URL'&&!window.USPIFY_CONFIG.SUPABASE_URL.includes('%%')); },
 };
 
-let _cloudSyncing=false,_pendingSave=null;
+let _cloudSyncing=false,_pendingSave=null,_initSyncing=false;
 
 function _sbH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'return=minimal'}; }
 function _sbUH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'resolution=merge-duplicates,return=minimal'}; }
@@ -1505,6 +1505,7 @@ function initRealtimeSync(){
 
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
+  _initSyncing=true;
   // SUPABASE = SOURCE OF TRUTH. Always overwrite localStorage cache on startup.
   const cloudData=await cloudLoad();
   if(cloudData&&cloudData.users?.length){
