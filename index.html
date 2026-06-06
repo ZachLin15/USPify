@@ -1690,7 +1690,7 @@ function D(){
   const raw=localStorage.getItem(KEY);
   if(_dataCache && _dataCacheKey===raw) return _dataCache; // return cached parse
   _dataCacheKey=raw;
-  if(!r){
+  if(!raw){
     // No cache yet — return a minimal shell so the app can render a loading state
     // Supabase data will arrive via initCloudSync() shortly
     const d={users:[],brands:[],contents:[],statuses:getDefault().statuses,
@@ -1698,7 +1698,7 @@ function D(){
     return d;
   }
   let data;
-  try{data=JSON.parse(r);}catch(e){
+  try{data=JSON.parse(raw);}catch(e){
     localStorage.removeItem(KEY);
     return {users:[],brands:[],contents:[],statuses:getDefault().statuses,
       scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[]};
