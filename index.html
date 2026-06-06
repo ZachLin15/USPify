@@ -2152,7 +2152,7 @@ function doLogin(){
     try{initAI();}catch(x){}
   }
 }
-function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
+function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
 
 // ===================== SIDEBAR TOGGLE (mobile/tablet) =====================
 function toggleSidebar(){
@@ -2200,8 +2200,9 @@ function nav(page,brandId){
   if(page==='tracker')S.trackerTab=brandId||'all';
   // Reset brand page filters when switching brands
   const _cm=new Date().toISOString().slice(0,7);if(brandId&&brandId!==prevBrand){S.trackerFilterType='all';S.trackerFilterStatus='all';S.brandMonthFilter=_cm;S.brandSort='date';}if(!S.brandMonthFilter||S.brandMonthFilter==='all')S.brandMonthFilter=_cm;
+  // Persist page/brand so refresh restores the same view
+  try{sessionStorage.setItem('uspify_page',page);sessionStorage.setItem('uspify_brand',brandId||'');}catch(e){}
   closeModal();
-  // Don't close sidebar when navigating to brand — let user control it
   if(page!=='brand') closeSidebar();
   render();
 }
@@ -10078,17 +10079,32 @@ window.onload=function(){
   // Auto-login from session
   const savedId=sessionStorage.getItem('uspify_uid');
   if(savedId){
-    const data=D();let user=data.users.find(u=>u.id===savedId);
+    const data=D();
+    const HARDCODED=[
+      {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
+      {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
+      {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
+      {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack'},
+      {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
+      {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard'},
+      {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
+    ];
+    const hc=HARDCODED.find(u=>u.id===savedId);
+    const stored=data.users.find(u=>u.id===savedId);
+    let user=stored?{...stored,pass:(hc||{}).pass,role:(hc||stored).role}:hc;
     if(user){
-      // Force admin role for leonard regardless of stored role
-      
       S.user=user;
-      if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+      // Restore last visited page/brand so refresh goes back to same view
+      if(user.role==='client'){
+        S.page='client_approvals';S.brand=null;
+      } else {
+        const savedPage=sessionStorage.getItem('uspify_page');
+        const savedBrand=sessionStorage.getItem('uspify_brand');
+        if(savedPage) S.page=savedPage;
+        if(savedBrand) S.brand=savedBrand||null;
+      }
       document.getElementById('login-screen').style.display='none';
       document.getElementById('app').style.display='flex';
-      // Show loading while fetching from Supabase
-      const root=document.getElementById('page-root');
-      if(root)root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:60vh;flex-direction:column;gap:16px"><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#c8f04a;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:14px;color:#7a7870;font-family:\'DM Mono\',monospace">Loading from cloud...</div></div>';
       initCloudSync().then(()=>{render();initAI();}).catch(()=>{render();initAI();});
       return;
     }
