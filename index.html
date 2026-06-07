@@ -1408,13 +1408,12 @@ async function cloudSave(data){
 
 async function broadcastPing(contentIds, savedBy){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
-  try{
-    await fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
-      body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by:savedBy||'?',ids:contentIds||[],ts:Date.now()}}]})
-    });
-  }catch(e){}
+  // Fire and forget — don't await, don't block the UI
+  fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
+    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by:savedBy||'?',ts:Date.now()}}]})
+  }).catch(()=>{});
 }
 
 let _realtimeSyncStarted=false;
@@ -1520,7 +1519,7 @@ function showTaskNotification(c, task, fromName){
     if(_pulling||_initSyncing) return; // skip if already pulling or initialising
     _pulling=true;
     try{
-      const fresh=await cloudLoad(2, 500); // 2 retries, 500ms delay
+      const fresh=await cloudLoad(1, 200); // fast pull — 1 retry, 200ms delay
       if(fresh&&fresh.users?.length){
         const h=dataHash(fresh);
         if(h!==lastHash){
@@ -1594,8 +1593,7 @@ function showTaskNotification(c, task, fromName){
           // Any postgres change → pull fresh data
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            console.log('[WS] broadcast from',by,'— my name:',S.user?.name);
-            if(by!==S.user?.name) setTimeout(pullIfChanged,300);
+            if(by!==S.user?.name) setTimeout(pullIfChanged,100);
             return;
           }
           if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
@@ -2333,7 +2331,7 @@ function renderSidebar(){
         <div class="sb-item ${S.page==='client_dashboard'?'active':''}" onclick="nav('client_dashboard')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>Dashboard</div>
         <div class="sb-item ${S.page==='client_approvals'?'active':''}" onclick="nav('client_approvals')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/></svg>Approve Content${pendingApprovalCount>0?`<span class="sb-badge" style="background:var(--pnkd);color:var(--pnk)">${pendingApprovalCount}</span>`:''}</div>
       </div>
-      <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${b.color}22;color:${b.color}">${S.user.init||'C'}</div><div class="u-info"><div class="u-name">${S.user.name}</div><div class="u-role">Client</div></div><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
+      <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(S.user.color||'#ff5a5a')}22;color:${S.user.color||'#ff5a5a'}">${S.user.init||S.user.name?.slice(0,2)||'C'}</div><div class="u-info"><div class="u-name">${S.user.name}</div><div class="u-role">Client</div></div><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
     return;
   }
   const apprCount=data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length;
@@ -2371,7 +2369,7 @@ function renderSidebar(){
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
-    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${u.color}22;color:${u.color}">${u.init}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
+    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(u.color||({caleb:'#c8f04a',carmen:'#5a9fff',developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888')}22;color:${u.color||({caleb:'#c8f04a',carmen:'#5a9fff',developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888'}">${u.init||u.name?.slice(0,2)||'?'}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
 
 function renderTopbar(){
@@ -3484,7 +3482,6 @@ function openReviseModal(id){
   const data=D();
   const stOpts=data.statuses.filter(s=>!s.isAmendment).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   openModal(`<div class="modal-title">Request revision<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Revert to status</label><select class="form-select" id="rv-status">${stOpts}</select></div>
     <div class="form-row"><label class="form-label">Amendment type</label>
       <select class="form-select" id="rv-type">
         <option value="">None</option>
@@ -3492,15 +3489,38 @@ function openReviseModal(id){
         <option value="design_amendment">Design Amendment</option>
       </select>
     </div>
+    <div class="form-row"><label class="form-label">Revert to status</label><select class="form-select" id="rv-status">${stOpts}</select></div>
+    <div class="form-row"><label class="form-label">Note to team member</label>
+      <textarea class="form-textarea" id="rv-note" placeholder="Describe what needs to change..." style="min-height:70px;font-size:14px"></textarea>
+    </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="doRevise('${id}')">Request revision</button></div>`);
 }
 async function doRevise(id){
   const statusId=document.getElementById('rv-status').value;
   const amendType=document.getElementById('rv-type').value;
+  const note=document.getElementById('rv-note')?.value?.trim()||'';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  if(amendType){c.statusId=amendType;c.statusHistory.push({statusId:amendType,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});}
-  else{c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});}
+  const today=new Date().toISOString().split('T')[0];
+  const finalStatus=amendType||statusId;
+  c.statusId=finalStatus;
+  c.statusHistory.push({statusId:finalStatus,changedBy:S.user.id,changedAt:today});
+  // Notify the right person based on amendment type
+  const creator=getContentCreator(data,c);
+  const designer=getDesigner(data,c);
+  if(amendType==='copy_amendment'||finalStatus==='copywriting'){
+    c.assignees=[creator.id];
+    notifyRejected(c,creator,'Copy needs revision',S.user.name,note);
+  } else if(amendType==='design_amendment'||finalStatus==='design'||finalStatus==='video_editing'){
+    c.assignees=[designer.id];
+    notifyRejected(c,designer,'Design needs revision',S.user.name,note);
+  } else {
+    // Generic revert — notify based on who owns the target status
+    const targetUser=(finalStatus==='ideation'||finalStatus==='shoot'||finalStatus==='copywriting')?creator:designer;
+    c.assignees=[targetUser.id];
+    notifyRejected(c,targetUser,`Revision needed: ${getStatus(data,finalStatus).name}`,S.user.name,note);
+  }
   await saveNow(data,c.id);closeModal();render();
+  showAIToast(`🔄 Amendment sent`);
 }
 
 // ===================== CALENDAR =====================
