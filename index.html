@@ -9295,23 +9295,35 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
   let totalCreated=0;
   const newPieces=[];
 
-  setProgress(50,'Building content pieces...');
-  await new Promise(r=>setTimeout(r,50)); // yield to browser to update progress bar
+  // Build content pieces in async batches to avoid freezing the browser
+  for(let mi=0;mi<months.length;mi++){
+    const month=months[mi];
+    const pct=10+Math.round((mi/months.length)*38); // 10% → 48%
+    setProgress(pct,`Building ${mi+1}/${months.length} months...`);
+    await new Promise(r=>setTimeout(r,0)); // yield to browser every month
 
-  months.forEach(month=>{
     const[yr,mo]=month.split('-').map(Number);
     const daysInMonth=new Date(yr,mo,0).getDate();
     const interval=Math.max(1,Math.floor(daysInMonth/quota));
-    // Use Intl for locale-safe month label
-    const monthLabel=new Date(month+'-15').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+    // Build month label from string to avoid timezone bugs
+    const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthLabel=MONTH_NAMES[mo-1]+' '+String(yr).slice(2);
 
     baseTemplates.forEach((t,i)=>{
       const pieceTitle=`${t.title} — ${monthLabel}`;
       if(data.contents.find(c=>c.brandId===id&&c.title===pieceTitle)) return;
       let dayNum=Math.min(daysInMonth,3+(i*interval));
       let postingDate=`${month}-${String(dayNum).padStart(2,'0')}`;
-      postingDate=nextBusinessDay(postingDate);
-      if(!postingDate.startsWith(month)) postingDate=addBusinessDays(`${month}-${String(daysInMonth).padStart(2,'0')}`,-1);
+      // Safe nextBusinessDay with max 14 iterations to avoid infinite loop
+      for(let tries=0;tries<14;tries++){
+        const d=new Date(postingDate+'T00:00:00');
+        if(d.getDay()!==0&&d.getDay()!==6) break;
+        const nd=new Date(postingDate+'T00:00:00');nd.setDate(nd.getDate()+1);
+        postingDate=nd.toISOString().split('T')[0];
+      }
+      if(!postingDate.startsWith(month)){
+        postingDate=`${month}-${String(Math.min(daysInMonth,28)).padStart(2,'0')}`;
+      }
       newPieces.push({
         id:'ct'+uid(),brandId:id,
         title:pieceTitle,type:t.type,cat:t.cat||'wallPost',
@@ -9323,7 +9335,9 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
       });
       totalCreated++;
     });
-  });
+  }
+  setProgress(50,'Saving to cloud...');
+  await new Promise(r=>setTimeout(r,50));
 
   // Push all pieces to data
   data.contents.push(...newPieces);
@@ -9347,31 +9361,25 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
       };
 
       // 1. Save brand + settings
-      console.log('[saveNewBrand] saving brand+settings...');
       const bP=data.brands.filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
       const sP=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
       const [r1,r2]=await Promise.all([
         sbFetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bP)}),
         sbFetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sP)}),
       ]);
-      console.log('[saveNewBrand] brand save:',r1.status,'settings:',r2.status);
-
       setProgress(70,'Saving content pieces...');
-      await new Promise(r=>setTimeout(r,20));
+      await new Promise(r=>setTimeout(r,10));
 
-      // 2. Save new pieces in chunks of 50
-      const CHUNK=50;
-      for(let ci=0;ci<newPieces.length;ci+=CHUNK){
-        const chunk=newPieces.slice(ci,ci+CHUNK);
-        const pct=70+Math.round((ci/newPieces.length)*25);
-        setProgress(pct,`Saving ${ci+1}–${Math.min(ci+CHUNK,newPieces.length)} of ${newPieces.length}...`);
-        console.log(`[saveNewBrand] chunk ${ci}–${ci+CHUNK}...`);
-        const r=await sbFetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),
-          body:JSON.stringify(chunk.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))});
-        if(!r.ok){const t=await r.text();console.error('[saveNewBrand] chunk failed:',r.status,t.slice(0,100));}
-        await new Promise(r=>setTimeout(r,30));
-      }
-      console.log('[saveNewBrand] all chunks done');
+      // 2. Save ALL new pieces in parallel chunks of 100
+      const CHUNK=100;
+      const chunks=[];
+      for(let ci=0;ci<newPieces.length;ci+=CHUNK)
+        chunks.push(newPieces.slice(ci,ci+CHUNK));
+
+      await Promise.all(chunks.map(chunk=>
+        sbFetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),
+          body:JSON.stringify(chunk.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))})
+      ));
 
       // 3. Save to localStorage (best effort)
       try{
