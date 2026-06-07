@@ -3372,6 +3372,44 @@ function renderBrandPage(){
 }
 
 // ===================== APPROVALS =====================
+
+async function approveWithNote(id, nextStatusId){
+  const noteEl=document.getElementById('appr-note-'+id);
+  const note=(noteEl?.value||'').trim();
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const today=new Date().toISOString().split('T')[0];
+  c.statusId=nextStatusId;
+  c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:today});
+  if(note){
+    if(!c.comments)c.comments=[];
+    c.comments.push({id:'cm'+uid(),userId:S.user.id,text:'✅ Approved. '+note,type:'general',createdAt:today});
+  }
+  // Notify the right person
+  const creator=getContentCreator(data,c);
+  const designer=getDesigner(data,c);
+  if(nextStatusId==='posted'){
+    // already posted - no notification needed
+  } else if(nextStatusId==='client_approval'){
+    notifyApproved(c,creator,'Approved → Client Approval',S.user.name);
+  } else if(nextStatusId==='copywriting'){
+    notifyApproved(c,creator,'Approved → start copywriting ✍️',S.user.name);
+  } else if(nextStatusId==='design'){
+    notifyApproved(c,designer,'Ideation approved — start designing 🎨',S.user.name);
+  } else if(nextStatusId==='shoot'){
+    notifyApproved(c,creator,'Script approved — start shooting 🎬',S.user.name);
+  } else if(nextStatusId==='video_editing'){
+    notifyApproved(c,designer,'Shoot done — start editing ✂️',S.user.name);
+  }
+  await saveNow(data,c.id);render();
+  showAIToast('✅ Approved');
+}
+
+async function reviseWithNote(id){
+  const noteEl=document.getElementById('appr-note-'+id);
+  const note=(noteEl?.value||'').trim();
+  openReviseModal(id, note);
+}
+
 function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
@@ -3380,17 +3418,27 @@ function renderApprovals(){
   function apprItem(c,nextId,label){
     const b=getBrand(data,c.brandId);const last=c.statusHistory[c.statusHistory.length-1];
     const submitter=last?getUser(data,last.changedBy):{name:'?'};
-    return `<div class="appr-item">
-      <div class="appr-icon" style="background:${b.color}22">${c.type==='Video'?'\u25B6':'\u25A6'}</div>
-      <div class="appr-info">
-        <div class="appr-name" onclick="openContentDetail('${c.id}')">${c.title}</div>
-        <div class="appr-meta">${brandBadge(b)} · Posting ${fmt(c.postingDate)}</div>
-        <div class="appr-meta" style="margin-top:2px">By ${submitter.name} · ${last?fmt(last.changedAt):''}</div>
-        ${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)">Drive ↗</a>`:''}
+    const stLabel=c.statusId==='senior_approval_ideation'?'Ideation':
+                  c.statusId==='senior_approval_video'?'Video/Design':
+                  c.statusId==='senior_approval_copy'?'Copy':
+                  c.statusId==='senior_approval'?'Design':'';
+    return `<div class="appr-item" style="flex-direction:column;align-items:stretch;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div class="appr-icon" style="background:${b.color}22">${c.type==='Video'?'\u25B6':'\u25A6'}</div>
+        <div class="appr-info" style="flex:1">
+          <div class="appr-name" onclick="openContentDetail('${c.id}')">${c.title}</div>
+          <div class="appr-meta">${brandBadge(b)} · Posting ${fmt(c.postingDate)}</div>
+          <div class="appr-meta" style="margin-top:2px">By ${submitter.name} · ${last?fmt(last.changedAt):''}${stLabel?` · <strong style="color:var(--amb)">${stLabel}</strong>`:''}</div>
+          ${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)">Drive ↗</a>`:''}
+        </div>
       </div>
-      <div class="appr-actions">
-        <button class="btn-approve" onclick="approveContent('${c.id}','${nextId}')">${label}</button>
-        <button class="btn-revise" onclick="openReviseModal('${c.id}')">Revise</button>
+      <div>
+        <textarea id="appr-note-${c.id}" placeholder="Leave a review note (optional)..." style="width:100%;min-height:56px;font-size:13px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:8px 10px;color:var(--t1);font-family:'DM Mono',monospace;resize:vertical;box-sizing:border-box" onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--b2)'"></textarea>
+      </div>
+      <div class="appr-actions" style="justify-content:flex-end">
+        <button class="btn-approve" onclick="approveWithNote('${c.id}','${nextId}')">${label}</button>
+        <button class="btn-revise" onclick="reviseWithNote('${c.id}')">Request Revision</button>
+        <button class="btn btn-ghost btn-sm" onclick="openContentDetail('${c.id}')">Open →</button>
       </div>
     </div>`;
   }
@@ -3489,7 +3537,7 @@ async function approveContent(id,nextStatusId){
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   await saveNow(data,c.id);render();
 }
-function openReviseModal(id){
+function openReviseModal(id, prefillNote){
   const data=D();
   const stOpts=data.statuses.filter(s=>!s.isAmendment).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   openModal(`<div class="modal-title">Request revision<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -3502,7 +3550,7 @@ function openReviseModal(id){
     </div>
     <div class="form-row"><label class="form-label">Revert to status</label><select class="form-select" id="rv-status">${stOpts}</select></div>
     <div class="form-row"><label class="form-label">Note to team member</label>
-      <textarea class="form-textarea" id="rv-note" placeholder="Describe what needs to change..." style="min-height:70px;font-size:14px"></textarea>
+      <textarea class="form-textarea" id="rv-note" placeholder="Describe what needs to change..." style="min-height:70px;font-size:14px">${prefillNote||''}</textarea>
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-danger" onclick="doRevise('${id}')">Request revision</button></div>`);
 }
