@@ -2696,7 +2696,6 @@ function renderDashboard(){
   }).sort((a,b)=>daysUntil(a.postingDate)-daysUntil(b.postingDate));
 
   const statsHTML=`<div class="four-col">
-    <div class="stat-c"><div class="stat-lbl">Total content <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">· ${monthLabel}</span></div><div class="stat-val" style="color:var(--ac)">${totalContent}</div><div class="stat-meta">${inProgress} in progress</div></div>
     <div class="stat-c"><div class="stat-lbl">Pending tasks</div><div class="stat-val" style="color:var(--amb)">${pendingTasks}</div><div class="stat-meta">active right now</div></div>
     <div class="stat-c"><div class="stat-lbl">Posted</div><div class="stat-val" style="color:var(--tel)">${posted}</div><div class="stat-meta">of ${totalContent} this month</div></div>
     <div class="stat-c"><div class="stat-lbl">Overdue</div><div class="stat-val" style="color:${overdue>0?'var(--red)':'var(--t2)'}">${overdue}</div><div class="stat-meta">${overdue>0?'needs attention':'on track'}</div></div>
