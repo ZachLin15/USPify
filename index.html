@@ -1406,29 +1406,15 @@ async function cloudSave(data){
   }
 }
 
-// broadcast via WS (instant) AND REST API (fallback)
-let _broadcastWS=null; // reference to active WS set by initRealtimeSync
+let _broadcastWS=null;
 function broadcastPing(contentIds, savedBy){
   if(!CLOUD_CONFIG.ENABLED) return;
   const by=savedBy||S.user?.name||'?';
-  const payload={by,ts:Date.now()};
-  // Try WS broadcast first (instant, no extra HTTP roundtrip)
-  if(_broadcastWS&&_broadcastWS.readyState===1){
-    try{
-      _broadcastWS.send(JSON.stringify({
-        topic:'realtime:uspify-updates',
-        event:'broadcast',
-        payload:{event:'data_changed',payload},
-        ref:String(Date.now())
-      }));
-      return; // WS sent successfully, no need for REST fallback
-    }catch(e){}
-  }
-  // Fallback: REST broadcast API
+  // REST broadcast API — correct way to send to Supabase Realtime channel
   fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
     method:'POST',
     headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
-    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload}]})
+    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by,ts:Date.now()}}]})
   }).catch(()=>{});
 }
 
@@ -1569,7 +1555,7 @@ function showTaskNotification(c, task, fromName){
   function startPolling(){
     if(pollTimer) return;
     setSyncStatus('idle','Polling...');
-    pollTimer=setInterval(pullIfChanged, 3000);
+    pollTimer=setInterval(pullIfChanged, 1500);
   }
 
   function stopPolling(){
@@ -1585,7 +1571,6 @@ function showTaskNotification(c, task, fromName){
       const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')
         +'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
       ws=new WebSocket(wsUrl);
-      _broadcastWS=ws; // expose for broadcastPing
 
       ws.onopen=()=>{
         reconnectDelay=3000;
@@ -1611,15 +1596,19 @@ function showTaskNotification(c, task, fromName){
             if(msg.payload?.status==='ok') console.log('[WS] channel joined:',msg.topic||'');
             return;
           }
+          // Broadcast: Leonard/Hualu submitted → Jack receives
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            console.log('[WS] broadcast from',by);
+            console.log('[WS] broadcast from',by,'— I am',S.user?.name);
             if(by!==S.user?.name) pullIfChanged();
             return;
           }
-          if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
-            console.log('[WS] db change:',msg.event);
+          // Postgres changes: any DB update triggers a pull
+          if(msg.event==='postgres_changes'){
+            const tbl=msg.payload?.data?.table||'';
+            console.log('[WS] db change on',tbl);
             pullIfChanged();
+            return;
           }
         }catch(err){}
       };
@@ -6978,7 +6967,8 @@ function designerSubmitForReview(id, verIdx){
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[senior.id];
-  save(data);
+  notifyApproved(c, senior, `Design ${versions[verIdx].label} ready for review 🎨`, S.user.name);
+  saveNow(data, c.id);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`\uD83D\uDCE4 Design ${versions[verIdx].label} submitted \u2014 ${senior.name} notified`);
 }
@@ -7940,12 +7930,10 @@ async function wfSubmitIdeationForVideo(id){
     type:'general',createdAt:today});
   // Move to senior_approval stage, add task for senior
   if(!c.workflowTasks)c.workflowTasks=[];
-  c.workflowTasks.push({id:'wt'+uid(),assigneeId:senior.id,status:'open',
-    statusId:'senior_approval_ideation',label:'Review Script/Ideation',openedAt:today});
-  const prev=[...c.assignees];
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
+  notifyApproved(c, senior, 'Script/Ideation ready for review 💡', S.user.name);
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Ideation submitted — ${senior.name} notified to review`);
 }
@@ -8144,6 +8132,7 @@ async function carouselSubmitDesign(id){
   c.statusId='senior_approval';
   c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
+  notifyApproved(c, senior, 'Design ready for review 🎨', S.user.name);
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Design submitted — ${senior.name} notified to review`);
 }
@@ -8171,7 +8160,7 @@ function wfSeniorApprove(id){
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Approved — moved to client approval`);
 }
 
@@ -8443,7 +8432,9 @@ function wfShootDone(id){
   const prev=[...c.assignees];
   wfTransition(data,c,'video_editing',[designer.id],
     `\uD83C\uDFAC Shooting done by ${S.user.name}.${c.footageLink?' Footage link added.':''} Assigned to ${designer.name} for video editing.`,prev);
-  save(data); renderDetailPage(id); renderSidebar(); renderTopbar();
+  notifyApproved(c, designer, 'Footage ready — start editing ✂️', S.user.name);
+  saveNow(data, c.id);
+  renderDetailPage(id); renderSidebar(); renderTopbar();
   showAIToast(`\u2705 Shooting done \u2014 ${designer.name} assigned to edit`);
 }
 
@@ -8466,7 +8457,9 @@ function wfVideoDone(id){
   c.statusId='senior_approval_video';
   c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
-  save(data); renderDetailPage(id); renderSidebar(); renderTopbar();
+  notifyApproved(c, senior, 'Video ready for review ✂️', S.user.name);
+  saveNow(data, c.id);
+  renderDetailPage(id); renderSidebar(); renderTopbar();
   showAIToast(`✅ Video submitted — ${senior.name} notified to review`);
 }
 
@@ -10067,6 +10060,7 @@ async function submitIdeaForApproval(id, verIdx){
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
+  notifyApproved(c, senior, 'Ideation ready for review 💡', S.user.name);
   await saveNow(data, c.id);
   renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`📤 Submitted — ${senior.name} notified to review`);
