@@ -1406,13 +1406,29 @@ async function cloudSave(data){
   }
 }
 
-async function broadcastPing(contentIds, savedBy){
-  if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
-  // Fire and forget — don't await, don't block the UI
+// broadcast via WS (instant) AND REST API (fallback)
+let _broadcastWS=null; // reference to active WS set by initRealtimeSync
+function broadcastPing(contentIds, savedBy){
+  if(!CLOUD_CONFIG.ENABLED) return;
+  const by=savedBy||S.user?.name||'?';
+  const payload={by,ts:Date.now()};
+  // Try WS broadcast first (instant, no extra HTTP roundtrip)
+  if(_broadcastWS&&_broadcastWS.readyState===1){
+    try{
+      _broadcastWS.send(JSON.stringify({
+        topic:'realtime:uspify-updates',
+        event:'broadcast',
+        payload:{event:'data_changed',payload},
+        ref:String(Date.now())
+      }));
+      return; // WS sent successfully, no need for REST fallback
+    }catch(e){}
+  }
+  // Fallback: REST broadcast API
   fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
     method:'POST',
     headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
-    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by:savedBy||'?',ts:Date.now()}}]})
+    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload}]})
   }).catch(()=>{});
 }
 
@@ -1569,35 +1585,41 @@ function showTaskNotification(c, task, fromName){
       const wsUrl=CLOUD_CONFIG.URL.replace('https://','wss://')
         +'/realtime/v1/websocket?apikey='+CLOUD_CONFIG.ANON_KEY+'&vsn=1.0.0';
       ws=new WebSocket(wsUrl);
+      _broadcastWS=ws; // expose for broadcastPing
 
       ws.onopen=()=>{
         reconnectDelay=3000;
         stopPolling();
         setSyncStatus('live','Live ✓');
+        console.log('[WS] connected');
 
-        // Join a single channel that listens to all table changes
+        // Join broadcast channel for instant cross-browser notifications
         sendMsg({topic:'realtime:uspify-updates',event:'phx_join',payload:{config:{broadcast:{self:false}},access_token:CLOUD_CONFIG.ANON_KEY},ref:'1'});
-        sendMsg({topic:'realtime:uspify-db',event:'phx_join',payload:{config:{broadcast:{self:false},postgres_changes:[{event:'UPDATE',schema:'public',table:'uspify_contents'},{event:'UPDATE',schema:'public',table:'uspify_settings'}]},access_token:CLOUD_CONFIG.ANON_KEY},ref:'2'});
+        // Join postgres changes channel as backup
+        sendMsg({topic:'realtime:uspify-db',event:'phx_join',payload:{config:{broadcast:{self:false},postgres_changes:[{event:'UPDATE',schema:'public',table:'uspify_settings'}]},access_token:CLOUD_CONFIG.ANON_KEY},ref:'2'});
       };
 
       ws.onmessage=async(e)=>{
         try{
           const msg=JSON.parse(e.data);
-          // Reply to server heartbeats
           if(msg.event==='heartbeat'){
             sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)});
             return;
           }
-          // Ignore join confirmations and other system messages
-          if(msg.event==='phx_reply') return;
-          // Any postgres change → pull fresh data
+          if(msg.event==='phx_reply'){
+            // Log join confirmations so we know channels are active
+            if(msg.payload?.status==='ok') console.log('[WS] channel joined:',msg.topic||'');
+            return;
+          }
           if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
             const by=msg.payload?.payload?.by||'?';
-            if(by!==S.user?.name) setTimeout(pullIfChanged,100);
+            console.log('[WS] broadcast from',by);
+            if(by!==S.user?.name) pullIfChanged();
             return;
           }
           if(msg.event==='postgres_changes'||msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
-            await pullIfChanged();
+            console.log('[WS] db change:',msg.event);
+            pullIfChanged();
           }
         }catch(err){}
       };
