@@ -1417,8 +1417,11 @@ async function broadcastPing(contentIds, savedBy){
   }catch(e){}
 }
 
+let _realtimeSyncStarted=false;
 function initRealtimeSync(){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL') return;
+  if(_realtimeSyncStarted) return; // prevent duplicate WS connections
+  _realtimeSyncStarted=true;
 
   let ws, pollTimer, lastHash='', reconnectDelay=3000, heartbeatRef=0;
 
@@ -1640,19 +1643,27 @@ function showTaskNotification(c, task, fromName){
 
 async function initCloudSync(){
   if(!CLOUD_CONFIG.ENABLED)return;
-  _initSyncing=true;
-  // SUPABASE = SOURCE OF TRUTH. Always overwrite localStorage cache on startup.
-  const cloudData=await cloudLoad();
-  if(cloudData&&cloudData.users?.length){
-    _dataCache=null; _dataCacheKey=null; // invalidate D() cache
-    localStorage.setItem(KEY,JSON.stringify(cloudData));
-    if(S.user){
-      const freshUser=cloudData.users.find(u=>u.id===S.user.id);
-      if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
-    }
-    if(typeof render==='function') render();
-  }
+  // Start realtime sync first (non-blocking WS connection)
   initRealtimeSync();
+  _initSyncing=true;
+  try{
+    const cloudData=await cloudLoad();
+    if(cloudData&&cloudData.users?.length){
+      reapplyDefaultPasswords(cloudData.users);
+      _dataCache=null;_dataCacheKey=null;
+      localStorage.setItem(KEY,JSON.stringify(cloudData));
+      if(S.user){
+        const freshUser=cloudData.users.find(u=>u.id===S.user.id);
+        if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
+      }
+      if(S.user&&typeof render==='function') render();
+    }
+  }catch(e){
+    console.warn('initCloudSync failed:', e.message);
+  }finally{
+    _initSyncing=false;
+    if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
+  }
 }
 
 
@@ -2084,21 +2095,20 @@ function save(data, dirtyContentId){
 }
 
 async function saveNow(data, dirtyContentId){
-  console.log('[saveNow] called, dirtyContentId=',dirtyContentId);
   _dataCache=null;_dataCacheKey=null;
-  try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){
-    if(e.name==='QuotaExceededError'||e.code===22){
-      const slim=JSON.parse(JSON.stringify(data));
-      slim.contents.forEach(c=>{
-        (c.ideationVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!(img.url||'').startsWith('blob:'));});
-      });
-      try{localStorage.setItem(KEY,JSON.stringify(slim));}catch(_){}
-    }
+  try{
+    const slim=JSON.parse(JSON.stringify(data));
+    slim.contents.forEach(c=>{
+      (c.ideationVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!(img.url||'').startsWith('blob:'));});
+    });
+    localStorage.setItem(KEY,JSON.stringify(slim));
+  }catch(e){
+    // If quota exceeded just skip localStorage — Supabase is the source of truth
+    console.warn('saveNow: localStorage failed, continuing with Supabase only');
   }
   if(dirtyContentId) markDirty(dirtyContentId);
   clearTimeout(_saveDebounceTimer);
-  await cloudSave(data);
-  if(CLOUD_CONFIG.ENABLED&&S.user?.name) broadcastPing(dirtyContentId?[dirtyContentId]:[],S.user.name).catch(()=>{});
+  await cloudSave(data); // cloudSave handles broadcastPing internally
 }
 function uid(){return Math.random().toString(36).slice(2,9);}
 
@@ -8913,7 +8923,9 @@ Reply with ONLY the summary using these exact section headers. Do not think, jus
 
   try{
     // LM Studio local server — OpenAI-compatible API at localhost:1234
-    const resp=await fetch('http://localhost:1234/v1/chat/completions',{
+    const _aiCtrl=new AbortController();
+    const _aiTimeout=setTimeout(()=>_aiCtrl.abort(),5000); // 5s max for local AI
+    const resp=await fetch('http://localhost:1234/v1/chat/completions',{signal:_aiCtrl.signal,
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -9245,6 +9257,7 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
         chat_template_kwargs:{thinking:false}
       })
     });
+    clearTimeout(_aiTimeout);
     if(resp.ok){
       const result=await resp.json();
       const msg=result.choices?.[0]?.message||{};
@@ -9314,65 +9327,70 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
 
   // Push all pieces to data
   data.contents.push(...newPieces);
-
-  // Save brand+users+settings to localStorage (small)
-  // Skip localStorage for contents if too many pieces (quota risk)
-  const dataForLocal = JSON.parse(JSON.stringify(data));
-  if(newPieces.length > 100){
-    // Keep only existing contents (not new ones) in localStorage to avoid quota crash
-    // Supabase will be the source of truth for the new pieces
-    dataForLocal.contents = data.contents.filter(c => !newPieces.find(n=>n.id===c.id));
-  }
   _dataCache=null;_dataCacheKey=null;
-  try{ localStorage.setItem(KEY, JSON.stringify(dataForLocal)); }catch(e){}
 
-  // Save directly to Supabase in chunks — bypass saveNow to avoid localStorage quota
+  // Save to Supabase — only new pieces
   setProgress(60,'Saving brand...');
-  await new Promise(r=>setTimeout(r,30));
+  await new Promise(r=>setTimeout(r,20));
+  console.log('[saveNewBrand] starting Supabase save, newPieces=',newPieces.length,'ENABLED=',CLOUD_CONFIG.ENABLED);
 
   if(CLOUD_CONFIG.ENABLED){
     try{
       const now=new Date().toISOString();
       const by=S.user?.name||'?';
-      // Save brand + users + settings first
-      const uP=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
-      const bP=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
+
+      // Helper: fetch with 15s timeout
+      const sbFetch=(url,opts)=>{
+        const ctrl=new AbortController();
+        const t=setTimeout(()=>ctrl.abort(),15000);
+        return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t));
+      };
+
+      // 1. Save brand + settings
+      console.log('[saveNewBrand] saving brand+settings...');
+      const bP=data.brands.filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
       const sP=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
-      await Promise.all([
-        fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uP)}),
-        fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bP)}),
-        fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sP)}),
+      const [r1,r2]=await Promise.all([
+        sbFetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bP)}),
+        sbFetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sP)}),
       ]);
+      console.log('[saveNewBrand] brand save:',r1.status,'settings:',r2.status);
 
-      // Save contents in chunks of 25
-      const allC = data.contents.filter(c=>c&&c.id);
-      const CHUNK = 25;
-      for(let ci=0; ci<allC.length; ci+=CHUNK){
-        const chunk = allC.slice(ci, ci+CHUNK);
-        const pct = 60 + Math.round((ci/allC.length)*35);
-        setProgress(pct, `Saving contents ${ci+1}–${Math.min(ci+CHUNK,allC.length)} of ${allC.length}...`);
-        await fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),
+      setProgress(70,'Saving content pieces...');
+      await new Promise(r=>setTimeout(r,20));
+
+      // 2. Save new pieces in chunks of 50
+      const CHUNK=50;
+      for(let ci=0;ci<newPieces.length;ci+=CHUNK){
+        const chunk=newPieces.slice(ci,ci+CHUNK);
+        const pct=70+Math.round((ci/newPieces.length)*25);
+        setProgress(pct,`Saving ${ci+1}–${Math.min(ci+CHUNK,newPieces.length)} of ${newPieces.length}...`);
+        console.log(`[saveNewBrand] chunk ${ci}–${ci+CHUNK}...`);
+        const r=await sbFetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),
           body:JSON.stringify(chunk.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))});
-        await new Promise(r=>setTimeout(r,80)); // small gap between chunks
+        if(!r.ok){const t=await r.text();console.error('[saveNewBrand] chunk failed:',r.status,t.slice(0,100));}
+        await new Promise(r=>setTimeout(r,30));
       }
+      console.log('[saveNewBrand] all chunks done');
 
-      // Now store full data in localStorage (it includes all contents)
-      _dataCache=null;_dataCacheKey=null;
-      try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){
-        // If still too big, just keep without new contents — Supabase has them
-        try{ localStorage.setItem(KEY, JSON.stringify(dataForLocal)); }catch(_){}
-      }
+      // 3. Save to localStorage (best effort)
+      try{
+        const slim=JSON.parse(JSON.stringify(data));
+        slim.contents.forEach(c=>{
+          (c.ideationVersions||[]).forEach(v=>{v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl);});
+        });
+        localStorage.setItem(KEY,JSON.stringify(slim));
+      }catch(e){console.warn('[saveNewBrand] localStorage quota, Supabase is source of truth');}
 
       broadcastPing([],by).catch(()=>{});
     }catch(e){
-      console.error('Brand save error:',e);
-      showAIToast('⚠ Save error: '+e.message);
+      console.error('[saveNewBrand] save error:',e);
+      showAIToast('⚠ Save error: '+e.message.slice(0,80));
     }
   } else {
-    // No Supabase — just use localStorage
-    _dataCache=null;_dataCacheKey=null;
-    try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){
-      showAIToast('⚠ Storage full — some content may not be saved locally');
+    console.log('[saveNewBrand] Supabase disabled, saving to localStorage only');
+    try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){
+      showAIToast('⚠ Storage full');
     }
   }
 
