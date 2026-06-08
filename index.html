@@ -3456,7 +3456,13 @@ async function reviseWithNote(id){
 function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
-  const sa=data.contents.filter(c=>c.statusId==='senior_approval');
+  // Catch ALL senior approval statuses
+  const sa=data.contents.filter(c=>
+    c.statusId==='senior_approval'||
+    c.statusId==='senior_approval_ideation'||
+    c.statusId==='senior_approval_video'||
+    c.statusId==='senior_approval_copy'
+  );
   const ca=data.contents.filter(c=>c.statusId==='client_approval');
   function apprItem(c,nextId,label){
     const b=getBrand(data,c.brandId);const last=c.statusHistory[c.statusHistory.length-1];
@@ -3487,7 +3493,16 @@ function renderApprovals(){
   }
   return `<div class="two-col">
     <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
-    <div class="pb">${sa.length?sa.map(c=>apprItem(c,'client_approval','Approve →')).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
+    <div class="pb">${sa.length?sa.map(c=>{
+      const nextId=c.statusId==='senior_approval_ideation'?'design':
+                   c.statusId==='senior_approval_video'?'copywriting':
+                   'client_approval';
+      const label=c.statusId==='senior_approval_ideation'?'Approve Ideation →':
+                  c.statusId==='senior_approval_video'?'Approve Design →':
+                  c.statusId==='senior_approval_copy'?'Approve Copy →':
+                  'Approve →';
+      return apprItem(c,nextId,label);
+    }).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
     <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--pnk)">Client Approval</div><div class="ph-sub">${ca.length} pending</div></div>
     <div class="pb">${ca.length?ca.map(c=>{
       const clientEntry=c.statusHistory.slice().reverse().find(h=>h.statusId==='client_approval');
@@ -7055,8 +7070,8 @@ function designerSubmitForReview(id, verIdx){
   const senior=getSenior(data,c);
   c.seniorNotifDismissed={};
   const prev=[...c.assignees];
-  c.statusId='senior_approval';
-  c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusId='senior_approval_video';
+  c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[senior.id];
   notifyApproved(c, senior, `Design ${versions[verIdx].label} ready for review 🎨`, S.user.name);
   saveNow(data, c.id);
@@ -8220,8 +8235,8 @@ async function carouselSubmitDesign(id){
     text:`🎨 Design submitted for senior approval by ${S.user.name}`,type:'general',createdAt:today});
   c.designPendingReview=true;
   const prev=[...c.assignees];
-  c.statusId='senior_approval';
-  c.statusHistory.push({statusId:'senior_approval',changedBy:S.user.id,changedAt:today});
+  c.statusId='senior_approval_video';
+  c.statusHistory.push({statusId:'senior_approval_video',changedBy:S.user.id,changedAt:today});
   c.assignees=[senior.id];
   notifyApproved(c, senior, 'Design ready for review 🎨', S.user.name);
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
