@@ -829,7 +829,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 #notif-btn.has-alerts{border-color:var(--red);color:var(--red);background:var(--redd)}
 #notif-count{background:var(--red);color:#fff;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;min-width:15px;height:15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px}
 
-#notif-panel{position:fixed;top:52px;right:16px;width:420px;max-height:560px;background:var(--s1);border:1px solid var(--b2);border-radius:var(--r2);z-index:500;display:none;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;animation:slideUp .18s ease both}
+#notif-panel{position:fixed;top:52px;right:16px;width:420px;max-height:70vh;background:var(--s1);border:1px solid var(--b2);border-radius:var(--r2);z-index:500;display:none;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;animation:slideUp .18s ease both}
 #notif-panel.open{display:flex}
 .np-header{padding:12px 15px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .np-title{font-size:16px;font-weight:700}
@@ -10286,9 +10286,39 @@ function getAlertItems(data){
   return items;
 }
 
+function getNotifCount(data){
+  const uid=S.user?.id;
+  const role=S.user?.role;
+  // Use a Set to avoid double-counting same content
+  const seen=new Set();
+  const add=(c)=>{if(c&&c.id&&!seen.has(c.id)){seen.add(c.id);return true;}return false;};
+  // Shoot
+  if(role==='content_creator'||role==='admin')
+    data.contents.filter(c=>c.statusId==='shoot'&&c.shootNotified&&!(c.shootNotifDismissed||{})[uid]).forEach(add);
+  // Copy
+  if(role==='content_creator'||role==='admin')
+    data.contents.filter(c=>c.statusId==='copywriting'&&c.copyNotified&&!(c.copyNotifDismissed||{})[uid]).forEach(add);
+  // Designer
+  if(role==='designer'||role==='admin'){
+    data.contents.filter(c=>c.statusId==='video_editing'&&c.designerAlerted&&!(c.editNotifDismissed||{})[uid]).forEach(add);
+    data.contents.filter(c=>c.type!=='Video'&&c.statusId==='design'&&!(c.designNotifDismissed||{})[uid]&&(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&t.statusId==='design')).forEach(add);
+  }
+  // Senior approval
+  if(role==='senior'||role==='admin')
+    data.contents.filter(c=>(c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')&&!(c.seniorNotifDismissed||{})[uid]).forEach(add);
+  // Amendment workflowTasks — only count if NOT already counted above
+  data.contents.filter(c=>!(c.amendNotifDismissed||{})[uid]&&(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&(t.label||'').toLowerCase().includes('amendment'))).forEach(add);
+  // Deletions (each entry counts separately, not a content item)
+  let delCount=0;
+  if(role==='admin'||role==='senior'){
+    const _7dAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
+    delCount=(data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid&&(e.deletedAt||'')>=_7dAgo).length;
+  }
+  return seen.size+delCount;
+}
+
 function renderNotifBell(data){
-  const alerts=getAlertItems(data);
-  const count=alerts.length;
+  const count=getNotifCount(data);
   const hasAlerts=count>0;
   return `<button id="notif-btn" class="${hasAlerts?'has-alerts':''}" onclick="toggleNotifPanel()" title="Reminders">
     \uD83D\uDD14 ${hasAlerts?`<span id="notif-count">${count}</span>`:''}
@@ -10301,6 +10331,12 @@ function renderNotifPanel(){
   const role=S.user?.role;
   const uid=S.user?.id;
   let sections=[];
+  // Update header title with total count
+  const _titleEl=document.querySelector('.np-title');
+  if(_titleEl){
+    const _tc=getNotifCount(data);
+    _titleEl.innerHTML=`🔔 Reminders${_tc>0?` <span style="background:var(--redd);color:var(--red);font-size:11px;padding:1px 6px;border-radius:20px;font-family:'DM Mono',monospace;font-weight:700;margin-left:4px">${_tc}</span>`:''}`;
+  }
 
   // ── 1. SHOOT NOTIFICATIONS for Leonard/content_creator ──────────────────
   if(role==='content_creator'||role==='admin'){
@@ -10457,9 +10493,12 @@ function renderNotifPanel(){
 
   // ── 3.7. CONTENT DELETION NOTIFICATIONS (admin/senior only) ────────────────
   if(role==='admin'||role==='senior'){
+    // Only show recent deletions (last 7 days) to avoid clutter
+    const _7dAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
     const deletions=(data.deletionLog||[]).filter(entry=>
       !entry.dismissedBy.includes(uid) &&
-      entry.deletedById!==uid
+      entry.deletedById!==uid &&
+      (entry.deletedAt||'')>=_7dAgo
     );
     if(deletions.length){
       sections.push(`<div class="np-section-header" style="background:var(--redd);color:var(--red)">🗑 CONTENT REMOVED (${deletions.length})</div>`
