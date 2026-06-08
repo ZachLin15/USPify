@@ -1241,7 +1241,7 @@ const CLOUD_CONFIG={
 let _cloudSyncing=false,_pendingSave=null,_initSyncing=false;
 
 function _sbH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'return=minimal'}; }
-function _sbUH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'resolution=merge-duplicates,return=minimal'}; }
+function _sbUH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'resolution=merge-duplicates,return=minimal','Cache-Control':'no-cache','Pragma':'no-cache'}; }
 function _sbUrl(table,query){ return CLOUD_CONFIG.URL+'/rest/v1/'+table+(query?'?'+query:''); }
 
 function setSyncStatus(status,msg){
@@ -1559,34 +1559,19 @@ function showTaskNotification(c, task, fromName){
             });
           });
         }
+        // ALWAYS update localStorage with fresh Supabase data
+        // Never skip based on hash — stale local data causes sync bugs
+        _dataCache=null;_dataCacheKey=null;
+        localStorage.setItem(KEY,JSON.stringify(fresh));
+        if(S.user){
+          const fu=fresh.users.find(u=>u.id===S.user.id);
+          if(fu){S.user=fu;}
+        }
         const h=dataHash(fresh);
         if(h!==lastHash){
           lastHash=h;
-          _dataCache=null;_dataCacheKey=null;
-          localStorage.setItem(KEY,JSON.stringify(fresh));
-          if(S.user){
-            const fu=fresh.users.find(u=>u.id===S.user.id);
-            if(fu){S.user=fu;}
-          }
           render();
-          // Refresh notif panel if open
           try{const _p=document.getElementById('notif-panel');if(_p&&_p.style.display!=='none')renderNotifPanel();}catch(_){}
-          console.log('[pull] hash changed → re-rendered');
-        } else {
-          // Hash same but check if bell count needs update (tasks may have changed)
-          try{
-            const _d=fresh;
-            const _alerts=getAlertItems(_d);
-            const _bellEl=document.getElementById('notif-btn');
-            const _countEl=document.getElementById('notif-count');
-            if(_bellEl){
-              _bellEl.className=_alerts.length>0?'has-alerts':'';
-              if(_alerts.length>0){
-                if(!_countEl){const sp=document.createElement('span');sp.id='notif-count';sp.textContent=_alerts.length;_bellEl.appendChild(sp);}
-                else _countEl.textContent=_alerts.length;
-              } else if(_countEl) _countEl.remove();
-            }
-          }catch(_){}
         }
       }
     }catch(e){}finally{_pulling=false;}
