@@ -1393,8 +1393,8 @@ async function cloudSave(data){
     }
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
+    console.log('[cloudSave] saved OK, broadcasting as',by);
     broadcastPing([...dirtyIds],by).catch(()=>{});
-    console.log('[cloudSave] OK — saved',allC.length,'contents to Supabase');
   }catch(e){
     setSyncStatus('error','Sync error');
     console.error('Supabase save error:',e.message,e);
@@ -1410,12 +1410,12 @@ let _broadcastWS=null;
 function broadcastPing(contentIds, savedBy){
   if(!CLOUD_CONFIG.ENABLED) return;
   const by=savedBy||S.user?.name||'?';
-  // REST broadcast API — correct way to send to Supabase Realtime channel
+  console.log('[broadcast] sending as',by);
   fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
     method:'POST',
     headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
     body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by,ts:Date.now()}}]})
-  }).catch(()=>{});
+  }).then(r=>console.log('[broadcast] response:',r.status)).catch(e=>console.error('[broadcast] failed:',e));
 }
 
 let _realtimeSyncStarted=false;
@@ -1518,8 +1518,10 @@ function showTaskNotification(c, task, fromName){
   let _seenTaskIds=new Set(); // tracks tasks already toasted to this user
 
   async function pullIfChanged(){
-    if(_pulling||_initSyncing) return; // skip if already pulling or initialising
+    if(_pulling){console.log('[pull] skipped: already pulling');return;}
+    if(_initSyncing){console.log('[pull] skipped: initSyncing');return;}
     _pulling=true;
+    console.log('[pull] starting...');
     try{
       const fresh=await cloudLoad(1, 200); // fast pull — 1 retry, 200ms delay
       if(fresh&&fresh.users?.length){
