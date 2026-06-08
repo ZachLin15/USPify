@@ -1534,16 +1534,34 @@ function showTaskNotification(c, task, fromName){
               t.assigneeId===_uid&&t.status==='open'&&!_seenTaskIds.has(t.id)
             ).forEach(t=>{
               _seenTaskIds.add(t.id);
+              // Persist so refresh doesn't re-toast same task
+              try{sessionStorage.setItem('uspify_seen_tasks',JSON.stringify([..._seenTaskIds]));}catch(_){}
               const savedBy=fresh.__savedBy||'Someone';
               console.log('[pull] new task for',_uid,'from',savedBy,'→ showing toast');
               showTaskNotification(c, t, savedBy);
+              // Update bell count immediately without full render
+              try{
+                const _d=JSON.parse(localStorage.getItem(KEY)||'{}');
+                const _bellEl=document.getElementById('notif-btn');
+                const _countEl=document.getElementById('notif-count');
+                const _alerts=getAlertItems(_d);
+                if(_bellEl){_bellEl.className=_alerts.length>0?'has-alerts':'';}
+                if(_alerts.length>0){
+                  if(!_countEl){const sp=document.createElement('span');sp.id='notif-count';sp.textContent=_alerts.length;_bellEl?.appendChild(sp);}
+                  else _countEl.textContent=_alerts.length;
+                }
+              }catch(_){}
+              // Refresh notif panel if open
+              try{
+                const _panel=document.getElementById('notif-panel');
+                if(_panel&&_panel.style.display!=='none') renderNotifPanel();
+              }catch(_){}
             });
           });
         }
         const h=dataHash(fresh);
         if(h!==lastHash){
           lastHash=h;
-          const savedBy=fresh.__savedBy;
           _dataCache=null;_dataCacheKey=null;
           localStorage.setItem(KEY,JSON.stringify(fresh));
           if(S.user){
@@ -1551,7 +1569,24 @@ function showTaskNotification(c, task, fromName){
             if(fu){S.user=fu;}
           }
           render();
+          // Refresh notif panel if open
+          try{const _p=document.getElementById('notif-panel');if(_p&&_p.style.display!=='none')renderNotifPanel();}catch(_){}
           console.log('[pull] hash changed → re-rendered');
+        } else {
+          // Hash same but check if bell count needs update (tasks may have changed)
+          try{
+            const _d=fresh;
+            const _alerts=getAlertItems(_d);
+            const _bellEl=document.getElementById('notif-btn');
+            const _countEl=document.getElementById('notif-count');
+            if(_bellEl){
+              _bellEl.className=_alerts.length>0?'has-alerts':'';
+              if(_alerts.length>0){
+                if(!_countEl){const sp=document.createElement('span');sp.id='notif-count';sp.textContent=_alerts.length;_bellEl.appendChild(sp);}
+                else _countEl.textContent=_alerts.length;
+              } else if(_countEl) _countEl.remove();
+            }
+          }catch(_){}
         }
       }
     }catch(e){}finally{_pulling=false;}
@@ -1645,13 +1680,26 @@ function showTaskNotification(c, task, fromName){
   setInterval(()=>sendMsg({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++heartbeatRef)}), 25000);
 
   // Initial hash from current data
-  // Seed seen task IDs from current data so we don't toast existing tasks on load
+  // On startup: seed seen IDs from sessionStorage (survives refresh)
+  // Show toast for any unseen open tasks (acts as a reminder on login/refresh)
   try{
     const _uid=S.user?.id;
-    if(_uid)(D().contents||[]).forEach(c=>
-      (c.workflowTasks||[]).filter(t=>t.assigneeId===_uid&&t.status==='open')
-        .forEach(t=>_seenTaskIds.add(t.id))
-    );
+    const _stored=JSON.parse(sessionStorage.getItem('uspify_seen_tasks')||'[]');
+    _stored.forEach(id=>_seenTaskIds.add(id));
+    if(_uid){
+      const _today=new Date().toISOString().split('T')[0];
+      (D().contents||[]).forEach(c=>{
+        (c.workflowTasks||[]).filter(t=>t.assigneeId===_uid&&t.status==='open').forEach(t=>{
+          if(!_seenTaskIds.has(t.id)){
+            // Show toast for unseen tasks (reminder on load)
+            setTimeout(()=>showTaskNotification(c,t,'Reminder'),500+Math.random()*1000);
+            _seenTaskIds.add(t.id);
+          }
+        });
+      });
+      // Persist
+      try{sessionStorage.setItem('uspify_seen_tasks',JSON.stringify([..._seenTaskIds]));}catch(_){}
+    }
   }catch(_){}
   try{ lastHash=dataHash(D()); }catch(e){}
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullIfChanged();});
@@ -2273,7 +2321,7 @@ function doLogin(){
   try{initAI();}catch(x){}
   if(typeof initCloudSync==='function') initCloudSync();
 }
-function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
+function doLogout(){S.user=null;S.page='dashboard';S.brand=null;sessionStorage.removeItem('uspify_uid');sessionStorage.removeItem('uspify_page');sessionStorage.removeItem('uspify_brand');sessionStorage.removeItem('uspify_seen_tasks');document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';const lp=document.getElementById('li-pass');if(lp)lp.value='';const le=document.getElementById('li-err');if(le)le.textContent='';}
 
 // ===================== SIDEBAR TOGGLE (mobile/tablet) =====================
 function toggleSidebar(){
