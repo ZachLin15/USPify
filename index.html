@@ -1394,7 +1394,7 @@ async function cloudSave(data){
     setSyncStatus('live','Saved ✓');
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     console.log('[cloudSave] saved OK, broadcasting as',by);
-    broadcastPing([...dirtyIds],by).catch(()=>{});
+    try{broadcastPing([...dirtyIds],by);}catch(e){}
   }catch(e){
     setSyncStatus('error','Sync error');
     console.error('Supabase save error:',e.message,e);
@@ -1410,11 +1410,12 @@ let _broadcastWS=null;
 function broadcastPing(contentIds, savedBy){
   if(!CLOUD_CONFIG.ENABLED) return;
   const by=savedBy||S.user?.name||'?';
-  console.log('[broadcast] sending as',by);
+  // topic must match the channel name Jack subscribed to (without 'realtime:' prefix)
+  console.log('[broadcast] sending as',by,'to topic: uspify-updates');
   fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
     method:'POST',
     headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
-    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'data_changed',payload:{by,ts:Date.now()}}]})
+    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'broadcast',payload:{event:'data_changed',payload:{by,ts:Date.now()}}}]})
   }).then(r=>console.log('[broadcast] response:',r.status)).catch(e=>console.error('[broadcast] failed:',e));
 }
 
@@ -1525,6 +1526,20 @@ function showTaskNotification(c, task, fromName){
     try{
       const fresh=await cloudLoad(1, 200); // fast pull — 1 retry, 200ms delay
       if(fresh&&fresh.users?.length){
+        // Always check for new tasks regardless of hash
+        if(S.user){
+          const _uid=S.user.id;
+          (fresh.contents||[]).forEach(c=>{
+            (c.workflowTasks||[]).filter(t=>
+              t.assigneeId===_uid&&t.status==='open'&&!_seenTaskIds.has(t.id)
+            ).forEach(t=>{
+              _seenTaskIds.add(t.id);
+              const savedBy=fresh.__savedBy||'Someone';
+              console.log('[pull] new task for',_uid,'from',savedBy,'→ showing toast');
+              showTaskNotification(c, t, savedBy);
+            });
+          });
+        }
         const h=dataHash(fresh);
         if(h!==lastHash){
           lastHash=h;
@@ -1535,20 +1550,8 @@ function showTaskNotification(c, task, fromName){
             const fu=fresh.users.find(u=>u.id===S.user.id);
             if(fu){S.user=fu;}
           }
-          // Detect NEW workflowTasks for this user → show message-style notification
-          if(S.user){
-            const _uid=S.user.id;
-            (fresh.contents||[]).forEach(c=>{
-              (c.workflowTasks||[]).filter(t=>
-                t.assigneeId===_uid&&t.status==='open'&&!_seenTaskIds.has(t.id)
-              ).forEach(t=>{
-                _seenTaskIds.add(t.id);
-                showTaskNotification(c, t, savedBy||'Someone');
-              });
-            });
-          }
           render();
-          if(savedBy&&savedBy!==S.user?.name) showAIToast('🔄 Updated by '+savedBy);
+          console.log('[pull] hash changed → re-rendered');
         }
       }
     }catch(e){}finally{_pulling=false;}
@@ -1599,17 +1602,22 @@ function showTaskNotification(c, task, fromName){
             return;
           }
           // Broadcast: Leonard/Hualu submitted → Jack receives
-          if(msg.event==='broadcast'&&msg.payload?.event==='data_changed'){
-            const by=msg.payload?.payload?.by||'?';
-            console.log('[WS] broadcast from',by,'— I am',S.user?.name);
-            if(by!==S.user?.name) pullIfChanged();
+          if(msg.event==='broadcast'){
+            // Handle both payload formats
+            const inner=msg.payload?.payload||msg.payload||{};
+            const evName=inner.event||msg.payload?.event||'';
+            const by=inner.payload?.by||inner.by||'?';
+            if(evName==='data_changed'||evName==='broadcast'){
+              console.log('[WS] broadcast from',by,'— I am',S.user?.name);
+              if(by!==S.user?.name) pullIfChanged();
+            }
             return;
           }
           // Postgres changes: any DB update triggers a pull
           if(msg.event==='postgres_changes'){
-            const tbl=msg.payload?.data?.table||'';
+            const tbl=msg.payload?.data?.table||msg.payload?.data?.schema||'';
             console.log('[WS] db change on',tbl);
-            pullIfChanged();
+            pullIfChanged(); // postgres_changes is reliable — always pull
             return;
           }
         }catch(err){}
