@@ -1239,6 +1239,7 @@ const CLOUD_CONFIG={
 };
 
 let _cloudSyncing=false,_pendingSave=null,_initSyncing=false;
+const _TAB_ID=Math.random().toString(36).slice(2,10); // unique per tab
 
 function _sbH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'return=minimal'}; }
 function _sbUH(){ return {'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY,'Prefer':'resolution=merge-duplicates,return=minimal','Cache-Control':'no-cache','Pragma':'no-cache'}; }
@@ -1306,15 +1307,27 @@ async function cloudLoad(retries=3, delay=1000){
       setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading...');
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(), 8000); // 8s timeout
-      const [uR,bR,cR,sR]=await Promise.all([
+      const [uR,bR,sR]=await Promise.all([
         fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
-        fetch(_sbUrl('uspify_contents'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_settings','id=eq.main'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
       ]);
+      // Contents: paginate past Supabase's 1000-row cap so nothing goes missing
+      let cRows=[];
+      {
+        const PAGE=1000;let from=0;
+        while(true){
+          const r=await fetch(_sbUrl('uspify_contents'),{headers:{..._sbH(),'Range':from+'-'+(from+PAGE-1),'Range-Unit':'items'},cache:'no-store',signal:controller.signal});
+          if(!r.ok) throw new Error('contents HTTP '+r.status);
+          const page=await r.json();
+          cRows=cRows.concat(page);
+          if(page.length<PAGE) break;
+          from+=PAGE;
+        }
+      }
       clearTimeout(timeout);
-      if(!uR.ok||!bR.ok||!cR.ok||!sR.ok) throw new Error('HTTP '+[uR,bR,cR,sR].find(r=>!r.ok)?.status);
-      const [uRows,bRows,cRows,sRows]=await Promise.all([uR.json(),bR.json(),cR.json(),sR.json()]);
+      if(!uR.ok||!bR.ok||!sR.ok) throw new Error('HTTP '+[uR,bR,sR].find(r=>!r.ok)?.status);
+      const [uRows,bRows,sRows]=await Promise.all([uR.json(),bR.json(),sR.json()]);
       const settings=sRows[0]?.data||{};
       const data={
         users:uRows.map(r=>r.data).filter(x=>x&&x.id),
@@ -1415,7 +1428,7 @@ function broadcastPing(contentIds, savedBy){
   fetch(CLOUD_CONFIG.URL+'/realtime/v1/api/broadcast',{
     method:'POST',
     headers:{'Content-Type':'application/json','apikey':CLOUD_CONFIG.ANON_KEY,'Authorization':'Bearer '+CLOUD_CONFIG.ANON_KEY},
-    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'broadcast',payload:{event:'data_changed',payload:{by,ts:Date.now()}}}]})
+    body:JSON.stringify({messages:[{topic:'uspify-updates',event:'broadcast',payload:{event:'data_changed',payload:{by,tab:_TAB_ID,ts:Date.now()}}}]})
   }).then(r=>console.log('[broadcast] response:',r.status)).catch(e=>console.error('[broadcast] failed:',e));
 }
 
@@ -1429,11 +1442,15 @@ function initRealtimeSync(){
 
   function dataHash(data){
     try{
-      const contents=(data.contents||[]).map(c=>
+      // DJB2 hash over the FULL content fingerprint — no truncation,
+      // so a change to ANY item (regardless of sort position) flips the hash
+      const fp=(data.contents||[]).map(c=>
         c.id+c.statusId+(c.assignees||[]).join('')+(c.workflowTasks||[]).filter(t=>t.status==='open').length
-      ).sort().join('').slice(0,600);
+      ).sort().join('');
+      let h=5381;
+      for(let i=0;i<fp.length;i++){h=((h<<5)+h+fp.charCodeAt(i))>>>0;}
       const settings=(data.deletionLog||[]).length;
-      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${contents}|${settings}`;
+      return `${(data.brands||[]).length}|${(data.contents||[]).length}|${h}|${settings}`;
     }catch(e){ return String(Date.now()); }
   }
 
@@ -1559,8 +1576,28 @@ function showTaskNotification(c, task, fromName){
             });
           });
         }
+        if(typeof enforceOfficialQuotas==='function') enforceOfficialQuotas(fresh);
+        // Migrate legacy 'senior_approval' statuses
+        if(fresh.contents){
+          fresh.contents.forEach(c=>{
+            if(c.statusId==='senior_approval'){
+              c.statusId=c.designPendingReview?'senior_approval_video':'senior_approval_copy';
+              const last=c.statusHistory?.[c.statusHistory.length-1];
+              if(last&&last.statusId==='senior_approval') last.statusId=c.statusId;
+            }
+          });
+        }
+        // Protect in-progress edits: if user is typing in detail view,
+        // preserve their open content piece from being overwritten
+        const _actEl=document.activeElement;
+        const _typing=_actEl&&(_actEl.tagName==='TEXTAREA'||_actEl.tagName==='INPUT')&&_actEl.closest('#page-root,#detail-overlay');
+        if(_typing&&S.detailId){
+          const _localData=D();
+          const _localC=_localData.contents.find(x=>x.id===S.detailId);
+          const _freshIdx=fresh.contents.findIndex(x=>x.id===S.detailId);
+          if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC; // keep local edits
+        }
         // ALWAYS update localStorage with fresh Supabase data
-        // Never skip based on hash — stale local data causes sync bugs
         _dataCache=null;_dataCacheKey=null;
         localStorage.setItem(KEY,JSON.stringify(fresh));
         if(S.user){
@@ -1570,7 +1607,13 @@ function showTaskNotification(c, task, fromName){
         const h=dataHash(fresh);
         if(h!==lastHash){
           lastHash=h;
-          render();
+          if(_typing){
+            // Don't re-render the page mid-edit — just refresh sidebar/topbar
+            try{renderSidebar();}catch(_){}
+            try{renderTopbar();}catch(_){}
+          } else {
+            render();
+          }
           try{const _p=document.getElementById('notif-panel');if(_p&&_p.style.display!=='none')renderNotifPanel();}catch(_){}
         }
       }
@@ -1627,9 +1670,10 @@ function showTaskNotification(c, task, fromName){
             const inner=msg.payload?.payload||msg.payload||{};
             const evName=inner.event||msg.payload?.event||'';
             const by=inner.payload?.by||inner.by||'?';
+            const fromTab=inner.payload?.tab||inner.tab||'';
             if(evName==='data_changed'||evName==='broadcast'){
-              console.log('[WS] broadcast from',by,'— I am',S.user?.name);
-              if(by!==S.user?.name) pullIfChanged();
+              console.log('[WS] broadcast from',by,'(tab',fromTab,') — my tab',_TAB_ID);
+              if(fromTab!==_TAB_ID) pullIfChanged(); // same user, different tab → still sync
             }
             return;
           }
@@ -1704,6 +1748,24 @@ async function initCloudSync(){
       reapplyDefaultPasswords(cloudData.users);
       _dataCache=null;_dataCacheKey=null;
       localStorage.setItem(KEY,JSON.stringify(cloudData));
+      if(typeof enforceOfficialQuotas==='function') enforceOfficialQuotas(cloudData);
+      // Migrate legacy 'senior_approval' → specific status
+      if(cloudData.contents){
+        let migrated=false;
+        cloudData.contents.forEach(c=>{
+          if(c.statusId==='senior_approval'){
+            const newStatus=c.designPendingReview?'senior_approval_video':'senior_approval_copy';
+            c.statusId=newStatus;
+            // Also fix the last statusHistory entry
+            const last=c.statusHistory?.[c.statusHistory.length-1];
+            if(last&&last.statusId==='senior_approval') last.statusId=newStatus;
+            migrated=true;
+          }
+        });
+        if(migrated){
+          console.log('[migration] fixed senior_approval → specific statuses');
+        }
+      }
       if(S.user){
         const freshUser=cloudData.users.find(u=>u.id===S.user.id);
         if(freshUser){freshUser.pass=S.user.pass;freshUser.role=S.user.role;S.user=freshUser;}
@@ -1770,8 +1832,8 @@ function calcSmartDueDates(postingDate, contentType){
   const hualuOffset = contentType==='Video' ? 4 : 3;   // video editing heavier
   const leonardOffset = contentType==='Video' ? 7 : 5; // more steps for video
   return {
-    hualu: addWorkingDays(postingDate, -hualuOffset),
-    leonard: addWorkingDays(postingDate, -leonardOffset),
+    hualu: addBusinessDays(postingDate, -hualuOffset),
+    leonard: addBusinessDays(postingDate, -leonardOffset),
   };
 }
 
@@ -1803,8 +1865,8 @@ function updateDueDatesFromPosting(c){
   if(!c.postingDate) return;
   const isVideo=c.type==='Video';
   c.dueDates=c.dueDates||{};
-  c.dueDates.hualu=addWorkingDays(c.postingDate, isVideo?-4:-3);
-  c.dueDates.leonard=addWorkingDays(c.postingDate, isVideo?-7:-5);
+  c.dueDates.hualu=addBusinessDays(c.postingDate, isVideo?-4:-3);
+  c.dueDates.leonard=addBusinessDays(c.postingDate, isVideo?-7:-5);
 }
 
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
@@ -1965,6 +2027,28 @@ function getDefault(){
 // ===================== DATA ACCESS =====================
 // D() cache — invalidated on every save(), avoids repeated JSON.parse in same render cycle
 let _dataCache=null, _dataCacheKey=null;
+
+// ── OFFICIAL BRAND QUOTAS (fixed) — enforced on every load ──────────
+// Corrects any drift in Supabase data. Does NOT touch content items.
+var _OFFICIAL_QUOTAS={
+  lunox:{quota:25,quotaBreakdown:{wallPost:8,videoAds:5,tiktok:12,carousel:0,video:0},
+    quotaLabels:{wallPost:'Wall Posts WP#1–8 (carousel / single image / reels)',videoAds:'Video Ads (3 Lunox Consultation, 2 Maizisleepz)',tiktok:'TikTok Videos',carousel:'',video:''}},
+  uspify:{quota:12,quotaBreakdown:{video:8,carousel:4,wallPost:0,videoAds:0,tiktok:0},
+    quotaLabels:{video:'Videos',carousel:'Carousels',wallPost:'',videoAds:'',tiktok:''}},
+  carmen:{quota:12,quotaBreakdown:{video:8,carousel:4,wallPost:0,videoAds:0,tiktok:0},
+    quotaLabels:{video:'Videos',carousel:'Carousels',wallPost:'',videoAds:'',tiktok:''}},
+  grandmeca:{quota:8,quotaBreakdown:{carousel:6,videoAds:2,wallPost:0,video:0,tiktok:0},
+    quotaLabels:{carousel:'Reels / Carousels',videoAds:'Ads Videos',wallPost:'',video:'',tiktok:''}},
+  sonmol:{quota:4,quotaBreakdown:{videoAds:4,wallPost:0,video:0,carousel:0,tiktok:0},
+    quotaLabels:{videoAds:'Video Ads',wallPost:'',video:'',carousel:'',tiktok:''}},
+};
+function enforceOfficialQuotas(data){
+  (data.brands||[]).forEach(b=>{
+    const q=_OFFICIAL_QUOTAS[b.id];
+    if(q){b.quota=q.quota;b.quotaBreakdown={...q.quotaBreakdown};b.quotaLabels={...q.quotaLabels};}
+  });
+}
+
 function D(){
   const raw=localStorage.getItem(KEY);
   if(_dataCache && _dataCacheKey===raw) return _dataCache; // return cached parse
@@ -2072,8 +2156,8 @@ function D(){
         }
         if(!postingDate.startsWith(month)) postingDate=`${month}-${String(Math.min(daysInMonth,28)).padStart(2,'0')}`;
         const isVid=(t.type==='Video')||(t.cat==='videoAds')||(t.cat==='tiktok');
-        const hualuDueStr=addWorkingDays(postingDate,isVid?-4:-3);
-        const leonardDueStr=addWorkingDays(postingDate,isVid?-7:-5);
+        const hualuDueStr=addBusinessDays(postingDate,isVid?-4:-3);
+        const leonardDueStr=addBusinessDays(postingDate,isVid?-7:-5);
         // Derive category from template prefix/cat — locked permanently so renaming doesn't change it
         const inferredCat=t.cat||(
           t.title.match(/^WP#/i)?'wallPost':
@@ -2114,6 +2198,24 @@ function D(){
     }
   });
 
+  enforceOfficialQuotas(data);
+  // Migrate legacy 'senior_approval' → specific statuses
+  // AND ensure statusId matches last statusHistory entry (fix sync mismatches)
+  data.contents.forEach(c=>{
+    if(c.statusId==='senior_approval'){
+      c.statusId=c.designPendingReview?'senior_approval_video':'senior_approval_copy';
+    }
+    // Fix statusId/history mismatch: statusId should match last history entry
+    if(Array.isArray(c.statusHistory)&&c.statusHistory.length>0){
+      const lastHist=c.statusHistory[c.statusHistory.length-1].statusId;
+      // Only sync if last history entry is a valid non-amendment status
+      const AMEND_STATUSES=new Set(['ideation_amendment','design_amendment','copy_amendment']);
+      if(lastHist&&!AMEND_STATUSES.has(lastHist)&&lastHist!==c.statusId){
+        // History is ahead of statusId — trust history
+        c.statusId=lastHist;
+      }
+    }
+  });
   _dataCache=data;
   return data;
 }
@@ -3006,6 +3108,7 @@ function renderTracker(){
           </div>
         </td>`
       :`<td class="due-date${lateClass}">${fmt(c.postingDate)||'—'}${lateClass?' ⚠':''}</td>`;
+    const canDelete=isAdmin||S.user.role==='senior'||S.user.role==='content_creator';
     return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠ 2d</span>`:''}</td>
       <td><div class="av-row">${avs}</div></td>
@@ -3013,6 +3116,7 @@ function renderTracker(){
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">Drive ↗</a>`:`<span style="color:var(--t4)">—</span>`}</td>
+      ${canDelete?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--red);opacity:0.7;transition:all .15s" onmouseenter="this.style.opacity=1;this.style.borderColor='var(--red)'" onmouseleave="this.style.opacity=0.7;this.style.borderColor='var(--b2)'" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
   }
 
@@ -3411,7 +3515,56 @@ function renderBrandPage(){
     ${hasSep(tiktokContent,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Other','🎬','var(--amb)',other)}
     ${!contents.length?`<div class="empty-msg" style="padding:20px">No content for this month</div>`:''}
+    ${renderBrandMiniCalendar(b,data)}
   </div>`;
+}
+
+// ── Mini month calendar at bottom of brand page ─────────────────────
+function renderBrandMiniCalendar(b,data){
+  const month=S.brandCalMonth||S.trackerMonth||new Date().toISOString().slice(0,7);
+  const [yr,mo]=month.split('-').map(Number);
+  const daysInMonth=new Date(yr,mo,0).getDate();
+  const firstDow=new Date(yr,mo-1,1).getDay(); // 0=Sun
+  const today=new Date().toISOString().split('T')[0];
+  const items=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(month));
+  const byDay={};
+  items.forEach(c=>{const d=Number(c.postingDate.slice(8,10));(byDay[d]=byDay[d]||[]).push(c);});
+  const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let cells='';
+  for(let i=0;i<firstDow;i++)cells+='<div></div>';
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${month}-${String(d).padStart(2,'0')}`;
+    const dayItems=byDay[d]||[];
+    const isToday=ds===today;
+    cells+=`<div style="min-height:64px;border:1px solid var(--b1);border-radius:6px;padding:4px;${isToday?'border-color:var(--ac);background:var(--acd,rgba(200,240,74,0.06));':''}">
+      <div style="font-size:11px;color:${isToday?'var(--ac)':'var(--t3)'};font-family:'DM Mono',monospace;font-weight:${isToday?'700':'400'}">${d}</div>
+      ${dayItems.slice(0,3).map(c=>{
+        const st=getStatus(data,c.statusId);
+        return `<div onclick="openContentDetail('${c.id}')" title="${c.title} — ${st.name}" style="font-size:10px;background:${st.color}22;color:${st.color};border-left:2px solid ${st.color};padding:1px 4px;margin-top:2px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div>`;
+      }).join('')}
+      ${dayItems.length>3?`<div style="font-size:9px;color:var(--t4);margin-top:1px">+${dayItems.length-3} more</div>`:''}
+    </div>`;
+  }
+  return `<div style="margin-top:24px;border-top:2px solid var(--b1);padding-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace;color:var(--t2)">📅 ${b.name} — ${MONTH_NAMES[mo-1]} ${yr}</span>
+      <button class="btn btn-ghost btn-sm" onclick="brandMiniCalNav(-1)">◀</button>
+      <button class="btn btn-ghost btn-sm" onclick="brandMiniCalNav(1)">▶</button>
+      <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${items.length} item${items.length!==1?'s':''} this month</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:4px;text-align:center">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${cells}</div>
+  </div>`;
+}
+
+function brandMiniCalNav(dir){
+  const cur=S.brandCalMonth||S.trackerMonth||new Date().toISOString().slice(0,7);
+  let [y,m]=cur.split('-').map(Number);
+  m+=dir;if(m>12){m=1;y++;}if(m<1){m=12;y--;}
+  S.brandCalMonth=`${y}-${String(m).padStart(2,'0')}`;
+  render();
 }
 
 // ===================== APPROVALS =====================
@@ -3486,6 +3639,7 @@ function renderApprovals(){
       </div>
       <div class="appr-actions" style="justify-content:flex-end">
         <button class="btn-approve" onclick="approveWithNote('${c.id}','${nextId}')">${label}</button>
+        ${c.statusId==='client_approval'?`<button class="btn btn-info btn-sm" onclick="postToFacebook('${c.id}')" title="Post via FB Graph API">📘 Post to FB</button>`:''}
         <button class="btn-revise" onclick="reviseWithNote('${c.id}')">Request Revision</button>
         <button class="btn btn-ghost btn-sm" onclick="openContentDetail('${c.id}')">Open →</button>
       </div>
@@ -3593,6 +3747,12 @@ async function approveContent(id,nextStatusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  const _cr=getContentCreator(data,c);const _dz=getDesigner(data,c);
+  if(nextStatusId==='design'){c.assignees=[_dz.id];notifyApproved(c,_dz,'Ideation approved — start designing 🎨',S.user.name);}
+  else if(nextStatusId==='copywriting'){c.assignees=[_cr.id];notifyApproved(c,_cr,'Approved → start copywriting ✍️',S.user.name);}
+  else if(nextStatusId==='shoot'){c.assignees=[_cr.id];notifyApproved(c,_cr,'Script approved — start shooting 🎬',S.user.name);}
+  else if(nextStatusId==='video_editing'){c.assignees=[_dz.id];notifyApproved(c,_dz,'Start editing ✂️',S.user.name);}
+  else if(nextStatusId==='client_approval'){notifyApproved(c,_cr,'Approved → Client Approval 🤝',S.user.name);}
   await saveNow(data,c.id);render();
 }
 function openReviseModal(id, prefillNote){
@@ -6266,19 +6426,19 @@ function submitCopyForReview(id,verIdx){
   showAIToast(`📤 Copy ${v[verIdx].label} submitted — senior notified`);
 }
 
-function approveCopyVersion(id,verIdx){
+async function approveCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
   v[verIdx].approvals.push({userId:S.user.id,status:'approved',note,date:new Date().toISOString().split('T')[0]});
   v[verIdx].pendingReview=false;c.copyVersions=v;c.copyPendingReview=false;
-  c.statusId='senior_approval_copy';c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.statusId='senior_approval_copy';const _sr=getSenior(data,c);c.assignees=[_sr.id];notifyApproved(c,_sr,'Copy ready for review ✍️',S.user.name);c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✅ Copy ${v[verIdx].label} approved by ${S.user.name}.${note?' Note: '+note:''} → Senior Approval.`,type:'copy',createdAt:new Date().toISOString().split('T')[0]});
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
 }
 
-function amendCopyVersion(id,verIdx){
+async function amendCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
@@ -6294,7 +6454,7 @@ function amendCopyVersion(id,verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
 }
 
 function renderCopywritingPanel(c,id){
@@ -6470,7 +6630,7 @@ function renderShootingPanel(c, id){
         <details id="footage-manual-link-${id}" style="margin-top:4px">
           <summary style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer;user-select:none">Or paste Drive link manually ▸</summary>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-            <input class="form-input" id="footage-input-${id}" type="url" placeholder="https://drive.google.com/file/d/..." value="${c.footageLink||''}" style="font-size:14px;padding:10px 12px"
+            <input class="form-input" id="footage-input-${id}" type="url" placeholder="Any link — Drive file, folder, Dropbox, etc." value="${c.footageLink||''}" style="font-size:14px;padding:10px 12px"
               oninput="saveVideoFieldLive('${id}','footageLink',this.value)">
             <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Paste the shareable Drive link — saves automatically</div>
           </div>
@@ -6619,7 +6779,7 @@ function renderVideoEditingPanel(c, id){
         <details id="edited-video-manual-link-${id}" style="margin-top:2px">
           <summary style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer;user-select:none">Or paste Drive link manually ▸</summary>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-            <input class="form-input" id="video-edit-input-${id}" type="url" placeholder="https://drive.google.com/file/d/..." value="${c.videoEditLink||''}" style="font-size:14px;padding:10px 12px"
+            <input class="form-input" id="video-edit-input-${id}" type="url" placeholder="Any link — Drive file, folder, Dropbox, etc." value="${c.videoEditLink||''}" style="font-size:14px;padding:10px 12px"
               oninput="saveVideoFieldLive('${id}','videoEditLink',this.value)">
             <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Paste the shareable Drive link — saves automatically</div>
           </div>
@@ -6996,7 +7156,7 @@ function autosaveDesignNotes(id, verIdx){
   },900);
 }
 
-function approveDesign(id, verIdx){
+async function approveDesign(id, verIdx){
   saveWfReviewComment(id,'Senior Approved — Design');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
@@ -7018,11 +7178,11 @@ function approveDesign(id, verIdx){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Design approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-function amendDesign(id, verIdx){
+async function amendDesign(id, verIdx){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining what needs to be amended.');return;}
@@ -7043,7 +7203,7 @@ function amendDesign(id, verIdx){
   c.statusId='design';
   c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Design amendment — ${designer.name} notified`);
 }
 
@@ -7408,7 +7568,7 @@ function _showDriveUploadPrompt(id, verIdx, fileNames){
     <div style="margin-bottom:8px">
       <label style="font-size:13px;font-weight:700;color:var(--t2);display:block;margin-bottom:6px">Google Drive Link</label>
       <input class="form-input" id="drive-ref-link-input" type="url"
-        placeholder="https://drive.google.com/file/d/..."
+        placeholder="Any link — Drive file, folder, Dropbox, etc."
         style="font-size:14px">
     </div>
 
@@ -7431,7 +7591,7 @@ function _saveDriveRefLink(id, verIdx){
   const linkEl=document.getElementById('drive-ref-link-input');
   const labelEl=document.getElementById('drive-ref-label-input');
   const link=(linkEl?.value||'').trim();
-  if(!link){alert('Please enter a Google Drive link.');return;}
+  if(!link){alert('Please enter a link (Drive file/folder, Dropbox, any URL).');return;}
 
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
@@ -7955,6 +8115,48 @@ function renderWorkflowActionBox(data, c){
 
   return withHistory('');
 }
+async 
+// ── FACEBOOK POSTING via Graph API ──────────────────────────────────
+async function postToFacebook(contentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  const b=data.brands.find(x=>x.id===c.brandId);
+  if(!b?.fbPageId||!b?.fbAccessToken){
+    alert('Set the FB Page ID and Access Token in Brand Settings first.');
+    return;
+  }
+  // Build message from approved copy version (latest) or copywriting field
+  let message=c.copywriting||'';
+  const cvs=c.copyVersions||[];
+  if(cvs.length) message=cvs[cvs.length-1].text||message;
+  if(!message){alert('No copy/caption found for this content.');return;}
+  if(!confirm(`Post to Facebook page now?\n\nPreview:\n${message.slice(0,200)}${message.length>200?'…':''}`))return;
+  showAIToast('📤 Posting to Facebook...');
+  try{
+    const url=`https://graph.facebook.com/v19.0/${b.fbPageId}/feed`;
+    const params=new URLSearchParams({message,access_token:b.fbAccessToken});
+    if(c.driveLink) params.set('link',c.driveLink);
+    const r=await fetch(url,{method:'POST',body:params});
+    const j=await r.json();
+    if(j.error) throw new Error(j.error.message||'Graph API error');
+    // Success → mark as posted
+    const today=new Date().toISOString().split('T')[0];
+    c.fbPostId=j.id||'';
+    c.statusId='posted';
+    c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
+    if(!c.comments)c.comments=[];
+    c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`🚀 Posted to Facebook (post id: ${j.id||'?'})`,type:'general',createdAt:today});
+    const _cr=getContentCreator(data,c);
+    notifyApproved(c,_cr,'Posted to Facebook 🚀',S.user.name);
+    await saveNow(data,c.id);
+    render();
+    showAIToast('✅ Posted to Facebook!');
+  }catch(e){
+    console.error('FB post error:',e);
+    showAIToast('⚠ FB post failed: '+e.message.slice(0,80));
+    alert('Facebook post failed: '+e.message+'\n\nCheck the Page ID and that the token has pages_manage_posts permission and is not expired.');
+  }
+}
+
 function wfMarkPosted(id){
   saveWfReviewComment(id,'Client Approved — Posted');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7962,11 +8164,11 @@ function wfMarkPosted(id){
   c.statusId='posted';
   c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:today});
   (c.workflowTasks||[]).filter(t=>t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  const _cr=getContentCreator(data,c);notifyApproved(c,_cr,"Content posted 🚀",S.user.name);await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🚀 Marked as posted!');
 }
 
-function wfClientAmend(id){
+async function wfClientAmend(id){
   saveWfReviewComment(id,'Client Requested Changes');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
@@ -7979,7 +8181,7 @@ function wfClientAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast('🔄 Sent back for revisions');
 }
 
@@ -8142,7 +8344,7 @@ function markTaskDone(id){
   showAIToast('✅ Task marked as done!');
 }
 
-function wfApproveVideo(id){
+async function wfApproveVideo(id){
   saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
@@ -8156,11 +8358,11 @@ function wfApproveVideo(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Video approved — ✍️ ${creator.name} notified for copywriting`);
 }
 
-function wfAmendVideo(id){
+async function wfAmendVideo(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -8176,7 +8378,7 @@ function wfAmendVideo(id){
   c.statusId='video_editing';
   c.statusHistory.push({statusId:'video_editing',changedBy:S.user.id,changedAt:today});
   c.assignees=[designer.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Video amendment — ${designer.name} notified`);
 }
 
@@ -8270,7 +8472,7 @@ function wfSeniorApprove(id){
   showAIToast(`✅ Approved — moved to client approval`);
 }
 
-function wfSeniorAmend(id){
+async function wfSeniorAmend(id){
   const inp=document.getElementById('wf-review-note-'+id);
   const note=inp?inp.value.trim():'';
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
@@ -8286,7 +8488,7 @@ function wfSeniorAmend(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Amendment — ${creator.name} notified`);
 }
 
@@ -8741,8 +8943,8 @@ function updateAutoDate(){
   if(!due) return;
   const type=document.getElementById('af-type')?.value||'Video';
   const isVid=type==='Video';
-  const hDate=addWorkingDays(due,isVid?-4:-3);
-  const lDate=addWorkingDays(due,isVid?-7:-5);
+  const hDate=addBusinessDays(due,isVid?-4:-3);
+  const lDate=addBusinessDays(due,isVid?-7:-5);
   const el=document.getElementById('af-date-preview');
   const wrap=document.getElementById('af-date-preview-wrap');
   if(wrap)wrap.style.display='block';
@@ -8780,8 +8982,8 @@ function saveNewContent(){
     copywriting:'',comments:[],
     statusHistory:[{statusId,changedBy:S.user.id,changedAt:today}],
     dueDates:{
-      hualu:addWorkingDays(postingDate,isVid?-4:-3),
-      leonard:addWorkingDays(postingDate,isVid?-7:-5),
+      hualu:addBusinessDays(postingDate,isVid?-4:-3),
+      leonard:addBusinessDays(postingDate,isVid?-7:-5),
       jack:''
     },
     workflowTasks,
@@ -8936,8 +9138,8 @@ function autoInsertAllMonths(data, brandId){
         driveLink:'',copywriting:'',comments:[],
         statusHistory:[{statusId:'ideation',changedBy:S.user?.id||'system',changedAt:today}],
         dueDates:{
-          hualu:addWorkingDays(postingDate,isVid?-4:-3),
-          leonard:addWorkingDays(postingDate,isVid?-7:-5),
+          hualu:addBusinessDays(postingDate,isVid?-4:-3),
+          leonard:addBusinessDays(postingDate,isVid?-7:-5),
           jack:''
         },
         workflowTasks:[],pic:{}
@@ -9165,6 +9367,11 @@ function openBrandInfoModal(brandId){
     </div>
     <div class="form-row"><label class="form-label">Brand guide link</label><input class="form-input" id="bi-guide" type="url" value="${b.brandGuide||''}" placeholder="https://drive.google.com/..."></div>
     <div class="form-row"><label class="form-label">🔵 Facebook Page URL</label><input class="form-input" id="bi-facebook" type="url" value="${b.facebookUrl||''}" placeholder="https://www.facebook.com/yourpage"></div>
+    <div class="two-col">
+      <div><label class="form-label">FB Page ID (for API posting)</label><input class="form-input" id="bi-fbpage" type="text" value="${b.fbPageId||''}" placeholder="e.g. 1234567890"></div>
+      <div><label class="form-label">FB Page Access Token</label><input class="form-input" id="bi-fbtoken" type="password" value="${b.fbAccessToken||''}" placeholder="EAAG..."></div>
+    </div>
+    <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin:-6px 0 10px">Get these from <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--blu)">Graph API Explorer ↗</a> — needs pages_manage_posts permission.</div>
     <div class="form-row"><label class="form-label">Info summary</label><textarea class="form-textarea" id="bi-info">${b.infoSummary||''}</textarea></div>
     <div style="margin:4px 0 6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Monthly Quota Breakdown</div>
     <div class="form-row-2">
@@ -9197,9 +9404,16 @@ function saveBrandInfo(brandId, fillAllMonths){
   const carousels=parseInt(document.getElementById('bi-carousel').value)||0;
   const ads=parseInt(document.getElementById('bi-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('bi-tiktok').value)||0;
-  const quota=videos+carousels+ads+tiktoks||data.brands[idx].quota;
-  const quotaBreakdown={video:videos,carousel:carousels,videoAds:ads,tiktok:tiktoks,wallPost:0};
-  const quotaLabels={video:'Videos / Reels',carousel:'Wall Posts / Carousels',videoAds:'Video Ads',tiktok:'TikTok Videos',wallPost:''};
+  // MERGE into existing breakdown — never wipe fields the modal doesn't edit
+  const _oldQB=data.brands[idx].quotaBreakdown||{};
+  const _oldQL=data.brands[idx].quotaLabels||{};
+  const quotaBreakdown={..._oldQB,video:videos,carousel:carousels,videoAds:ads,tiktok:tiktoks};
+  const quotaLabels={..._oldQL};
+  if(videos>0&&!quotaLabels.video)quotaLabels.video='Videos / Reels';
+  if(carousels>0&&!quotaLabels.carousel)quotaLabels.carousel='Wall Posts / Carousels';
+  if(ads>0&&!quotaLabels.videoAds)quotaLabels.videoAds='Video Ads';
+  if(tiktoks>0&&!quotaLabels.tiktok)quotaLabels.tiktok='TikTok Videos';
+  const quota=Object.values(quotaBreakdown).reduce((a,v)=>a+(Number(v)||0),0)||data.brands[idx].quota;
   data.brands[idx]={...data.brands[idx],
     quota,quotaBreakdown,quotaLabels,
     driveLink:document.getElementById('bi-drive').value.trim(),
@@ -9211,6 +9425,10 @@ function saveBrandInfo(brandId, fillAllMonths){
     contractEnd:document.getElementById('bi-cend').value,
     shootingDates,templates};
   // Validate contract dates before generating
+  const _fbPage=document.getElementById('bi-fbpage')?.value?.trim()||'';
+  const _fbToken=document.getElementById('bi-fbtoken')?.value?.trim()||'';
+  data.brands[idx].fbPageId=_fbPage;
+  data.brands[idx].fbAccessToken=_fbToken;
   const _cStart=document.getElementById('bi-cstart')?.value;
   const _cEnd=document.getElementById('bi-cend')?.value;
   if(fillAllMonths&&(!_cStart||!_cEnd)){
