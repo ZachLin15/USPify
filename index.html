@@ -8157,7 +8157,7 @@ async function postToFacebook(contentId){
   }
 }
 
-function wfMarkPosted(id){
+async function wfMarkPosted(id){
   saveWfReviewComment(id,'Client Approved — Posted');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
