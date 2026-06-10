@@ -3108,7 +3108,7 @@ function renderTracker(){
           </div>
         </td>`
       :`<td class="due-date${lateClass}">${fmt(c.postingDate)||'—'}${lateClass?' ⚠':''}</td>`;
-    const canDelete=isAdmin||S.user.role==='senior'||S.user.role==='content_creator';
+    const canDelete=isAdminUser(S.user)||S.user.role==='senior'||S.user.role==='content_creator';
     return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠ 2d</span>`:''}</td>
       <td><div class="av-row">${avs}</div></td>
@@ -3202,7 +3202,7 @@ function renderTracker(){
           // Sub-grouped (Wall Post → Carousel / Single Image / Reels)
           // All subs share ONE table so columns stay perfectly aligned
           brandHTML+=`<table class="ctable" style="margin-bottom:0">
-            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
+            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th><th></th></tr></thead>
             <tbody>`;
           grp.subs.forEach(sub=>{
             const subContents=grpContents.filter(c=>sub.match(c));
@@ -3224,7 +3224,7 @@ function renderTracker(){
         } else {
           // Flat table (Video Ads, TikTok Content)
           brandHTML+=`<table class="ctable" style="margin-bottom:0">
-            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th></tr></thead>
+            <thead><tr><th>Content piece</th><th>Assigned</th><th>Status</th><th>Progress</th><th>Posting date</th><th>Drive</th><th></th></tr></thead>
             <tbody>${grpContents.map(c=>makeRow(c)).join('')}</tbody>
           </table>`;
         }
