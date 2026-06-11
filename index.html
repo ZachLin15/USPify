@@ -3298,6 +3298,48 @@ function saveBrandRowDate(contentId, field, value){
 }
 
 // ===================== BRAND PAGE =====================
+
+// ── Multi-select + bulk delete ───────────────────────────────────────
+function toggleSelectContent(id,checked){
+  if(!S.selectedContentIds)S.selectedContentIds=[];
+  if(checked){if(!S.selectedContentIds.includes(id))S.selectedContentIds.push(id);}
+  else S.selectedContentIds=S.selectedContentIds.filter(x=>x!==id);
+  const bar=document.getElementById('bulk-bar');
+  if(bar)bar.outerHTML=renderBulkBar();
+}
+function renderBulkBar(){
+  const n=(S.selectedContentIds||[]).length;
+  return `<div id="bulk-bar" style="display:${n?'flex':'none'};align-items:center;gap:12px;background:var(--redd);border:1px solid var(--red);border-radius:var(--r);padding:8px 14px;margin:8px 0">
+    <span style="font-size:13px;font-weight:700;color:var(--red);font-family:'DM Mono',monospace">${n} selected</span>
+    <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()">🗑 Delete selected</button>
+    <button class="btn btn-ghost btn-sm" onclick="S.selectedContentIds=[];render()">Clear</button>
+  </div>`;
+}
+async function bulkDeleteSelected(){
+  const ids=S.selectedContentIds||[];
+  if(!ids.length)return;
+  if(!confirm(`Delete ${ids.length} content piece${ids.length>1?'s':''}? This cannot be undone.`))return;
+  const data=D();
+  const today=new Date().toISOString().split('T')[0];
+  if(!Array.isArray(data.deletionLog))data.deletionLog=[];
+  ids.forEach(id=>{
+    const c=data.contents.find(x=>x.id===id);
+    if(c){
+      const b=data.brands.find(x=>x.id===c.brandId)||{name:'?',color:'#888'};
+      data.deletionLog.push({logId:'dl'+Math.random().toString(36).slice(2,9),contentId:id,title:c.title,brandName:b.name,brandColor:b.color,type:c.type||'',statusId:c.statusId||'',deletedBy:S.user.name,deletedById:S.user.id,deletedAt:today,dismissedBy:[]});
+    }
+  });
+  data.contents=data.contents.filter(c=>!ids.includes(c.id));
+  S.selectedContentIds=[];
+  await saveNow(data);
+  if(CLOUD_CONFIG.ENABLED&&CLOUD_CONFIG.URL!=='YOUR_SUPABASE_PROJECT_URL'){
+    fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=in.(${ids.map(encodeURIComponent).join(',')})`,{method:'DELETE',headers:_sbUH()})
+      .catch(e=>console.error('Bulk cloud delete failed:',e.message));
+  }
+  render();
+  showAIToast(`🗑 ${ids.length} deleted`);
+}
+
 function renderBrandPage(){
   const data=D();const b=getBrand(data,S.brand);
   let contents=data.contents.filter(c=>c.brandId===S.brand);
@@ -3409,7 +3451,7 @@ function renderBrandPage(){
   if(!S.brandTableSort) S.brandTableSort={col:'postingDate',dir:'asc'};
   function sortClass(col){ return S.brandTableSort.col===col?`sortable sort-${S.brandTableSort.dir}`:'sortable'; }
 
-  const thead=`<thead><tr>
+  const thead=`<thead><tr><th style="width:28px"></th>
     <th class="${sortClass('title')}" onclick="sortBy('title')">Content piece</th>
     <th class="${sortClass('type')}" onclick="sortBy('type')">Type</th>
     <th>Assigned</th>
@@ -3470,6 +3512,7 @@ function renderBrandPage(){
         </select>
       </td>`;
     return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
+      <td onclick="event.stopPropagation()" style="width:28px"><input type="checkbox" ${(S.selectedContentIds||[]).includes(c.id)?'checked':''} onchange="toggleSelectContent('${c.id}',this.checked)" style="cursor:pointer;width:15px;height:15px;accent-color:var(--red)"></td>
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠</span>`:''}</td>
       ${typeCell}
       <td><div class="av-row">${avs}</div></td>
@@ -3508,7 +3551,7 @@ function renderBrandPage(){
 
   const sidebarBtn=`<button onclick="toggleSidebar()" title="Toggle sidebar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;color:var(--t2);cursor:pointer;font-family:'DM Mono',monospace;transition:all .12s;margin-bottom:10px" onmouseenter="this.style.borderColor='var(--ac)';this.style.color='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">☰ Toggle sidebar</button>`;
 
-  return sidebarBtn+stats+socialLinks+infoBar+filterRow+`<div class="panel" style="overflow:hidden">
+  return sidebarBtn+stats+socialLinks+infoBar+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
