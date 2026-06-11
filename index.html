@@ -1,5 +1,5 @@
 <div class="form-row-2">
-    <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video (Video#)</div></div>
+    
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
 <html lang="en">
@@ -9046,9 +9046,8 @@ function openAddContentModal(brandId){
           <option value="wallPost">🖼 Wall Post</option>
           <option value="videoAds">📢 Video Ads</option>
           <option value="tiktok">🎵 TikTok</option>
-          <option value="video">🎬 Other Video</option>
           <option value="carousel">🎠 Carousel</option>
-          <option value="other">📋 Others</option>
+          <option value="other">📋 Others (Content#)</option>
         </select>
       </div>
     </div>
@@ -9085,7 +9084,7 @@ function nextCatIndex(brandId,catPrefix,existingContents){
   let n=1;while(taken.has(n))n++;
   return n;
 }
-const _CAT_PREFIX={wallPost:'WP#',videoAds:'Ad#',tiktok:'TikTok#',video:'Video#',carousel:'Carousel#',reels:'Reels#',other:'Content#'};
+const _CAT_PREFIX={wallPost:'WP#',videoAds:'Ad#',tiktok:'TikTok#',carousel:'Carousel#',reels:'Reels#',other:'Content#'};
 function updateAddContentPrefix(){
   const cat=document.getElementById('af-category')?.value||'wallPost';
   const brandId=document.getElementById('af-brand')?.value||'';
@@ -9633,7 +9632,7 @@ function planReconcile(brandId){
   const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const today=new Date().toISOString().split('T')[0];
   const toDelete=[];const toAdd=[];
-  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#'],['other','Content#']];
+  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['other','Content#'],['carousel','Carousel#']];
   const contractSet=new Set(months);
   const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
     .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
@@ -9670,6 +9669,8 @@ function planReconcile(brandId){
       }
     });
   });
+  console.log('[reconcile] plan for',brandId,'— qb:',JSON.stringify(qb),'toDelete:',toDelete.length,'toAdd:',toAdd.length);
+  if(toDelete.length) console.log('[reconcile] sample deletes:',toDelete.slice(0,5).map(x=>x.title+' ('+x.month+')'));
   return {brandId,b,toDelete,toAdd};
 }
 
@@ -9677,7 +9678,7 @@ async function applyReconcile(plan,onProgress){
   const data=D();
   const b=plan.b;const today=new Date().toISOString().split('T')[0];
   const ids=plan.toDelete.map(x=>x.id);
-  const prog=(p,m)=>{try{onProgress&&onProgress(p,m);}catch(_){}}
+  const prog=(p,m)=>{console.log('[reconcile apply]',p+'%',m);try{onProgress&&onProgress(p,m);}catch(_){}}
   prog(10,'Logging deletions...');
   if(ids.length){
     if(!Array.isArray(data.deletionLog))data.deletionLog=[];
@@ -9690,7 +9691,7 @@ async function applyReconcile(plan,onProgress){
   prog(25,'Adding new pieces...');
   if(plan.toAdd.length)data.contents.push(...plan.toAdd);
   prog(40,'Saving to cloud...');
-  await saveNow(data);
+  try{await saveNow(data);}catch(e){console.error('[reconcile] saveNow failed:',e);throw e;}
   prog(70,'Removing rows from cloud...');
   if(ids.length&&CLOUD_CONFIG.ENABLED){
     for(let i=0;i<ids.length;i+=50){
@@ -9706,8 +9707,16 @@ async function applyReconcile(plan,onProgress){
 
 
 function openReconcilePreview(brandId){
-  const plan=planReconcile(brandId);
+  let plan;
+  try{
+    plan=planReconcile(brandId);
+  }catch(e){
+    console.error('[reconcile] planReconcile crashed:',e);
+    showAIToast('⚠ Reconcile error: '+e.message);
+    return;
+  }
   if(!plan){showAIToast('⚠ Brand not found');return;}
+  console.log('[reconcile] preview opened, toDelete:',plan.toDelete.length,'toAdd:',plan.toAdd.length);
   window._reconcilePlan=plan;
   const del=plan.toDelete, add=plan.toAdd;
   const byMonth={};
@@ -9743,7 +9752,9 @@ function openReconcilePreview(brandId){
 }
 
 async function runReconcile(){
-  const plan=window._reconcilePlan;if(!plan)return;
+  const plan=window._reconcilePlan;
+  console.log('[reconcile] runReconcile called, plan:',plan?'exists':'NULL');
+  if(!plan)return;
   const pr=document.getElementById('recon-progress');
   const bar=document.getElementById('recon-progress-bar');
   const msg=document.getElementById('recon-progress-msg');
@@ -9794,11 +9805,8 @@ function saveBrandInfo(brandId, fillAllMonths){
   data.brands[idx].monthlyReportLink=document.getElementById('bi-report')?.value?.trim()||'';
   data.brands[idx].brandFolderLink=document.getElementById('bi-folder')?.value?.trim()||'';
   const _biOther=parseInt(document.getElementById('bi-other')?.value||0)||0;
-  const _biVideo=parseInt(document.getElementById('bi-video')?.value||0)||0;
-  // merge into existing breakdown
   if(!data.brands[idx].quotaBreakdown)data.brands[idx].quotaBreakdown={};
   data.brands[idx].quotaBreakdown.other=_biOther;
-  data.brands[idx].quotaBreakdown.video=_biVideo;
   const _fbPage=document.getElementById('bi-fbpage')?.value?.trim()||'';
   const _fbToken=document.getElementById('bi-fbtoken')?.value?.trim()||'';
   data.brands[idx].fbPageId=_fbPage;
@@ -9882,7 +9890,6 @@ async function saveNewBrand(){
   const wallPosts2=wpCarousel+wpVideo+wpReels+wpImage;
   const ads=parseInt(document.getElementById('nb-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('nb-tiktok').value)||0;
-  const otherVideos=parseInt(document.getElementById('nb-video')?.value||0)||0;
   const otherContent=parseInt(document.getElementById('nb-other')?.value||0)||0;
   const contractStart=document.getElementById('nb-cstart').value;
   const contractEnd=document.getElementById('nb-cend').value;
@@ -9891,14 +9898,14 @@ async function saveNewBrand(){
   console.log('[saveNewBrand] contractStart=',contractStart,'contractEnd=',contractEnd);
   if(!contractStart||!contractEnd){alert('Please set contract start and end dates.');return;}
 
-  const quota=wallPosts2+ads+tiktoks+otherVideos+otherContent;
+  const quota=wallPosts2+ads+tiktoks+otherContent;
   if(quota===0){alert('Please set at least one quota number.');return;}
 
   const data=D();
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
   if(data.brands.find(b=>b.id===id)){alert('Brand with this name already exists.');return;}
 
-  const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,video:otherVideos,other:otherContent,carousel:0};
+  const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,other:otherContent,carousel:0};
   const quotaLabels={wallPost:'Wall Posts',wpCarousel:'Carousel',wpVideo:'Video',wpReels:'Reels',wpImage:'Single Image',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
   // Build month list using pure string arithmetic — no Date objects, no timezone bugs
