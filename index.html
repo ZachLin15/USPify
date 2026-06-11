@@ -2043,9 +2043,13 @@ var _OFFICIAL_QUOTAS={
     quotaLabels:{videoAds:'Video Ads',wallPost:'',video:'',carousel:'',tiktok:''}},
 };
 function enforceOfficialQuotas(data){
+  // SEED ONLY: apply defaults just when a brand has no breakdown yet.
+  // User-set quotas in Brand Settings always win.
   (data.brands||[]).forEach(b=>{
     const q=_OFFICIAL_QUOTAS[b.id];
-    if(q){b.quota=q.quota;b.quotaBreakdown={...q.quotaBreakdown};b.quotaLabels={...q.quotaLabels};}
+    if(q&&(!b.quotaBreakdown||!Object.values(b.quotaBreakdown).some(v=>v>0))){
+      b.quota=q.quota;b.quotaBreakdown={...q.quotaBreakdown};b.quotaLabels={...q.quotaLabels};
+    }
   });
 }
 
@@ -9439,6 +9443,98 @@ function openBrandInfoModal(brandId){
       <button class="btn btn-ac" onclick="saveBrandInfo('${brandId}')">Save</button>
     </div>`,null,'wide');
 }
+
+// ── QUOTA RECONCILER ─────────────────────────────────────────────────
+// Per month in the contract: keep custom-named content and anything with
+// progress; delete surplus auto-generated drafts (titles ending "— Mon YY"
+// still at ideation with no work); create defaults until quota is met.
+const _DATED_RE=/\s—\s[A-Z][a-z]{2}\s\d{2}$/;
+function _quotaCatOf(c){
+  const t=c.title||'';
+  if(/^WP#/i.test(t))return 'wallPost';
+  if(/^Ad#/i.test(t)||/Ad#/i.test(t))return 'videoAds';
+  if(/^TikTok#/i.test(t))return 'tiktok';
+  if(c.type==='Carousel'||c.type==='Single Image')return 'carousel';
+  return 'video';
+}
+function _hasProgress(c){
+  return c.statusId!=='ideation'
+    ||(c.assignees||[]).length>0
+    ||(c.comments||[]).length>0
+    ||(c.copyVersions||[]).length>0
+    ||(c.ideationVersions||[]).some(v=>(v.text||'').trim()||(v.refImages||[]).length);
+}
+async function reconcileBrandContent(brandId){
+  const data=D();
+  const b=data.brands.find(x=>x.id===brandId);if(!b)return {deleted:0,added:0};
+  const qb=b.quotaBreakdown||{};
+  const cStart=b.contractStart||new Date().toISOString().split('T')[0];
+  const cEnd=b.contractEnd||cStart;
+  const months=[];
+  {let [_y,_m]=cStart.slice(0,7).split('-').map(Number);
+   const [_ey,_em]=cEnd.slice(0,7).split('-').map(Number);
+   while(_y<_ey||(_y===_ey&&_m<=_em)){months.push(_y+'-'+String(_m).padStart(2,'0'));_m++;if(_m>12){_m=1;_y++;}}}
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const today=new Date().toISOString().split('T')[0];
+  const toDelete=[];const toAdd=[];
+  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#']];
+
+  months.forEach(month=>{
+    const [yr,mo]=month.split('-').map(Number);
+    const monthLabel=MN[mo-1]+' '+String(yr).slice(2);
+    const inMonth=data.contents.filter(c=>c.brandId===brandId&&(c.postingDate||'').startsWith(month));
+    CATS.forEach(([cat,prefix])=>{
+      const target=Number(qb[cat])||0;
+      const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
+      // protected = custom name OR has real progress
+      const protectedItems=items.filter(c=>!_DATED_RE.test(c.title)||_hasProgress(c));
+      // disposable auto-drafts
+      const drafts=items.filter(c=>_DATED_RE.test(c.title)&&!_hasProgress(c));
+      let kept=protectedItems.length;
+      // keep drafts up to target, delete the rest
+      drafts.forEach(d=>{
+        if(kept<target)kept++;
+        else toDelete.push(d.id);
+      });
+      // top up with fresh defaults
+      const daysInMonth=new Date(yr,mo,0).getDate();
+      let n=items.length-toDelete.filter(id=>items.some(x=>x.id===id)).length;
+      let seq=1;
+      while(kept<target){
+        // next free sequence number for this prefix+month
+        while(data.contents.some(c=>c.brandId===brandId&&c.title===`${prefix}${seq} — ${monthLabel}`)||toAdd.some(c=>c.title===`${prefix}${seq} — ${monthLabel}`))seq++;
+        const day=Math.min(daysInMonth,3+(kept*Math.max(1,Math.floor(daysInMonth/Math.max(1,target)))));
+        let postingDate=`${month}-${String(day).padStart(2,'0')}`;
+        const type=cat==='tiktok'?'Video':cat==='videoAds'?'Video':cat==='carousel'?'Carousel':cat==='video'?'Video':'Carousel';
+        toAdd.push({id:'ct'+uid(),brandId,title:`${prefix}${seq} — ${monthLabel}`,type,
+          assignees:[],statusId:'ideation',postingDate,driveLink:'',copywriting:'',comments:[],
+          statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
+          dueDates:{hualu:addBusinessDays(postingDate,-4),leonard:addBusinessDays(postingDate,-7),jack:''},pic:{}});
+        kept++;
+      }
+    });
+  });
+
+  if(toDelete.length){
+    if(!Array.isArray(data.deletionLog))data.deletionLog=[];
+    toDelete.forEach(id=>{
+      const c=data.contents.find(x=>x.id===id);
+      if(c)data.deletionLog.push({logId:'dl'+Math.random().toString(36).slice(2,9),contentId:id,title:c.title,brandName:b.name,brandColor:b.color,type:c.type||'',statusId:c.statusId||'',deletedBy:S.user.name,deletedById:S.user.id,deletedAt:today,dismissedBy:[]});
+    });
+    data.contents=data.contents.filter(c=>!toDelete.includes(c.id));
+  }
+  if(toAdd.length)data.contents.push(...toAdd);
+  await saveNow(data);
+  if(toDelete.length&&CLOUD_CONFIG.ENABLED){
+    // bulk-delete in chunks of 50 ids per request
+    for(let i=0;i<toDelete.length;i+=50){
+      const ids=toDelete.slice(i,i+50);
+      fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=in.(${ids.map(encodeURIComponent).join(',')})`,{method:'DELETE',headers:_sbUH()}).catch(()=>{});
+    }
+  }
+  return {deleted:toDelete.length,added:toAdd.length};
+}
+
 function saveBrandInfo(brandId, fillAllMonths){
   const data=D();const idx=data.brands.findIndex(b=>b.id===brandId);if(idx<0)return;
   const templatesRaw=document.getElementById('bi-templates').value.trim().split('\n').filter(Boolean);
@@ -9479,21 +9575,21 @@ function saveBrandInfo(brandId, fillAllMonths){
     alert('Please set Contract Start and Contract End dates before generating content.');
     return;
   }
-  let newPieces=0;
+  save(data);closeModal();
   if(fillAllMonths){
-    newPieces=autoInsertAllMonths(data,brandId);
-    if(newPieces===0){
-      const _s=data.brands[idx].contractStart;
-      const _e=data.brands[idx].contractEnd;
-      showAIToast(`⚠ No new content created — all months from ${_s} to ${_e} already have content`);
-      save(data);closeModal();render();return;
-    }
+    showAIToast('🔄 Reconciling content to quota...');
+    reconcileBrandContent(brandId).then(r=>{
+      render();
+      showAIToast(`✅ Quota reconciled · ${r.deleted} removed · ${r.added} added (custom-named & in-progress kept)`);
+    }).catch(e=>{
+      console.error('reconcile error:',e);
+      render();
+      showAIToast('⚠ Reconcile error: '+e.message.slice(0,60));
+    });
   } else {
-    newPieces=autoInsertBrandContent(data,brandId);
+    render();
+    showAIToast('✅ Brand settings saved');
   }
-  save(data);closeModal();render();
-  if(newPieces>0) showAIToast(`✅ Brand settings saved · ${newPieces} new content piece${newPieces!==1?'s':''} added`);
-  else showAIToast('✅ Brand settings saved');
 }
 
 // ===================== ADD BRAND =====================
