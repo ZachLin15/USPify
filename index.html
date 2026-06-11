@@ -9626,6 +9626,11 @@ function _hasProgress(c){
 function planReconcile(brandId){
   const data=D();
   const b=data.brands.find(x=>x.id===brandId);if(!b)return null;
+  // Log all items in this brand for debugging
+  const _allBrandItems=data.contents.filter(c=>c.brandId===brandId);
+  const _jun=_allBrandItems.filter(c=>(c.postingDate||'').startsWith('2026-06'));
+  console.log('[reconcile] START brandId:',brandId,'total items:',_allBrandItems.length,'Jun items:',_jun.length);
+  console.log('[reconcile] Jun item titles:',_jun.map(c=>c.title));
   const qb=b.quotaBreakdown||{};
   const cStart=b.contractStart||new Date().toISOString().split('T')[0];
   const cEnd=b.contractEnd||cStart;
@@ -9681,6 +9686,40 @@ function planReconcile(brandId){
   console.log('[reconcile] toDelete:',toDelete.length,'toAdd:',toAdd.length);
   console.log('[reconcile] delete samples:',toDelete.slice(0,6).map(x=>x.title));
   if(toDelete.length) console.log('[reconcile] sample deletes:',toDelete.slice(0,5).map(x=>x.title+' ('+x.month+')'));
+
+  // Clean up stray auto-dated drafts (Carousel#, Video#, Reels#) with no progress
+  const _KNOWN_AUTO=/^(Carousel#|Video#|Reels#)/i;
+  const _isManaged=(t)=>/^(WP#|Ad#|TikTok#|Content#)/i.test(t||'');
+  const brandItems=data.contents.filter(c=>c.brandId===brandId);
+  console.log('[reconcile] total brand items:',brandItems.length);
+  const strayItems=brandItems.filter(c=>_KNOWN_AUTO.test(c.title||''));
+  console.log('[reconcile] stray candidates:',strayItems.map(c=>c.title));
+  strayItems.forEach(c=>{
+    const dated=_DATED_RE.test(c.title||'');
+    const progress=_hasProgress(c);
+    const alreadyIn=toDelete.some(x=>x.id===c.id);
+    console.log('[reconcile] stray check:',c.title,'dated:',dated,'progress:',progress,'alreadyIn:',alreadyIn,'status:',c.statusId);
+    if(dated && !progress && !alreadyIn){
+      const month=(c.postingDate||'').slice(0,7)||'0000-00';
+      toDelete.push({id:c.id,title:c.title,month});
+    }
+  });
+  
+  // ALSO catch items with cat='carousel' that slipped through
+  const catStray=data.contents.filter(c=>
+    c.brandId===brandId &&
+    (c.cat==='carousel') &&
+    _DATED_RE.test(c.title||'') &&
+    !_hasProgress(c) &&
+    !toDelete.some(x=>x.id===c.id)
+  );
+  console.log('[reconcile] cat-stray (carousel cat):',catStray.map(c=>c.title));
+  catStray.forEach(c=>{
+    const month=(c.postingDate||'').slice(0,7)||'0000-00';
+    toDelete.push({id:c.id,title:c.title,month});
+  });
+
+  console.log('[reconcile] FINAL toDelete:',toDelete.length,'(incl stray)');
   return {brandId,b,toDelete,toAdd};
 }
 
