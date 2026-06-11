@@ -9013,12 +9013,18 @@ function openAddContentModal(brandId){
       ${u.name}
     </button>`).join('');
   openModal(`<div class="modal-title">Add content piece<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="af-title" type="text" placeholder="e.g. WP#1 — Product Spotlight"></div>
+    <div class="form-row"><label class="form-label">Title — <span style="font-size:12px;color:var(--t3)">prefix auto-set by category</span></label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span id="af-title-prefix" style="font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:var(--ac);white-space:nowrap;min-width:64px">WP#1 —</span>
+        <input class="form-input" id="af-title-suffix" type="text" placeholder="Your content name (e.g. Product Spotlight)" style="flex:1">
+      </div>
+      <input type="hidden" id="af-title">
+    </div>
     <div class="form-row-2">
-      <div class="form-row" style="margin:0"><label class="form-label">Brand</label><select class="form-select" id="af-brand" onchange="updateAutoDate()">${bOpts}</select></div>
+      <div class="form-row" style="margin:0"><label class="form-label">Brand</label><select class="form-select" id="af-brand" onchange="updateAutoDate();updateAddContentPrefix()">${bOpts}</select></div>
       <div class="form-row" style="margin:0">
         <label class="form-label">Category</label>
-        <select class="form-select" id="af-category" onchange="onAddCategoryChange()">
+        <select class="form-select" id="af-category" onchange="onAddCategoryChange();updateAddContentPrefix()">
           <option value="wallPost">🖼 Wall Post</option>
           <option value="videoAds">📢 Video Ads</option>
         </select>
@@ -9044,6 +9050,29 @@ function openAddContentModal(brandId){
     </div>
     <div class="form-row"><label class="form-label">Google Drive link (optional)</label><input class="form-input" id="af-drive" type="url" placeholder="https://drive.google.com/..."></div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveNewContent()">Add content</button></div>`);}
+
+
+// Return next unused index for a category prefix within a brand
+function nextCatIndex(brandId,catPrefix,existingContents){
+  const taken=new Set();
+  (existingContents||[]).forEach(c=>{
+    if(c.brandId!==brandId)return;
+    const m=c.title&&c.title.match(new RegExp('^'+catPrefix.replace('#','\\#')+'(\\d+)'));
+    if(m)taken.add(Number(m[1]));
+  });
+  let n=1;while(taken.has(n))n++;
+  return n;
+}
+const _CAT_PREFIX={wallPost:'WP#',videoAds:'Ad#',tiktok:'TikTok#',video:'Video#',carousel:'Carousel#',reels:'Reels#'};
+function updateAddContentPrefix(){
+  const cat=document.getElementById('af-category')?.value||'wallPost';
+  const brandId=document.getElementById('af-brand')?.value||'';
+  const data=D();
+  const prefix=_CAT_PREFIX[cat]||'Content#';
+  const idx=nextCatIndex(brandId,prefix,data.contents);
+  const prefixEl=document.getElementById('af-title-prefix');
+  if(prefixEl)prefixEl.textContent=prefix+idx+' —';
+}
 
 function toggleACBtn(userId){
   const btn=document.getElementById('ac-btn-'+userId);
@@ -9074,8 +9103,27 @@ function updateAutoDate(){
 }
 function toggleAC(uid,prefix){const el=document.getElementById(prefix+uid);if(el){el.classList.toggle('selected');el.querySelector('input').checked=el.classList.contains('selected');}}
 function saveNewContent(){
-  const title=document.getElementById('af-title').value.trim();
-  if(!title){alert('Enter a title');return;}
+  // Build title from prefix + user suffix
+  const _pre=document.getElementById('af-title-prefix')?.textContent?.trim()||'';
+  const _suf=document.getElementById('af-title-suffix')?.value?.trim()||'';
+  const title=_suf?_pre+' '+_suf:_pre;
+  if(!title||title===_pre){alert('Please enter a name after the prefix (e.g. "Product Spotlight").');return;}
+  // Ensure no duplicate across ALL data (re-check at save time)
+  {const _data2=D();const _cat=document.getElementById('af-category')?.value||'wallPost';
+   const _brandId2=document.getElementById('af-brand')?.value||'';
+   const _catPfx=_CAT_PREFIX[_cat]||'Content#';
+   const _nextIdx=nextCatIndex(_brandId2,_catPfx,_data2.contents);
+   // If prefix shown has stale index vs live data, silently use the fresh one
+   const _freshPre=_catPfx+_nextIdx+' —';
+   if(_pre!==_freshPre){
+     const finalTitle=_freshPre+' '+_suf;
+     if(_data2.contents.some(c=>c.brandId===_brandId2&&c.title===finalTitle)){
+       alert('A content piece with this name already exists. Please use a different name.');return;
+     }
+   } else if(_data2.contents.some(c=>c.brandId===_brandId2&&c.title===title)){
+     alert('A content piece with this name already exists. Please use a different name.');return;
+   }
+  }
   const postingDate=document.getElementById('af-due').value;
   if(!postingDate){
     alert('Posting date is required.');
