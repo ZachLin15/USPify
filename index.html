@@ -9464,9 +9464,9 @@ function _hasProgress(c){
     ||(c.copyVersions||[]).length>0
     ||(c.ideationVersions||[]).some(v=>(v.text||'').trim()||(v.refImages||[]).length);
 }
-async function reconcileBrandContent(brandId){
+function planReconcile(brandId){
   const data=D();
-  const b=data.brands.find(x=>x.id===brandId);if(!b)return {deleted:0,added:0};
+  const b=data.brands.find(x=>x.id===brandId);if(!b)return null;
   const qb=b.quotaBreakdown||{};
   const cStart=b.contractStart||new Date().toISOString().split('T')[0];
   const cEnd=b.contractEnd||cStart;
@@ -9479,11 +9479,9 @@ async function reconcileBrandContent(brandId){
   const toDelete=[];const toAdd=[];
   const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#']];
   const contractSet=new Set(months);
-  // Visit every month that actually has content too (incl. undated → '0000-00')
   const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
     .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
   const allMonths=[...new Set([...months,...dataMonths])].sort();
-  console.log('[reconcile]',brandId,'months:',allMonths.length,'contract:',months.length);
 
   allMonths.forEach(month=>{
     const inContract=contractSet.has(month);
@@ -9491,25 +9489,19 @@ async function reconcileBrandContent(brandId){
     const monthLabel=MN[(mo||1)-1]+' '+String(yr).slice(2);
     const inMonth=data.contents.filter(c=>c.brandId===brandId&&(((c.postingDate||'').slice(0,7)||'0000-00')===month));
     CATS.forEach(([cat,prefix])=>{
-      const target=inContract?(Number(qb[cat])||0):0; // outside contract → clean to zero
+      const target=inContract?(Number(qb[cat])||0):0;
       const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
-      // protected = custom name OR has real progress
       const protectedItems=items.filter(c=>!_DATED_RE.test(c.title)||_hasProgress(c));
-      // disposable auto-drafts
       const drafts=items.filter(c=>_DATED_RE.test(c.title)&&!_hasProgress(c));
       let kept=protectedItems.length;
-      // keep drafts up to target, delete the rest
       drafts.forEach(d=>{
         if(kept<target)kept++;
-        else toDelete.push(d.id);
+        else toDelete.push({id:d.id,title:d.title,month});
       });
-      // top up with fresh defaults (contract months only)
       if(!inContract||month==='0000-00')return;
       const daysInMonth=new Date(yr,mo,0).getDate();
-      let n=items.length-toDelete.filter(id=>items.some(x=>x.id===id)).length;
       let seq=1;
       while(kept<target){
-        // next free sequence number for this prefix+month
         while(data.contents.some(c=>c.brandId===brandId&&c.title===`${prefix}${seq} — ${monthLabel}`)||toAdd.some(c=>c.title===`${prefix}${seq} — ${monthLabel}`))seq++;
         const day=Math.min(daysInMonth,3+(kept*Math.max(1,Math.floor(daysInMonth/Math.max(1,target)))));
         let postingDate=`${month}-${String(day).padStart(2,'0')}`;
@@ -9522,26 +9514,95 @@ async function reconcileBrandContent(brandId){
       }
     });
   });
+  return {brandId,b,toDelete,toAdd};
+}
 
-  if(toDelete.length){
+async function applyReconcile(plan,onProgress){
+  const data=D();
+  const b=plan.b;const today=new Date().toISOString().split('T')[0];
+  const ids=plan.toDelete.map(x=>x.id);
+  const prog=(p,m)=>{try{onProgress&&onProgress(p,m);}catch(_){}}
+  prog(10,'Logging deletions...');
+  if(ids.length){
     if(!Array.isArray(data.deletionLog))data.deletionLog=[];
-    toDelete.forEach(id=>{
-      const c=data.contents.find(x=>x.id===id);
-      if(c)data.deletionLog.push({logId:'dl'+Math.random().toString(36).slice(2,9),contentId:id,title:c.title,brandName:b.name,brandColor:b.color,type:c.type||'',statusId:c.statusId||'',deletedBy:S.user.name,deletedById:S.user.id,deletedAt:today,dismissedBy:[]});
+    plan.toDelete.forEach(x=>{
+      const c=data.contents.find(y=>y.id===x.id);
+      if(c)data.deletionLog.push({logId:'dl'+Math.random().toString(36).slice(2,9),contentId:x.id,title:c.title,brandName:b.name,brandColor:b.color,type:c.type||'',statusId:c.statusId||'',deletedBy:S.user.name,deletedById:S.user.id,deletedAt:today,dismissedBy:[]});
     });
-    data.contents=data.contents.filter(c=>!toDelete.includes(c.id));
+    data.contents=data.contents.filter(c=>!ids.includes(c.id));
   }
-  if(toAdd.length)data.contents.push(...toAdd);
+  prog(25,'Adding new pieces...');
+  if(plan.toAdd.length)data.contents.push(...plan.toAdd);
+  prog(40,'Saving to cloud...');
   await saveNow(data);
-  if(toDelete.length&&CLOUD_CONFIG.ENABLED){
-    // bulk-delete in chunks of 50 ids per request
-    for(let i=0;i<toDelete.length;i+=50){
-      const ids=toDelete.slice(i,i+50);
-      fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=in.(${ids.map(encodeURIComponent).join(',')})`,{method:'DELETE',headers:_sbUH()}).catch(()=>{});
+  prog(70,'Removing rows from cloud...');
+  if(ids.length&&CLOUD_CONFIG.ENABLED){
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      prog(70+Math.round((i/ids.length)*25),`Deleting ${i+1}–${Math.min(i+50,ids.length)} of ${ids.length}...`);
+      await fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=in.(${chunk.map(encodeURIComponent).join(',')})`,{method:'DELETE',headers:_sbUH()}).catch(()=>{});
     }
   }
-  console.log('[reconcile] deleted',toDelete.length,'added',toAdd.length);
-  return {deleted:toDelete.length,added:toAdd.length};
+  prog(100,'Done!');
+  return {deleted:ids.length,added:plan.toAdd.length};
+}
+
+
+
+function openReconcilePreview(brandId){
+  const plan=planReconcile(brandId);
+  if(!plan){showAIToast('⚠ Brand not found');return;}
+  window._reconcilePlan=plan;
+  const del=plan.toDelete, add=plan.toAdd;
+  const byMonth={};
+  del.forEach(x=>{(byMonth[x.month]=byMonth[x.month]||[]).push(x.title);});
+  const delList=Object.keys(byMonth).sort().map(m=>
+    `<div style="margin-bottom:6px"><div style="font-size:12px;font-weight:700;color:var(--red);font-family:'DM Mono',monospace">${m==='0000-00'?'No date':m} · ${byMonth[m].length} item${byMonth[m].length>1?'s':''}</div>
+     <div style="font-size:12px;color:var(--t3);line-height:1.5">${byMonth[m].slice(0,8).join(', ')}${byMonth[m].length>8?` … +${byMonth[m].length-8} more`:''}</div></div>`).join('');
+  openModal(`<div class="modal-title">🔍 Quota Reconcile Preview<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="display:flex;gap:12px;margin-bottom:14px">
+      <div style="flex:1;background:var(--redd);border:1px solid var(--red);border-radius:var(--r);padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--red)">${del.length}</div>
+        <div style="font-size:12px;color:var(--t2)">will be deleted</div>
+      </div>
+      <div style="flex:1;background:var(--acd,rgba(200,240,74,.1));border:1px solid var(--ac);border-radius:var(--r);padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--ac)">${add.length}</div>
+        <div style="font-size:12px;color:var(--t2)">will be added</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">✅ Custom-named content and anything with progress is kept automatically.</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--b1);border-radius:var(--r);padding:10px;margin-bottom:10px">
+      ${del.length?delList:'<div style="font-size:13px;color:var(--t3)">Nothing to delete — quotas already satisfied.</div>'}
+    </div>
+    <div id="recon-progress" style="display:none;margin-bottom:10px">
+      <div id="recon-progress-msg" style="font-size:12px;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:4px">Starting...</div>
+      <div style="height:8px;background:var(--b1);border-radius:6px;overflow:hidden">
+        <div id="recon-progress-bar" style="height:100%;width:0%;background:var(--ac);transition:width .2s"></div>
+      </div>
+    </div>
+    <div class="modal-actions" id="recon-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="runReconcile()">${del.length||add.length?`Confirm — delete ${del.length}, add ${add.length}`:'Nothing to do'}</button>
+    </div>`);
+}
+
+async function runReconcile(){
+  const plan=window._reconcilePlan;if(!plan)return;
+  const pr=document.getElementById('recon-progress');
+  const bar=document.getElementById('recon-progress-bar');
+  const msg=document.getElementById('recon-progress-msg');
+  const acts=document.getElementById('recon-actions');
+  if(pr)pr.style.display='block';
+  if(acts)acts.style.display='none';
+  try{
+    const r=await applyReconcile(plan,(p,m)=>{if(bar)bar.style.width=p+'%';if(msg)msg.textContent=m;});
+    closeModal();render();
+    showAIToast(`✅ Reconciled · ${r.deleted} removed · ${r.added} added`);
+  }catch(e){
+    if(msg)msg.textContent='⚠ Error: '+e.message;
+    if(acts)acts.style.display='flex';
+  }
+  window._reconcilePlan=null;
 }
 
 function saveBrandInfo(brandId, fillAllMonths){
@@ -9586,15 +9647,7 @@ function saveBrandInfo(brandId, fillAllMonths){
   }
   save(data);closeModal();
   if(fillAllMonths){
-    showAIToast('🔄 Reconciling content to quota...');
-    reconcileBrandContent(brandId).then(r=>{
-      render();
-      showAIToast(`✅ Quota reconciled · ${r.deleted} removed · ${r.added} added (custom-named & in-progress kept)`);
-    }).catch(e=>{
-      console.error('reconcile error:',e);
-      render();
-      showAIToast('⚠ Reconcile error: '+e.message.slice(0,60));
-    });
+    openReconcilePreview(brandId);
   } else {
     render();
     showAIToast('✅ Brand settings saved');
