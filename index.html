@@ -9478,13 +9478,20 @@ async function reconcileBrandContent(brandId){
   const today=new Date().toISOString().split('T')[0];
   const toDelete=[];const toAdd=[];
   const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#']];
+  const contractSet=new Set(months);
+  // Visit every month that actually has content too (incl. undated → '0000-00')
+  const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
+    .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
+  const allMonths=[...new Set([...months,...dataMonths])].sort();
+  console.log('[reconcile]',brandId,'months:',allMonths.length,'contract:',months.length);
 
-  months.forEach(month=>{
-    const [yr,mo]=month.split('-').map(Number);
-    const monthLabel=MN[mo-1]+' '+String(yr).slice(2);
-    const inMonth=data.contents.filter(c=>c.brandId===brandId&&(c.postingDate||'').startsWith(month));
+  allMonths.forEach(month=>{
+    const inContract=contractSet.has(month);
+    const [yr,mo]=month==='0000-00'?[0,1]:month.split('-').map(Number);
+    const monthLabel=MN[(mo||1)-1]+' '+String(yr).slice(2);
+    const inMonth=data.contents.filter(c=>c.brandId===brandId&&(((c.postingDate||'').slice(0,7)||'0000-00')===month));
     CATS.forEach(([cat,prefix])=>{
-      const target=Number(qb[cat])||0;
+      const target=inContract?(Number(qb[cat])||0):0; // outside contract → clean to zero
       const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
       // protected = custom name OR has real progress
       const protectedItems=items.filter(c=>!_DATED_RE.test(c.title)||_hasProgress(c));
@@ -9496,7 +9503,8 @@ async function reconcileBrandContent(brandId){
         if(kept<target)kept++;
         else toDelete.push(d.id);
       });
-      // top up with fresh defaults
+      // top up with fresh defaults (contract months only)
+      if(!inContract||month==='0000-00')return;
       const daysInMonth=new Date(yr,mo,0).getDate();
       let n=items.length-toDelete.filter(id=>items.some(x=>x.id===id)).length;
       let seq=1;
@@ -9532,6 +9540,7 @@ async function reconcileBrandContent(brandId){
       fetch(`${CLOUD_CONFIG.URL}/rest/v1/uspify_contents?id=in.(${ids.map(encodeURIComponent).join(',')})`,{method:'DELETE',headers:_sbUH()}).catch(()=>{});
     }
   }
+  console.log('[reconcile] deleted',toDelete.length,'added',toAdd.length);
   return {deleted:toDelete.length,added:toAdd.length};
 }
 
