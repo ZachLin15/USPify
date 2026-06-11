@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+<div class="form-row-2">
+    <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video (Video#)</div></div>
+    <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
+  </div><!DOCTYPE html>
 <html lang="en">
 <head>
 <!-- ============================================================
@@ -9042,6 +9045,10 @@ function openAddContentModal(brandId){
         <select class="form-select" id="af-category" onchange="onAddCategoryChange();updateAddContentPrefix()">
           <option value="wallPost">🖼 Wall Post</option>
           <option value="videoAds">📢 Video Ads</option>
+          <option value="tiktok">🎵 TikTok</option>
+          <option value="video">🎬 Other Video</option>
+          <option value="carousel">🎠 Carousel</option>
+          <option value="other">📋 Others</option>
         </select>
       </div>
     </div>
@@ -9078,7 +9085,7 @@ function nextCatIndex(brandId,catPrefix,existingContents){
   let n=1;while(taken.has(n))n++;
   return n;
 }
-const _CAT_PREFIX={wallPost:'WP#',videoAds:'Ad#',tiktok:'TikTok#',video:'Video#',carousel:'Carousel#',reels:'Reels#'};
+const _CAT_PREFIX={wallPost:'WP#',videoAds:'Ad#',tiktok:'TikTok#',video:'Video#',carousel:'Carousel#',reels:'Reels#',other:'Content#'};
 function updateAddContentPrefix(){
   const cat=document.getElementById('af-category')?.value||'wallPost';
   const brandId=document.getElementById('af-brand')?.value||'';
@@ -9593,6 +9600,8 @@ function _quotaCatOf(c){
   if(/^WP#/i.test(t))return 'wallPost';
   if(/^Ad#/i.test(t)||/Ad#/i.test(t))return 'videoAds';
   if(/^TikTok#/i.test(t))return 'tiktok';
+  if(/^Carousel#/i.test(t))return 'carousel';
+  if(/^Content#/i.test(t))return 'other';
   if(c.type==='Carousel'||c.type==='Single Image')return 'carousel';
   return 'video';
 }
@@ -9616,7 +9625,7 @@ function planReconcile(brandId){
   const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const today=new Date().toISOString().split('T')[0];
   const toDelete=[];const toAdd=[];
-  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#']];
+  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['video','Video#'],['carousel','Carousel#'],['other','Content#']];
   const contractSet=new Set(months);
   const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
     .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
@@ -9849,6 +9858,8 @@ async function saveNewBrand(){
   const wallPosts2=wpCarousel+wpVideo+wpReels+wpImage;
   const ads=parseInt(document.getElementById('nb-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('nb-tiktok').value)||0;
+  const otherVideos=parseInt(document.getElementById('nb-video')?.value||0)||0;
+  const otherContent=parseInt(document.getElementById('nb-other')?.value||0)||0;
   const contractStart=document.getElementById('nb-cstart').value;
   const contractEnd=document.getElementById('nb-cend').value;
   const driveLink=document.getElementById('nb-drive').value.trim();
@@ -9856,14 +9867,14 @@ async function saveNewBrand(){
   console.log('[saveNewBrand] contractStart=',contractStart,'contractEnd=',contractEnd);
   if(!contractStart||!contractEnd){alert('Please set contract start and end dates.');return;}
 
-  const quota=wallPosts2+ads+tiktoks;
+  const quota=wallPosts2+ads+tiktoks+otherVideos+otherContent;
   if(quota===0){alert('Please set at least one quota number.');return;}
 
   const data=D();
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
   if(data.brands.find(b=>b.id===id)){alert('Brand with this name already exists.');return;}
 
-  const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,video:0,carousel:0};
+  const quotaBreakdown={wallPost:wallPosts2,wpCarousel,wpVideo,wpReels,wpImage,videoAds:ads,tiktok:tiktoks,video:otherVideos,other:otherContent,carousel:0};
   const quotaLabels={wallPost:'Wall Posts',wpCarousel:'Carousel',wpVideo:'Video',wpReels:'Reels',wpImage:'Single Image',videoAds:'Video Ads',tiktok:'TikTok Content',video:'',carousel:''};
 
   // Build month list using pure string arithmetic — no Date objects, no timezone bugs
