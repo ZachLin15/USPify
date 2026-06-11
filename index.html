@@ -1,4 +1,5 @@
-<div class="form-row-2">
+
+  <div class="form-row-2">
     
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
@@ -1579,6 +1580,7 @@ function showTaskNotification(c, task, fromName){
           });
         }
         if(typeof enforceOfficialQuotas==='function') enforceOfficialQuotas(fresh);
+        (fresh.brands||[]).forEach(b=>{if(b.quotaBreakdown)b.quotaBreakdown.carousel=0;});
         // Migrate legacy 'senior_approval' statuses
         if(fresh.contents){
           fresh.contents.forEach(c=>{
@@ -2208,6 +2210,8 @@ function D(){
   // Seed Lunox brand folder link if missing
   {const _lx=data.brands.find(b=>b.id==='lunox');
    if(_lx&&!_lx.brandFolderLink)_lx.brandFolderLink='https://drive.google.com/drive/folders/1r4hdb_bXi2RcTJiRmEfjaQauSkWJgaPo';}
+  // Ensure carousel quota is always 0 (carousel is a WP sub-type, not standalone)
+  (data.brands||[]).forEach(b=>{if(b.quotaBreakdown)b.quotaBreakdown.carousel=0;});
   // Migrate legacy 'senior_approval' → specific statuses
   // AND ensure statusId matches last statusHistory entry (fix sync mismatches)
   data.contents.forEach(c=>{
@@ -9632,7 +9636,7 @@ function planReconcile(brandId){
   const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const today=new Date().toISOString().split('T')[0];
   const toDelete=[];const toAdd=[];
-  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['other','Content#'],['carousel','Carousel#']];
+  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['other','Content#']];
   const contractSet=new Set(months);
   const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
     .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
@@ -9813,6 +9817,7 @@ function saveBrandInfo(brandId, fillAllMonths){
   const _biOther=parseInt(document.getElementById('bi-other')?.value||0)||0;
   if(!data.brands[idx].quotaBreakdown)data.brands[idx].quotaBreakdown={};
   data.brands[idx].quotaBreakdown.other=_biOther;
+  data.brands[idx].quotaBreakdown.carousel=0; // carousel is a WP sub-type, not a separate quota
   const _fbPage=document.getElementById('bi-fbpage')?.value?.trim()||'';
   const _fbToken=document.getElementById('bi-fbtoken')?.value?.trim()||'';
   data.brands[idx].fbPageId=_fbPage;
