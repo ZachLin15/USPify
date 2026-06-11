@@ -3090,7 +3090,7 @@ function renderTracker(){
   if(tsort==='date') contents=[...contents].sort((a,b)=>(!a.postingDate?1:!b.postingDate?-1:a.postingDate.localeCompare(b.postingDate)));
   else if(tsort==='date_desc') contents=[...contents].sort((a,b)=>(!a.postingDate?1:!b.postingDate?-1:b.postingDate.localeCompare(a.postingDate)));
   else if(tsort==='status') contents=[...contents].sort((a,b)=>getStepNumber(data,a.statusId)-getStepNumber(data,b.statusId));
-  else if(tsort==='title') contents=[...contents].sort((a,b)=>a.title.localeCompare(b.title));
+  else if(tsort==='title') contents=[...contents].sort((a,b)=>naturalCompare(a.title,b.title));
   else contents=[...contents].sort((a,b)=>{// brand → type → date
     const ba=getBrand(data,a.brandId).name;const bb=getBrand(data,b.brandId).name;
     if(ba!==bb) return ba.localeCompare(bb);
@@ -3346,6 +3346,21 @@ async function bulkDeleteSelected(){
   showAIToast(`🗑 ${ids.length} deleted`);
 }
 
+// Natural sort: compares strings with embedded numbers numerically
+function naturalCompare(a,b){
+  const re=/([^0-9]*)([0-9]*)/g;
+  let ra,rb;
+  while(true){
+    ra=re.exec(a);rb=re.exec(b);
+    if(!ra&&!rb)return 0;
+    if(!ra)return -1;if(!rb)return 1;
+    if(ra[1]!==rb[1])return ra[1]<rb[1]?-1:1;
+    const na=parseInt(ra[2]||'0'),nb=parseInt(rb[2]||'0');
+    if(na!==nb)return na-nb;
+    if(!ra[0]&&!rb[0])return 0;
+  }
+}
+
 function renderBrandPage(){
   const data=D();const b=getBrand(data,S.brand);
   let contents=data.contents.filter(c=>c.brandId===S.brand);
@@ -3388,7 +3403,7 @@ function renderBrandPage(){
   }else if(S.brandSort==='progress'){
     contents=[...contents].sort((a,c2)=>getProgress(data,c2.statusId)-getProgress(data,a.statusId));
   }else if(S.brandSort==='title'){
-    contents=[...contents].sort((a,c2)=>a.title.localeCompare(c2.title));
+    contents=[...contents].sort((a,c2)=>naturalCompare(a.title,c2.title)*dir);
   }else{
     contents=[...contents].sort((a,c2)=>(!a.postingDate?1:!c2.postingDate?-1:a.postingDate.localeCompare(c2.postingDate)));
   }
