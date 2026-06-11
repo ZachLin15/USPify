@@ -1,5 +1,4 @@
-
-  <div class="form-row-2">
+<div class="form-row-2">
     <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video (Video#)</div></div>
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
@@ -2034,7 +2033,7 @@ let _dataCache=null, _dataCacheKey=null;
 // ── OFFICIAL BRAND QUOTAS (fixed) — enforced on every load ──────────
 // Corrects any drift in Supabase data. Does NOT touch content items.
 var _OFFICIAL_QUOTAS={
-  lunox:{quota:25,quotaBreakdown:{wallPost:8,videoAds:5,tiktok:12,carousel:0,video:0},
+  lunox:{quota:25,quotaBreakdown:{wallPost:8,videoAds:5,tiktok:6,other:12,carousel:0,video:0},
     quotaLabels:{wallPost:'Wall Posts WP#1–8 (carousel / single image / reels)',videoAds:'Video Ads (3 Lunox Consultation, 2 Maizisleepz)',tiktok:'TikTok Videos',carousel:'',video:''}},
   uspify:{quota:12,quotaBreakdown:{video:8,carousel:4,wallPost:0,videoAds:0,tiktok:0},
     quotaLabels:{video:'Videos',carousel:'Carousels',wallPost:'',videoAds:'',tiktok:''}},
@@ -10021,6 +10020,8 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
         ...Array.from({length:wpImage},(_,i)=>({title:`WP#${wpCarousel+wpVideo+wpReels+i+1}`,type:'Single Image',cat:'wallPost'})),
         ...Array.from({length:ads},(_,i)=>({title:`Ad#${i+1}`,type:'Video',cat:'videoAds'})),
         ...Array.from({length:tiktoks},(_,i)=>({title:`TikTok#${i+1}`,type:'Video',cat:'tiktok'})),
+        ...Array.from({length:otherVideos},(_,i)=>({title:`Video#${i+1}`,type:'Video',cat:'video'})),
+        ...Array.from({length:otherContent},(_,i)=>({title:`Content#${i+1}`,type:'Carousel',cat:'other'})),
       ];
 
   // Save the brand
