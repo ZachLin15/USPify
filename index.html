@@ -9669,7 +9669,13 @@ function planReconcile(brandId){
       }
     });
   });
-  console.log('[reconcile] plan for',brandId,'— qb:',JSON.stringify(qb),'toDelete:',toDelete.length,'toAdd:',toAdd.length);
+  // Log per-category summary
+  const summary={};
+  toDelete.forEach(x=>{const k=x.month+'/del';summary[k]=(summary[k]||0)+1;});
+  console.log('[reconcile] plan for',brandId);
+  console.log('[reconcile] qb:',JSON.stringify(qb));
+  console.log('[reconcile] toDelete:',toDelete.length,'toAdd:',toAdd.length);
+  console.log('[reconcile] delete samples:',toDelete.slice(0,6).map(x=>x.title));
   if(toDelete.length) console.log('[reconcile] sample deletes:',toDelete.slice(0,5).map(x=>x.title+' ('+x.month+')'));
   return {brandId,b,toDelete,toAdd};
 }
@@ -9716,7 +9722,7 @@ function openReconcilePreview(brandId){
     return;
   }
   if(!plan){showAIToast('⚠ Brand not found');return;}
-  console.log('[reconcile] preview opened, toDelete:',plan.toDelete.length,'toAdd:',plan.toAdd.length);
+  console.log('[reconcile] preview opened — toDelete:',plan.toDelete.length,'toAdd:',plan.toAdd.length,'qb:',JSON.stringify(plan.b?.quotaBreakdown));
   window._reconcilePlan=plan;
   const del=plan.toDelete, add=plan.toAdd;
   const byMonth={};
