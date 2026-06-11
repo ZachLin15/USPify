@@ -35,7 +35,7 @@
   window.closeSidebar=function(){};
 </script>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>USPify Portal v171b</title>
+<title>USPify Portal v172</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0f0f11;--s1:#161618;--s2:#1e1e22;--s3:#26262c;--s4:#2e2e36;--b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.13);--b3:rgba(255,255,255,0.22);--t1:#eeecea;--t2:#b0ada6;--t3:#7e7c76;--t4:#3a3a36;--ac:#c8f04a;--ac2:#a8d030;--acd:rgba(200,240,74,0.12);--red:#ff5a5a;--redd:rgba(255,90,90,0.12);--amb:#f0a030;--ambd:rgba(240,160,48,0.12);--blu:#5a9fff;--blud:rgba(90,159,255,0.12);--pnk:#e06aaa;--pnkd:rgba(224,106,170,0.12);--tel:#3acca0;--teld:rgba(58,204,160,0.12);--pur:#9a7aff;--purd:rgba(154,122,255,0.12);--ora:#ff9f43;--orad:rgba(255,159,67,0.12);--r:8px;--r2:12px;--sb:260px}
@@ -915,7 +915,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
   <div class="login-box fade-in">
     <div class="login-logo">
       <div class="login-icon">U</div>
-      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v171b</div></div>
+      <div><div class="login-name">USPify</div><div class="login-sub">Agency Portal v172</div></div>
     </div>
     <label class="fl">Name</label><input class="fi" id="li-name" type="text" placeholder="Your name" autocomplete="off">
     <label class="fl">Password</label>
@@ -1536,10 +1536,9 @@ function showTaskNotification(c, task, fromName){
   let _seenTaskIds=new Set(); // tracks tasks already toasted to this user
 
   async function pullIfChanged(){
-    if(_pulling){console.log('[pull] skipped: already pulling');return;}
-    if(_initSyncing){console.log('[pull] skipped: initSyncing');return;}
+    if(_pulling)return;
+    if(_initSyncing)return;
     _pulling=true;
-    console.log('[pull] starting...');
     try{
       const fresh=await cloudLoad(1, 200); // fast pull — 1 retry, 200ms delay
       if(fresh&&fresh.users?.length){
@@ -2203,6 +2202,9 @@ function D(){
   });
 
   enforceOfficialQuotas(data);
+  // Seed Lunox brand folder link if missing
+  {const _lx=data.brands.find(b=>b.id==='lunox');
+   if(_lx&&!_lx.brandFolderLink)_lx.brandFolderLink='https://drive.google.com/drive/folders/1r4hdb_bXi2RcTJiRmEfjaQauSkWJgaPo';}
   // Migrate legacy 'senior_approval' → specific statuses
   // AND ensure statusId matches last statusHistory entry (fix sync mismatches)
   data.contents.forEach(c=>{
@@ -2525,7 +2527,7 @@ function renderSidebar(){
   </div>`).join('');
   const u=S.user;
   document.getElementById('sidebar').innerHTML=`
-    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v171b</div></div></div></div>
+    <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v172</div></div></div></div>
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
@@ -5638,12 +5640,26 @@ function renderClientDashboard(){
     </div>`:''}
   </div>`;
 }
+
+// ── Client portal extras: report link, brand folder, calendar ───────
+function renderClientExtras(b,data){
+  const folder=b.brandFolderLink||'';
+  const report=b.monthlyReportLink||'';
+  const links=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    ${report?`<a href="${report}" target="_blank" class="btn btn-info btn-sm" style="text-decoration:none">📄 Monthly Report (PDF) ↗</a>`:''}
+    ${folder?`<a href="${folder}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📁 Brand Folder ↗</a>`:''}
+  </div>`;
+  let cal='';
+  try{cal=renderBrandMiniCalendar(b,data);}catch(e){cal='';}
+  return links+cal;
+}
+
 function renderClientApprovals(){
   const data=D();const brandId=S.user.brandId;
   const pending=data.contents.filter(c=>c.brandId===brandId&&c.statusId==='client_approval');
   const b=getBrand(data,brandId);
   if(!pending.length){
-    return `<div class="ca-empty">
+    return renderClientExtras(b,data)+`<div class="ca-empty">
       <div class="ca-empty-icon">✅</div>
       <div class="ca-empty-title">You're all caught up!</div>
       <div class="ca-empty-sub">No content is awaiting your approval right now.<br>Check back later or contact your agency team.</div>
@@ -5710,7 +5726,7 @@ function renderClientApprovals(){
       </div>
     </div>`;
   }).join('');
-  return `<div class="ca-header">
+  return renderClientExtras(b,data)+`<div class="ca-header">
     <div style="flex:1"><div style="font-size:17px;font-weight:700">Awaiting Your Approval</div><div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-top:2px">Review each piece, approve or leave a comment, then post to Facebook when ready</div></div>
     <span class="ca-count-badge">${pending.length} pending</span>
   </div>
@@ -7446,11 +7462,15 @@ function renderIdeationPanel(c, id){
         <span class="idea-section-hint">Drag & drop or browse to upload</span>
       </div>
       <input type="file" id="ref-file-${id}" accept="image/*" multiple style="display:none" onchange="handleRefFileSelect('${id}',${verIdx},this)">
+      <input type="file" id="ref-folder-${id}" webkitdirectory directory multiple style="display:none" onchange="handleRefFileSelect('${id}',${verIdx},this)">
       <div class="ref-images-grid" id="ref-grid-${id}"
         ondragover="event.preventDefault();this.classList.add('drag-over')"
         ondragleave="this.classList.remove('drag-over')"
         ondrop="handleRefFileDrop('${id}',${verIdx},event)">
         ${refImagesHTML}
+        <div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
+          <span style="font-size:20px">📁</span><span>Folder</span>
+        </div>
         <div class="ref-img-add" onclick="document.getElementById('ref-file-${id}').click()">
           <span style="font-size:22px">+</span><span>Add reference</span>
         </div>
@@ -7665,14 +7685,35 @@ function handleRefFileSelect(id, verIdx, input){
   input.value=''; // reset so same file can be re-selected
 }
 
-function handleRefFileDrop(id, verIdx, event){
+async function handleRefFileDrop(id, verIdx, event){
   event.preventDefault();
-  document.getElementById('ref-grid-'+id)?.classList.remove('drag-over');
+  event.currentTarget.classList.remove('drag-over');
+  const items=event.dataTransfer.items;
+  // If folders were dropped, walk them recursively
+  if(items&&items.length&&items[0].webkitGetAsEntry){
+    const files=[];
+    const walk=(entry)=>new Promise(res=>{
+      if(entry.isFile){entry.file(f=>{files.push(f);res();},()=>res());}
+      else if(entry.isDirectory){
+        const reader=entry.createReader();
+        const readAll=()=>reader.readEntries(async ents=>{
+          if(!ents.length)return res();
+          for(const e of ents)await walk(e);
+          readAll(); // keep reading (readEntries returns batches of 100)
+        },()=>res());
+        readAll();
+      } else res();
+    });
+    const entries=[];
+    for(let i=0;i<items.length;i++){const e=items[i].webkitGetAsEntry&&items[i].webkitGetAsEntry();if(e)entries.push(e);}
+    Promise.all(entries.map(walk)).then(()=>{
+      if(files.length)_readRefImageFiles(id,verIdx,files);
+    });
+    return;
+  }
   const files=event.dataTransfer.files;
   _readRefImageFiles(id, verIdx, files);
 }
-
-// kept for backwards compat (old URL-stored refs still render fine via img src)
 function addRefImageFromInput(id, verIdx){}
 
 function deleteRefImage(id, verIdx, imgIdx){
@@ -9413,6 +9454,8 @@ function openBrandInfoModal(brandId){
       <div><label class="form-label">Drive folder</label><input class="form-input" id="bi-drive" type="url" value="${b.driveLink||''}" placeholder="https://drive.google.com/..."></div>
     </div>
     <div class="form-row"><label class="form-label">Brand guide link</label><input class="form-input" id="bi-guide" type="url" value="${b.brandGuide||''}" placeholder="https://drive.google.com/..."></div>
+    <div class="form-row"><label class="form-label">📄 Monthly Report Link (PDF — shown to client)</label><input class="form-input" id="bi-report" type="url" value="${b.monthlyReportLink||''}" placeholder="Any link — Drive PDF, Dropbox, etc."></div>
+    <div class="form-row"><label class="form-label">📁 Brand Folder Link (shown to client)</label><input class="form-input" id="bi-folder" type="url" value="${b.brandFolderLink||''}" placeholder="https://drive.google.com/drive/folders/..."></div>
     <div class="form-row"><label class="form-label">🔵 Facebook Page URL</label><input class="form-input" id="bi-facebook" type="url" value="${b.facebookUrl||''}" placeholder="https://www.facebook.com/yourpage"></div>
     <div class="two-col">
       <div><label class="form-label">FB Page ID (for API posting)</label><input class="form-input" id="bi-fbpage" type="text" value="${b.fbPageId||''}" placeholder="e.g. 1234567890"></div>
@@ -9634,6 +9677,8 @@ function saveBrandInfo(brandId, fillAllMonths){
     contractEnd:document.getElementById('bi-cend').value,
     shootingDates,templates};
   // Validate contract dates before generating
+  data.brands[idx].monthlyReportLink=document.getElementById('bi-report')?.value?.trim()||'';
+  data.brands[idx].brandFolderLink=document.getElementById('bi-folder')?.value?.trim()||'';
   const _fbPage=document.getElementById('bi-fbpage')?.value?.trim()||'';
   const _fbToken=document.getElementById('bi-fbtoken')?.value?.trim()||'';
   data.brands[idx].fbPageId=_fbPage;
