@@ -1,4 +1,5 @@
-<div class="form-row-2">
+
+  <div class="form-row-2">
     <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video (Video#)</div></div>
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
@@ -9574,11 +9575,15 @@ function openBrandInfoModal(brandId){
     </div>
     <div class="form-row-2">
       <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="bi-ads" type="number" min="0" value="${qb.videoAds||0}"></div>
-      <div><label class="form-label">🎵 TikTok Videos</label><input class="form-input" id="bi-tiktok" type="number" min="0" value="${qb.tiktok||0}"></div>
-    </div>
-    <div class="form-row-2">
-      <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="bi-video" type="number" min="0" value="${qb.video||0}"><div style="font-size:11px;color:var(--t3)">Video# / month</div></div>
-      <div><label class="form-label">📋 Others</label><input class="form-input" id="bi-other" type="number" min="0" value="${qb.other||0}"><div style="font-size:11px;color:var(--t3)">Content# / month</div></div>
+      <div>
+        <label class="form-label">🎵 TikTok Content</label>
+        <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:10px;margin-top:4px">
+          <div class="form-row-2" style="margin-bottom:4px">
+            <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="bi-tiktok" type="number" min="0" value="${qb.tiktok||0}"></div>
+            <div><label style="font-size:12px;color:var(--t3)">Others (Content#)</label><input class="form-input" id="bi-other" type="number" min="0" value="${qb.other||0}"></div>
+          </div>
+        </div>
+      </div>
     </div>
     <div style="margin:4px 0 6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Contract Period</div>
     <div class="form-row-2">
@@ -9842,12 +9847,18 @@ function openAddBrandModal(){
     </div>
     <div class="form-row-2">
       <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Video ads (Ad#)</div></div>
-      <div><label class="form-label">🎵 TikTok Content</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">TikTok videos (TikTok#)</div></div>
+      <div>
+        <label class="form-label">🎵 TikTok Content</label>
+        <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:10px;margin-top:4px">
+          <div class="form-row-2" style="margin-bottom:6px">
+            <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0" oninput="updateNbTiktokTotal()"></div>
+            <div><label style="font-size:12px;color:var(--t3)">Others (Content#)</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0" oninput="updateNbTiktokTotal()"></div>
+          </div>
+          <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Total TikTok+Others: <span id="nb-tiktok-total" style="font-weight:700;color:var(--tel)">0</span></div>
+        </div>
+      </div>
     </div>
-    <div class="form-row-2">
-      <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video content (Video#)</div></div>
-      <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
-    </div>
+
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-top:6px">Contract Period</div>
     <div class="form-row-2">
       <div><label class="form-label">Contract start</label><input class="form-input" id="nb-cstart" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
