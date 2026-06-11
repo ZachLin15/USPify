@@ -1,5 +1,4 @@
-
-  <div class="form-row-2">
+<div class="form-row-2">
     <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video (Video#)</div></div>
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
@@ -9577,6 +9576,10 @@ function openBrandInfoModal(brandId){
       <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="bi-ads" type="number" min="0" value="${qb.videoAds||0}"></div>
       <div><label class="form-label">🎵 TikTok Videos</label><input class="form-input" id="bi-tiktok" type="number" min="0" value="${qb.tiktok||0}"></div>
     </div>
+    <div class="form-row-2">
+      <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="bi-video" type="number" min="0" value="${qb.video||0}"><div style="font-size:11px;color:var(--t3)">Video# / month</div></div>
+      <div><label class="form-label">📋 Others</label><input class="form-input" id="bi-other" type="number" min="0" value="${qb.other||0}"><div style="font-size:11px;color:var(--t3)">Content# / month</div></div>
+    </div>
     <div style="margin:4px 0 6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Contract Period</div>
     <div class="form-row-2">
       <div><label class="form-label">Contract start</label><input class="form-input" id="bi-cstart" type="date" value="${b.contractStart||''}"></div>
@@ -9786,6 +9789,12 @@ function saveBrandInfo(brandId, fillAllMonths){
   // Validate contract dates before generating
   data.brands[idx].monthlyReportLink=document.getElementById('bi-report')?.value?.trim()||'';
   data.brands[idx].brandFolderLink=document.getElementById('bi-folder')?.value?.trim()||'';
+  const _biOther=parseInt(document.getElementById('bi-other')?.value||0)||0;
+  const _biVideo=parseInt(document.getElementById('bi-video')?.value||0)||0;
+  // merge into existing breakdown
+  if(!data.brands[idx].quotaBreakdown)data.brands[idx].quotaBreakdown={};
+  data.brands[idx].quotaBreakdown.other=_biOther;
+  data.brands[idx].quotaBreakdown.video=_biVideo;
   const _fbPage=document.getElementById('bi-fbpage')?.value?.trim()||'';
   const _fbToken=document.getElementById('bi-fbtoken')?.value?.trim()||'';
   data.brands[idx].fbPageId=_fbPage;
@@ -9834,6 +9843,10 @@ function openAddBrandModal(){
     <div class="form-row-2">
       <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="nb-ads" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Video ads (Ad#)</div></div>
       <div><label class="form-label">🎵 TikTok Content</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">TikTok videos (TikTok#)</div></div>
+    </div>
+    <div class="form-row-2">
+      <div><label class="form-label">🎬 Other Videos</label><input class="form-input" id="nb-video" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other video content (Video#)</div></div>
+      <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
     </div>
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-top:6px">Contract Period</div>
     <div class="form-row-2">
