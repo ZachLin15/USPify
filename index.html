@@ -3401,6 +3401,7 @@ function renderBrandPage(){
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}${hualuCell}${leonardCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
+      ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
   }
 
@@ -3418,7 +3419,7 @@ function renderBrandPage(){
     <th class="${sortClass('hualu')}" onclick="sortBy('hualu')">Hualu due</th>
     <th class="${sortClass('leonard')}" onclick="sortBy('leonard')">Leonard due</th>
     <th>Drive</th>
-  </tr></thead>`;
+  <th></th></tr></thead>`;
 
   // Apply sort to contents
   const sortContents=(arr)=>{
