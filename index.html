@@ -3477,6 +3477,7 @@ function renderBrandPage(){
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}${hualuCell}${leonardCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
+      ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
   }
 
@@ -3501,7 +3502,7 @@ function renderBrandPage(){
   const hasSep=(a,b)=>a.length&&b.length;
 
   const stats=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-bottom:16px">
-    ${[['Total',data.contents.filter(c=>c.brandId===b.id).length,'var(--t1)'],['In progress',contents.filter(c=>c.statusId!=='posted').length,'var(--blu)'],['Posted',contents.filter(c=>c.statusId==='posted').length,'var(--ac)'],['Overdue',contents.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted').length,'var(--red)'],['Quota left',Math.max(0,b.quota-data.contents.filter(c=>c.brandId===b.id).length),'var(--amb)']].map(([l,v,col])=>
+    ${[['Total',contents.length,'var(--t1)'],['In progress',contents.filter(c=>c.statusId!=='posted').length,'var(--blu)'],['Posted',contents.filter(c=>c.statusId==='posted').length,'var(--ac)'],['Overdue',contents.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted').length,'var(--red)'],['Quota left',Math.max(0,(b.quota||0)-contents.length),'var(--amb)']].map(([l,v,col])=>
     `<div class="stat-c"><div class="stat-lbl">${l}</div><div class="stat-val" style="color:${col};font-size:21px">${v}</div></div>`).join('')}
   </div>`;
 
