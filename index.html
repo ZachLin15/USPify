@@ -9633,12 +9633,18 @@ function openBrandInfoModal(brandId){
 const _DATED_RE=/\s—\s[A-Z][a-z]{2}\s\d{2}$/;
 function _quotaCatOf(c){
   const t=c.title||'';
-  if(/^WP#/i.test(t))return 'wallPost';
-  if(/^Ad#/i.test(t)||/Ad#/i.test(t))return 'videoAds';
-  if(/^TikTok#/i.test(t))return 'tiktok';
-  if(/^Carousel#/i.test(t))return 'carousel';
-  if(/^Content#/i.test(t))return 'other';
-  if(c.type==='Carousel'||c.type==='Single Image')return 'carousel';
+  // Check anywhere in title (not just prefix) so custom names like
+  // "June (1st Half) WP#1 Sign Cam" are counted as wallPost
+  if(/WP#/i.test(t))return 'wallPost';
+  if(/Ad#/i.test(t))return 'videoAds';
+  if(/TikTok#/i.test(t))return 'tiktok';
+  if(/Carousel#/i.test(t))return 'carousel';
+  if(/Content#/i.test(t))return 'other';
+  // Fallback: use stored cat field
+  if(c.cat==='wallPost')return 'wallPost';
+  if(c.cat==='videoAds')return 'videoAds';
+  if(c.cat==='tiktok')return 'tiktok';
+  if(c.cat==='other')return 'other';
   return 'video';
 }
 function _hasProgress(c){
