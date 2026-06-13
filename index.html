@@ -2910,7 +2910,15 @@ function renderDashboard(){
   const brandCardsInner=brandsToShow.map(b=>{
     let bc=allContents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
     const overdue2=bc.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
-    const qb=b.quotaBreakdown||{};const ql=b.quotaLabels||{};
+    const qb={...( b.quotaBreakdown||{})};
+  // Ensure wallPost is always the sum of sub-types (backwards compat)
+  if(!qb.wallPost && (qb.wpCarousel||qb.wpVideo||qb.wpReels||qb.wpImage)){
+    qb.wallPost=(qb.wpCarousel||0)+(qb.wpVideo||0)+(qb.wpReels||0)+(qb.wpImage||0);
+  }
+  // Also fallback: if new wp fields missing but old carousel/video fields exist
+  if(!qb.wallPost && (qb.carousel||qb.video)){
+    qb.wallPost=(qb.carousel||0)+(qb.video||0);
+  }const ql=b.quotaLabels||{};
     const TYPE_ICONS={video:'🎬',wallPost:'🖼',videoAds:'📢',tiktok:'🎵',carousel:'🃏'};
     const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
       const tc=bc.filter(c=>{
@@ -9583,12 +9591,12 @@ function openBrandInfoModal(brandId){
     <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:12px;margin-bottom:12px">
       <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🖼 Wall Posts — breakdown by type</div>
       <div class="form-row-2" style="margin-bottom:8px">
-        <div><label class="form-label">🎠 Carousel</label><input class="form-input" id="bi-wpCarousel" type="number" min="0" value="${qb.wpCarousel||0}" oninput="updateBiWpTotal()"></div>
-        <div><label class="form-label">🎬 Video</label><input class="form-input" id="bi-wpVideo" type="number" min="0" value="${qb.wpVideo||0}" oninput="updateBiWpTotal()"></div>
+        <div><label class="form-label">🎠 Carousel</label><input class="form-input" id="bi-wpCarousel" type="number" min="0" value="${qb.wpCarousel||qb.carousel||0}" oninput="updateBiWpTotal()"></div>
+        <div><label class="form-label">🎬 Video</label><input class="form-input" id="bi-wpVideo" type="number" min="0" value="${qb.wpVideo||qb.video||0}" oninput="updateBiWpTotal()"></div>
       </div>
       <div class="form-row-2" style="margin-bottom:6px">
         <div><label class="form-label">📱 Reels</label><input class="form-input" id="bi-wpReels" type="number" min="0" value="${qb.wpReels||0}" oninput="updateBiWpTotal()"></div>
-        <div><label class="form-label">🖼 Single Image</label><input class="form-input" id="bi-wpImage" type="number" min="0" value="${qb.wpImage||0}" oninput="updateBiWpTotal()"></div>
+        <div><label class="form-label">🖼 Single Image</label><input class="form-input" id="bi-wpImage" type="number" min="0" value="${qb.wpImage||qb.wpSingle||0}" oninput="updateBiWpTotal()"></div>
       </div>
       <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Total Wall Posts: <span id="bi-wp-total" style="font-weight:700;color:var(--pur)">${(qb.wpCarousel||0)+(qb.wpVideo||0)+(qb.wpReels||0)+(qb.wpImage||0)}</span></div>
     </div>
