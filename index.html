@@ -3600,7 +3600,7 @@ function renderBrandPage(){
 
 // ── Mini month calendar at bottom of brand page ─────────────────────
 function renderBrandMiniCalendar(b,data){
-  const month=S.brandCalMonth||S.trackerMonth||new Date().toISOString().slice(0,7);
+  const month=S.brandMonthFilter||new Date().toISOString().slice(0,7);
   const [yr,mo]=month.split('-').map(Number);
   const daysInMonth=new Date(yr,mo,0).getDate();
   const firstDow=new Date(yr,mo-1,1).getDay(); // 0=Sun
@@ -3639,10 +3639,10 @@ function renderBrandMiniCalendar(b,data){
 }
 
 function brandMiniCalNav(dir){
-  const cur=S.brandCalMonth||S.trackerMonth||new Date().toISOString().slice(0,7);
+  const cur=S.brandMonthFilter||new Date().toISOString().slice(0,7);
   let [y,m]=cur.split('-').map(Number);
   m+=dir;if(m>12){m=1;y++;}if(m<1){m=12;y--;}
-  S.brandCalMonth=`${y}-${String(m).padStart(2,'0')}`;
+  S.brandMonthFilter=`${y}-${String(m).padStart(2,'0')}`;
   render();
 }
 
