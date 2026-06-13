@@ -9676,13 +9676,17 @@ function planReconcile(brandId){
     CATS.forEach(([cat,prefix])=>{
       const target=inContract?(Number(qb[cat])||0):0;
       const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
+      // Step 1: separate protected (keep always) from deletable drafts
       const protectedItems=items.filter(c=>!_DATED_RE.test(c.title)||_hasProgress(c));
       const drafts=items.filter(c=>_DATED_RE.test(c.title)&&!_hasProgress(c));
+      // Step 2: delete excess drafts (keep up to target, delete the rest)
       let kept=protectedItems.length;
       drafts.forEach(d=>{
-        if(kept<target)kept++;
-        else toDelete.push({id:d.id,title:d.title,month});
+        if(kept<target){kept++;}
+        else{toDelete.push({id:d.id,title:d.title,month});}
       });
+      // Step 3: 'kept' now = items that will survive after deletions
+      // Add new items only if still under quota after planned deletions
       if(!inContract||month==='0000-00')return;
       // Only auto-add in months that already have content for this brand
       // (don't generate content for completely empty months)
