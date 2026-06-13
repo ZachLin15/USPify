@@ -3586,7 +3586,7 @@ function renderBrandPage(){
 
   const sidebarBtn=`<button onclick="toggleSidebar()" title="Toggle sidebar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;color:var(--t2);cursor:pointer;font-family:'DM Mono',monospace;transition:all .12s;margin-bottom:10px" onmouseenter="this.style.borderColor='var(--ac)';this.style.color='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">☰ Toggle sidebar</button>`;
 
-  return sidebarBtn+stats+socialLinks+infoBar+filterRow+renderBulkBar()+renderBrandMiniCalendar(b,data)+`<div class="panel" style="overflow:hidden">
+  return sidebarBtn+stats+socialLinks+infoBar+renderBrandMiniCalendar(b,data)+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
