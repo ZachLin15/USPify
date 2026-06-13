@@ -9684,6 +9684,9 @@ function planReconcile(brandId){
         else toDelete.push({id:d.id,title:d.title,month});
       });
       if(!inContract||month==='0000-00')return;
+      // Only auto-add for tiktok and other categories
+      // wallPost and videoAds: delete excess but don't auto-generate missing
+      if(cat!=='tiktok'&&cat!=='other')return;
       const daysInMonth=new Date(yr,mo,0).getDate();
       let seq=1;
       while(kept<target){
