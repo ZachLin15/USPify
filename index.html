@@ -1,5 +1,4 @@
-
-  <div class="form-row-2">
+<div class="form-row-2">
     
     <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
   </div><!DOCTYPE html>
@@ -9549,6 +9548,16 @@ function saveBrandGuideSummaryManual(brandId){
   if(box) box.innerHTML=`<div style="font-size:14px;line-height:1.8;color:var(--t1);white-space:pre-wrap">${text}</div>`;
 }
 
+
+function updateBiWpTotal(){
+  const c=parseInt(document.getElementById('bi-wpCarousel')?.value||0)||0;
+  const v=parseInt(document.getElementById('bi-wpVideo')?.value||0)||0;
+  const r=parseInt(document.getElementById('bi-wpReels')?.value||0)||0;
+  const img=parseInt(document.getElementById('bi-wpImage')?.value||0)||0;
+  const el=document.getElementById('bi-wp-total');
+  if(el)el.textContent=c+v+r+img;
+}
+
 function openBrandInfoModal(brandId){
   const data=D();const b=getBrand(data,brandId);
   const templatesStr=(b.templates||[]).map(t=>`${t.title}|${t.type}`).join('\n');
@@ -9571,9 +9580,17 @@ function openBrandInfoModal(brandId){
     <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin:-6px 0 10px">Get these from <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--blu)">Graph API Explorer ↗</a> — needs pages_manage_posts permission.</div>
     <div class="form-row"><label class="form-label">Info summary</label><textarea class="form-textarea" id="bi-info">${b.infoSummary||''}</textarea></div>
     <div style="margin:4px 0 6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Monthly Quota Breakdown</div>
-    <div class="form-row-2">
-      <div><label class="form-label">📹 Videos / Reels</label><input class="form-input" id="bi-video" type="number" min="0" value="${qb.video||0}"></div>
-      <div><label class="form-label">🖼 Wall Posts / Carousels</label><input class="form-input" id="bi-carousel" type="number" min="0" value="${qb.carousel||0}"></div>
+    <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🖼 Wall Posts — breakdown by type</div>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label class="form-label">🎠 Carousel</label><input class="form-input" id="bi-wpCarousel" type="number" min="0" value="${qb.wpCarousel||0}" oninput="updateBiWpTotal()"></div>
+        <div><label class="form-label">🎬 Video</label><input class="form-input" id="bi-wpVideo" type="number" min="0" value="${qb.wpVideo||0}" oninput="updateBiWpTotal()"></div>
+      </div>
+      <div class="form-row-2" style="margin-bottom:6px">
+        <div><label class="form-label">📱 Reels</label><input class="form-input" id="bi-wpReels" type="number" min="0" value="${qb.wpReels||0}" oninput="updateBiWpTotal()"></div>
+        <div><label class="form-label">🖼 Single Image</label><input class="form-input" id="bi-wpImage" type="number" min="0" value="${qb.wpImage||0}" oninput="updateBiWpTotal()"></div>
+      </div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Total Wall Posts: <span id="bi-wp-total" style="font-weight:700;color:var(--pur)">${(qb.wpCarousel||0)+(qb.wpVideo||0)+(qb.wpReels||0)+(qb.wpImage||0)}</span></div>
     </div>
     <div class="form-row-2">
       <div><label class="form-label">📢 Video Ads</label><input class="form-input" id="bi-ads" type="number" min="0" value="${qb.videoAds||0}"></div>
@@ -9626,11 +9643,7 @@ function _hasProgress(c){
 function planReconcile(brandId){
   const data=D();
   const b=data.brands.find(x=>x.id===brandId);if(!b)return null;
-  // Log all items in this brand for debugging
-  const _allBrandItems=data.contents.filter(c=>c.brandId===brandId);
-  const _jun=_allBrandItems.filter(c=>(c.postingDate||'').startsWith('2026-06'));
-  console.log('[reconcile] START brandId:',brandId,'total items:',_allBrandItems.length,'Jun items:',_jun.length);
-  console.log('[reconcile] Jun item titles:',_jun.map(c=>c.title));
+
   const qb=b.quotaBreakdown||{};
   const cStart=b.contractStart||new Date().toISOString().split('T')[0];
   const cEnd=b.contractEnd||cStart;
@@ -9691,33 +9704,20 @@ function planReconcile(brandId){
   const _KNOWN_AUTO=/^(Carousel#|Video#|Reels#)/i;
   const _isManaged=(t)=>/^(WP#|Ad#|TikTok#|Content#)/i.test(t||'');
   const brandItems=data.contents.filter(c=>c.brandId===brandId);
-  console.log('[reconcile] total brand items:',brandItems.length);
+
   const strayItems=brandItems.filter(c=>_KNOWN_AUTO.test(c.title||''));
-  console.log('[reconcile] stray candidates:',strayItems.map(c=>c.title));
+  console.log('[reconcile] stray candidates:',strayItems.length);
   strayItems.forEach(c=>{
     const dated=_DATED_RE.test(c.title||'');
     const progress=_hasProgress(c);
     const alreadyIn=toDelete.some(x=>x.id===c.id);
-    console.log('[reconcile] stray check:',c.title,'dated:',dated,'progress:',progress,'alreadyIn:',alreadyIn,'status:',c.statusId);
+
     if(dated && !progress && !alreadyIn){
       const month=(c.postingDate||'').slice(0,7)||'0000-00';
       toDelete.push({id:c.id,title:c.title,month});
     }
   });
-  
-  // ALSO catch items with cat='carousel' that slipped through
-  const catStray=data.contents.filter(c=>
-    c.brandId===brandId &&
-    (c.cat==='carousel') &&
-    _DATED_RE.test(c.title||'') &&
-    !_hasProgress(c) &&
-    !toDelete.some(x=>x.id===c.id)
-  );
-  console.log('[reconcile] cat-stray (carousel cat):',catStray.map(c=>c.title));
-  catStray.forEach(c=>{
-    const month=(c.postingDate||'').slice(0,7)||'0000-00';
-    toDelete.push({id:c.id,title:c.title,month});
-  });
+
 
   console.log('[reconcile] FINAL toDelete:',toDelete.length,'(incl stray)');
   return {brandId,b,toDelete,toAdd};
@@ -9826,14 +9826,18 @@ function saveBrandInfo(brandId, fillAllMonths){
   const templatesRaw=document.getElementById('bi-templates').value.trim().split('\n').filter(Boolean);
   const templates=templatesRaw.map(l=>{const p=l.split('|');return{title:(p[0]||'').trim(),type:(p[1]||'Carousel').trim()};});
   const shootingDates=document.getElementById('bi-shoot').value.split(',').map(d=>d.trim()).filter(Boolean);
-  const videos=parseInt(document.getElementById('bi-video').value)||0;
-  const carousels=parseInt(document.getElementById('bi-carousel').value)||0;
+  const _biwpCarousel=parseInt(document.getElementById('bi-wpCarousel')?.value||0)||0;
+  const _biwpVideo=parseInt(document.getElementById('bi-wpVideo')?.value||0)||0;
+  const _biwpReels=parseInt(document.getElementById('bi-wpReels')?.value||0)||0;
+  const _biwpImage=parseInt(document.getElementById('bi-wpImage')?.value||0)||0;
+  const videos=_biwpVideo; // keep var name for compat
+  const carousels=_biwpCarousel;
   const ads=parseInt(document.getElementById('bi-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('bi-tiktok').value)||0;
   // MERGE into existing breakdown — never wipe fields the modal doesn't edit
   const _oldQB=data.brands[idx].quotaBreakdown||{};
   const _oldQL=data.brands[idx].quotaLabels||{};
-  const quotaBreakdown={..._oldQB,video:videos,carousel:carousels,videoAds:ads,tiktok:tiktoks};
+  const quotaBreakdown={..._oldQB,video:videos,carousel:0,wpCarousel:_biwpCarousel,wpVideo:_biwpVideo,wpReels:_biwpReels,wpImage:_biwpImage,wallPost:_biwpCarousel+_biwpVideo+_biwpReels+_biwpImage,videoAds:ads,tiktok:tiktoks};
   const quotaLabels={..._oldQL};
   if(videos>0&&!quotaLabels.video)quotaLabels.video='Videos / Reels';
   if(carousels>0&&!quotaLabels.carousel)quotaLabels.carousel='Wall Posts / Carousels';
