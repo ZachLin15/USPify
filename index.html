@@ -4017,12 +4017,21 @@ function renderCalendar(){
         const isT=ds===todayStr;
         const dayBlocks=userBlocks.filter(b=>b.date===ds).slice(0,3);
         const more=userBlocks.filter(b=>b.date===ds).length-3;
+        // Content jobs for this user due on this day
+        const myJobs=data.contents.filter(c=>{
+          const uid=S.user.id;
+          const isAssigned=(c.assignees||[]).includes(uid)||(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open');
+          const dueDate=c.dueDates?.[uid]||c.postingDate||'';
+          return isAssigned && dueDate===ds && c.statusId!=='posted';
+        });
         return `<div style="min-height:120px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:4px;${isT?'background:rgba(200,240,74,0.04)':''}"
           ondragover="event.preventDefault();this.style.outline='2px dashed var(--ac)'"
           ondragleave="this.style.outline=''"
           ondrop="this.style.outline='';calDropTodoMonth(event,'${ds}')">
           <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${dayBlocks.map(b=>`<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;padding:1px 5px;border-radius:3px;background:${b.color}22;color:${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px;cursor:pointer;font-weight:600">${b.label}</div>`).join('')}
+          ${myJobs.slice(0,3).map(c=>{const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);return`<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:1px 5px;border-radius:3px;background:${b.color}18;color:${b.color};border-left:2px solid ${st.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:${st.color};flex-shrink:0"></span><span style="overflow:hidden;text-overflow:ellipsis">${c.title}</span></div>`;}).join('')}
+          ${myJobs.length>3?`<div style="font-size:10px;color:var(--t3)">+${myJobs.length-3} jobs</div>`:''}
           ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.calView='day';S.calDate='${ds}';renderPage()">+${more} more</div>`:''}
         </div>`;
       }).join('')}
