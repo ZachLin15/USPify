@@ -4128,7 +4128,8 @@ function renderCalTodoLayout(data,mainGrid,todayStr){
     .filter(c=>{
       const uid=S.user.id;
       // Hide items already placed on calendar by this user
-      if(c.calScheduled?.[uid]) return false;
+      // Only hide if explicitly scheduled by this user
+      if(c.calScheduled?.[uid]===true) return false;
       // Also hide if a schedule block exists for this content
       if((data.scheduleBlocks||[]).some(b=>b.contentId===c.id&&b.userId===uid)) return false;
       // Use the user's personal due date if available, otherwise posting date
@@ -10554,7 +10555,13 @@ function deleteBlock(id){
   const block=data.scheduleBlocks.find(b=>b.id===id);
   if(block?.contentId){
     const c=data.contents.find(x=>x.id===block.contentId);
-    if(c){if(!c.calScheduled)c.calScheduled={};c.calScheduled[S.user.id]=false;}
+    if(c){
+      if(!c.calScheduled)c.calScheduled={};
+      c.calScheduled[S.user.id]=false;
+      // Clear personal due date so it goes back to job list
+      if(!c.dueDates)c.dueDates={};
+      c.dueDates[S.user.id]='';
+    }
   }
   data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);
   saveNow(data);closeModal();renderPage();
