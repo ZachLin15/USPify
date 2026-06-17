@@ -4254,6 +4254,7 @@ function renderBrandCalendar(){
     <button class="cal-nav-btn" onclick="brandCalNav(1)">▶</button>
     <button class="cal-today-btn" onclick="S.brandCalDate='${todayStr}';renderPage()">Today</button>
     ${activeBrand?`<span style="margin-left:4px;font-size:13px;font-weight:700;color:${activeBrand.color};background:${activeBrand.color}18;padding:4px 12px;border-radius:20px;border:1px solid ${activeBrand.color}40">${activeBrand.name}</span>`:''}
+    <button onclick="toggleCalEditMode()" style="margin-left:auto;padding:5px 14px;border-radius:var(--r);border:1px solid ${S.calEditMode?'var(--ac)':'var(--b2)'};background:${S.calEditMode?'var(--ac)':'transparent'};color:${S.calEditMode?'#000':'var(--t2)'};font-size:12px;font-weight:700;font-family:'DM Mono',monospace;cursor:pointer">${S.calEditMode?'✏️ Editing — Save':'✏️ Edit dates'}</button>
   </div>`;
 
   // ── FILTER CONTENT ─────────────────────────────────────────────────────────
@@ -4279,12 +4280,14 @@ function renderBrandCalendar(){
         const items=(contentByDate[ds]||[]);
         const shown=items.slice(0,5);
         const more=items.length-5;
-        return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}">
+        const isDrop=S.calEditMode;
+        return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
+          ${isDrop?`ondragover="event.preventDefault()" ondrop="calDrop(event,'${ds}')"`:''}>
           <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${shown.map(c=>{
             const b=getBrand(data,c.brandId);
             const st=getStatus(data,c.statusId);
-            return `<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:2px 6px;border-radius:4px;background:${b.color}18;color:${b.color};border-left:3px solid ${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;cursor:pointer;font-weight:600;line-height:1.5" title="${c.title} — ${b.name} [${st.name}]">${c.title}</div>`;
+            return `<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:2px 4px 2px 5px;border-radius:4px;background:${b.color}18;color:${b.color};border-left:3px solid ${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;cursor:pointer;font-weight:600;line-height:1.5;display:flex;align-items:center;gap:4px" title="${c.title} — ${b.name} [${st.name}]" draggable="true" ondragstart="calDragStart(event,'${c.id}')"><span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:${st.color};display:inline-block"></span><span style="overflow:hidden;text-overflow:ellipsis">${c.title}</span></div>`;
           }).join('')}
           ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.brandCalDate='${ds}';renderPage()">+${more} more</div>`:''}
         </div>`;
@@ -4299,6 +4302,59 @@ function renderBrandCalendar(){
     :`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">No content scheduled this month${activeBrand?' for '+activeBrand.name:''}.</div>`;
 
   return brandSelector+calHeader+grid+summary;
+}
+
+
+// ── Brand Calendar edit mode drag-and-drop ────────────────────────
+function toggleCalEditMode(){
+  S.calEditMode=!S.calEditMode;
+  if(!S.calEditMode){
+    // Leaving edit mode — save all pending date changes
+    const pending=S._calPendingDates;
+    if(pending&&Object.keys(pending).length){
+      const data=D();
+      Object.entries(pending).forEach(([cid,newDate])=>{
+        const c=data.contents.find(x=>x.id===cid);
+        if(c){
+          c.postingDate=newDate;
+          // Recalculate due dates
+          const isVid=(c.type==='Video'||c.type==='Reels');
+          c.dueDates={
+            hualu:addBusinessDays(newDate,isVid?-4:-3),
+            leonard:addBusinessDays(newDate,isVid?-7:-5),
+            jack:''
+          };
+        }
+      });
+      S._calPendingDates={};
+      saveNow(data).then(()=>showAIToast('✅ Dates saved'));
+    }
+  }
+  S._calPendingDates=S._calPendingDates||{};
+  renderPageOnly();
+}
+
+function calDragStart(event,contentId){
+  if(!S.calEditMode){event.preventDefault();return;}
+  event.dataTransfer.setData('text/plain',contentId);
+  event.dataTransfer.effectAllowed='move';
+}
+
+function calDrop(event,newDate){
+  event.preventDefault();
+  const contentId=event.dataTransfer.getData('text/plain');
+  if(!contentId||!newDate) return;
+  if(!S._calPendingDates) S._calPendingDates={};
+  S._calPendingDates[contentId]=newDate;
+  // Optimistically update local data for instant visual
+  const data=D();
+  const c=data.contents.find(x=>x.id===contentId);
+  if(c){
+    c.postingDate=newDate;
+    localStorage.setItem(KEY,JSON.stringify(data));
+  }
+  renderPageOnly();
+  showAIToast('📅 Date moved — click Save to confirm');
 }
 
 function brandCalNav(dir){
@@ -5129,6 +5185,16 @@ function renderTeam(){
       );
       allRelevant=[...allRelevant,...unstarted];
     }
+
+    // Only show items due within 2 weeks from today
+    const _twoWeeks=new Date();_twoWeeks.setDate(_twoWeeks.getDate()+14);
+    const _twStr=_twoWeeks.toISOString().split('T')[0];
+    const _todayStr=new Date().toISOString().split('T')[0];
+    allRelevant=allRelevant.filter(c=>{
+      const due=c.dueDates?.[u.id]||c.postingDate||'';
+      if(!due) return true; // no date = always show
+      return due<=_twStr; // show if due within 2 weeks
+    });
 
     const byBrand={};
     allRelevant.forEach(c=>{
