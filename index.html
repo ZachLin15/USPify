@@ -4101,9 +4101,43 @@ function renderCalTodoLayout(data,mainGrid,todayStr){
   const myJobs=getActiveJobsForUser(data,S.user.id);
   const unstarted=isAdminUser(S.user)||S.user.id==='leonard'
     ?data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10):[];
+
+  // Determine visible date range from current calendar view
+  const _calViewStart=(()=>{
+    if(S.calView==='day') return S.calDate;
+    if(S.calView==='week'){
+      const wk=getWeekDatesFromDate(S.calDate);
+      return wk[0].toISOString().split('T')[0];
+    }
+    // month view
+    return (S.calDate||todayStr).slice(0,7)+'-01';
+  })();
+  const _calViewEnd=(()=>{
+    if(S.calView==='day') return S.calDate;
+    if(S.calView==='week'){
+      const wk=getWeekDatesFromDate(S.calDate);
+      return wk[6].toISOString().split('T')[0];
+    }
+    // month — last day of month
+    const [_y,_m]=(S.calDate||todayStr).slice(0,7).split('-').map(Number);
+    return `${_y}-${String(_m).padStart(2,'0')}-${new Date(_y,_m,0).getDate()}`;
+  })();
+
   const todoItems=[...myJobs,...unstarted]
-    .sort((a,b)=>{if(!a.postingDate&&!b.postingDate)return 0;if(!a.postingDate)return 1;if(!b.postingDate)return -1;return a.postingDate.localeCompare(b.postingDate);})
-    .slice(0,25);
+    .filter(c=>{
+      const uid=S.user.id;
+      // Use the user's personal due date if available, otherwise posting date
+      const dueDate=c.dueDates?.[uid]||c.postingDate||'';
+      if(!dueDate) return true; // no date = always show
+      return dueDate>=_calViewStart && dueDate<=_calViewEnd;
+    })
+    .sort((a,b)=>{
+      const da=a.dueDates?.[S.user.id]||a.postingDate||'';
+      const db=b.dueDates?.[S.user.id]||b.postingDate||'';
+      if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;
+      return da.localeCompare(db);
+    })
+    .slice(0,30);
   const todoListHTML=todoItems.length?todoItems.map(c=>{
     const b=getBrand(data,c.brandId);
     const st=getStatus(data,c.statusId);
@@ -4117,7 +4151,7 @@ function renderCalTodoLayout(data,mainGrid,todayStr){
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1);font-size:13px;font-weight:600">${c.title}</div>
         <div style="display:flex;gap:5px;margin-top:2px;flex-wrap:wrap">
           <span style="font-size:11px;color:${b.color};font-family:'DM Mono',monospace;font-weight:700">${b.name}</span>
-          ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:${isLate?'var(--red)':'var(--t3)'}">${fmt(c.postingDate)}${isLate?' ⚠':''}</span>`:''}
+          ${(c.dueDates?.[S.user.id]||c.postingDate)?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:${isLate?'var(--red)':'var(--t3)'}">${fmt(c.dueDates?.[S.user.id]||c.postingDate)}${isLate?' ⚠':''}</span>`:''}
         </div>
       </div>
     </div>`;
