@@ -4021,8 +4021,9 @@ function renderCalendar(){
         const myJobs=data.contents.filter(c=>{
           const uid=S.user.id;
           const isAssigned=(c.assignees||[]).includes(uid)||(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open');
+          const isScheduled=c.calScheduled?.[uid]===true;
           const dueDate=c.dueDates?.[uid]||c.postingDate||'';
-          return isAssigned && dueDate===ds && c.statusId!=='posted';
+          return (isAssigned||isScheduled) && dueDate===ds && c.statusId!=='posted';
         });
         return `<div style="min-height:100px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:4px;${isT?'background:rgba(200,240,74,0.04)':''}"
           ondragover="event.preventDefault();this.style.outline='2px dashed var(--ac)'"
@@ -4030,7 +4031,7 @@ function renderCalendar(){
           ondrop="this.style.outline='';calDropTodoMonth(event,'${ds}')">
           <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${dayBlocks.map(b=>`<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}22;color:${b.color};margin-bottom:2px;cursor:pointer;font-weight:600;word-break:break-word;line-height:1.4">${b.label}</div>`).join('')}
-          ${myJobs.slice(0,3).map(c=>{const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);return`<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}18;color:${b.color};border-left:2px solid ${st.color};margin-bottom:2px;cursor:pointer;font-weight:600;display:flex;align-items:flex-start;gap:3px;word-break:break-word"><span style="width:6px;height:6px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:3px"></span><span style="line-height:1.4">${c.title}</span></div>`;}).join('')}
+          ${myJobs.slice(0,3).map(c=>{const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);return`<div style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}18;color:${b.color};border-left:2px solid ${st.color};margin-bottom:2px;font-weight:600;display:flex;align-items:flex-start;gap:3px;word-break:break-word;position:relative"><span style="width:6px;height:6px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:3px"></span><span onclick="openContentDetail('${c.id}')" style="line-height:1.4;flex:1;cursor:pointer">${c.title}</span><span onclick="event.stopPropagation();removeFromCalendar('${c.id}')" style="cursor:pointer;opacity:.5;font-size:13px;line-height:1;flex-shrink:0;padding-left:2px" title="Remove from calendar">×</span></div>`;}).join('')}
           ${myJobs.length>3?`<div style="font-size:10px;color:var(--t3)">+${myJobs.length-3} jobs</div>`:''}
           ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.calView='day';S.calDate='${ds}';renderPage()">+${more} more</div>`:''}
         </div>`;
@@ -4126,9 +4127,13 @@ function renderCalTodoLayout(data,mainGrid,todayStr){
   const todoItems=[...myJobs,...unstarted]
     .filter(c=>{
       const uid=S.user.id;
+      // Hide items already placed on calendar by this user
+      if(c.calScheduled?.[uid]) return false;
+      // Also hide if a schedule block exists for this content
+      if((data.scheduleBlocks||[]).some(b=>b.contentId===c.id&&b.userId===uid)) return false;
       // Use the user's personal due date if available, otherwise posting date
       const dueDate=c.dueDates?.[uid]||c.postingDate||'';
-      if(!dueDate) return true; // no date = always show
+      if(!dueDate) return true;
       return dueDate>=_calViewStart && dueDate<=_calViewEnd;
     })
     .sort((a,b)=>{
@@ -4213,6 +4218,20 @@ function calNavNext(){
   else d.setMonth(d.getMonth()+1);
   S.calDate=d.toISOString().split('T')[0];
   renderPageOnly();
+}
+
+
+function removeFromCalendar(cid){
+  const data=D();
+  const c=data.contents.find(x=>x.id===cid);
+  if(!c)return;
+  const uid=S.user.id;
+  if(c.calScheduled) c.calScheduled[uid]=false;
+  // Clear personal due date so item goes back to unscheduled
+  if(c.dueDates) c.dueDates[uid]='';
+  saveNow(data,c.id);
+  renderPage();
+  showAIToast('↩ Moved back to job list');
 }
 
 function calDropTodoMonth(e,dateStr){
@@ -4468,7 +4487,12 @@ function calDropConfirm(contentId, dateStr){
     color:st.color||b.color,
     contentId:c.id  // link back to the content piece
   });
-  save(data);closeModal();renderPage();
+  // Mark content as scheduled so it leaves the todo list
+  if(!c.calScheduled)c.calScheduled={};
+  c.calScheduled[S.user.id]=true;
+  if(!c.dueDates)c.dueDates={};
+  c.dueDates[S.user.id]=dateStr;
+  saveNow(data,c.id);closeModal();renderPage();
   showAIToast(`📌 "${c.title}" added to calendar at ${startHour<12?startHour+'am':startHour===12?'12pm':(startHour-12)+'pm'}`);
 }
 
@@ -10525,7 +10549,17 @@ function saveBlockEdit(id){
   save(data);closeModal();renderPage();
   showAIToast('✓ Block updated');
 }
-function deleteBlock(id){const data=D();data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);save(data);closeModal();renderPage();}
+function deleteBlock(id){
+  const data=D();
+  const block=data.scheduleBlocks.find(b=>b.id===id);
+  if(block?.contentId){
+    const c=data.contents.find(x=>x.id===block.contentId);
+    if(c){if(!c.calScheduled)c.calScheduled={};c.calScheduled[S.user.id]=false;}
+  }
+  data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);
+  saveNow(data);closeModal();renderPage();
+  showAIToast('↩ Job moved back to list');
+}
 
 // ===================== ADS EDIT =====================
 function openEditAdModal(brandId,month){
