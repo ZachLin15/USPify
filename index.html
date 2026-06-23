@@ -7799,7 +7799,33 @@ async function _readRefImageFiles(id, verIdx, files){
           mimeType:file.type,
           filename:file.name,
           brandName:brandName,
+          contentName:contentName,
+          folderType:'Reference Images'
+        })
+      });
+      const result=await res.json();
+      tempEntry.url=result.url;
+      tempEntry.driveFileId=result.fileId;
+      tempEntry.isBlobUrl=false;
+      tempEntry.uploading=false;
+    }catch(err){
+      console.error('Drive upload failed:',file.name,err);
+      tempEntry.uploadFailed=true;
+      tempEntry.uploading=false;
+    }
+  }
 
+  c.ideationVersions=versions;
+  const dataToSave=JSON.parse(JSON.stringify(data));
+  dataToSave.contents.forEach(ct=>{
+    (ct.ideationVersions||[]).forEach(v=>{
+      v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!img.uploadFailed);
+    });
+  });
+  save(dataToSave);
+  const panel=document.getElementById('dp-ideation');
+  if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+}
 function _showDriveUploadPrompt(id, verIdx, fileNames){
   // Show a modal asking user to upload to Google Drive and paste the link
   const fileList=fileNames.map(n=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--b1)"><span style="font-size:16px">📄</span><span style="font-size:14px;color:var(--t1)">${n}</span><span style="font-size:12px;color:var(--red);font-family:'DM Mono',monospace;margin-left:auto">Too large (&gt;5MB)</span></div>`).join('');
