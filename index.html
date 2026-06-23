@@ -7244,24 +7244,6 @@ function renderDesignPanel(c, id){
       ${fileCardHTML}
       <div style="height:14px"></div>
 
-      <!-- Browse file button -->
-      <label style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r2);cursor:pointer;transition:border-color .15s;margin-bottom:10px"
-        onmouseenter="this.style.borderColor='var(--blu)'" onmouseleave="this.style.borderColor='var(--b2)'">
-        <div style="width:40px;height:40px;border-radius:50%;background:rgba(90,159,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blu)" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </div>
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:700;color:var(--t1)">Browse & Select Design File</div>
-          <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">JPG, PNG, PDF, MP4 — then upload to Google Drive and paste link below</div>
-        </div>
-        <input type="file" accept="image/*,video/*,.pdf,.ai,.psd,.fig" style="display:none" onchange="handleDesignFileSelect(event,'${id}',${verIdx})">
-        <input type="file" webkitdirectory directory multiple style="display:none" id="design-folder-${id}-${verIdx}" onchange="window._dvIdx=${verIdx};uploadFolderItems(event,'${id}','design')">
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('design-folder-${id}-${verIdx}').click()">📁 Folder</button>
-      </label>
-      <div id="design-file-status-${id}" style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:10px">
-        ${ver.fileName?`<span style="color:var(--ac)">✓ ${ver.fileName}</span>`:'No file selected'}
-      </div>
-
       <!-- Paste link -->
       <div style="font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Paste Google Drive / image link</div>
       <div class="design-link-row">
