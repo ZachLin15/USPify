@@ -2507,7 +2507,7 @@ function renderSidebar(){
   const clientPostCount=data.contents.filter(c=>c.statusId==='client_approval').length;
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
-    {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length},
+    {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length,hidden:true},
     ...(isAdmin||S.user.role==='senior'?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
@@ -2519,7 +2519,7 @@ function renderSidebar(){
     ...(isAdmin?[{id:'settings',label:'Settings',icon:'<circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M9.54 9.54l1.41 1.41M3.05 12.95l1.41-1.41M9.54 6.46l1.41-1.41"/>'}]:[]),
     {id:'set_password',label:'Set Password',icon:'<rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/>'},
   ];
-  const navHTML=pages.map(p=>{
+  const navHTML=pages.filter(p=>!p.hidden).map(p=>{
     const active=S.page===p.id&&!S.brand;
     const badgeStyle=p.badgeColor?`style="background:${p.badgeColor}33;color:${p.badgeColor}"`:''
     return `<div class="sb-item${active?' active':''}" onclick="nav('${p.id}')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>${p.label}${p.badge?`<span class="sb-badge" ${badgeStyle}>${p.badge}</span>`:''}</div>`;
@@ -9901,8 +9901,10 @@ function planReconcile(brandId){
       const target=inContract?(Number(qb[cat])||0):0;
       const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
       // Step 1: separate protected (keep always) from deletable drafts
-      const protectedItems=items.filter(c=>!_DATED_RE.test(c.title)||_hasProgress(c));
-      const drafts=items.filter(c=>_DATED_RE.test(c.title)&&!_hasProgress(c));
+      // When target is 0, any no-progress item in this category is deletable
+      // (even if it has a custom/renamed title that doesn't match _DATED_RE)
+      const protectedItems=items.filter(c=>_hasProgress(c)||(target>0&&!_DATED_RE.test(c.title)));
+      const drafts=items.filter(c=>!_hasProgress(c)&&(target===0||_DATED_RE.test(c.title)));
       // Step 2: delete excess drafts (keep up to target, delete the rest)
       let kept=protectedItems.length;
       drafts.forEach(d=>{
