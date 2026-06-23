@@ -1,7 +1,4 @@
-<div class="form-row-2">
-    
-    <div><label class="form-label">📋 Others</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0"><div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">Other content (Content#)</div></div>
-  </div><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <!-- ============================================================
@@ -937,8 +934,6 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 (function(){
   var LOGIN_KEY='uspify_v3';
   var DEFAULT_USERS=[
-    {id:'caleb',name:'Caleb',role:'admin',pass:'caleb'},
-    {id:'carmen',name:'Carmen',role:'admin',pass:'carmen'},
     {id:'developer',name:'Developer',role:'admin',pass:'developer'},
     {id:'jack',name:'Jack',role:'senior',pass:'jack'},
     {id:'hualu',name:'Hualu',role:'designer',pass:'hualu'},
@@ -1286,8 +1281,6 @@ async function forceSyncNow(){
 
 
 var _USPIFY_DEFAULT_CREDS = [
-  {id:'caleb',      pass:'caleb',     role:'admin'},
-  {id:'carmen',     pass:'carmen',    role:'admin'},
   {id:'developer',  pass:'developer', role:'admin'},
   {id:'jack',       pass:'jack',      role:'senior'},
   {id:'hualu',      pass:'hualu',     role:'designer'},
@@ -1889,8 +1882,6 @@ const AI = {
 function getDefault(){
   return {
     users:[
-      {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
-      {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
       {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
       {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack',assignedStatuses:['senior_approval']},
       {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu',assignedStatuses:['design','video_editing']},
@@ -2398,8 +2389,6 @@ function doLogin(){
   const name=nameEl.value.trim().toLowerCase();
   const pass=passEl.value.trim();
   const HARDCODED=[
-    {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
-    {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
     {id:'developer',name:'Developer',role:'admin',title:'Developer',init:'Dev',color:'#9a7aff',pass:'developer'},
     {id:'jack',name:'Jack',role:'senior',title:'Senior 2',init:'J',color:'#5a9fff',pass:'jack'},
     {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
@@ -2534,7 +2523,7 @@ function renderSidebar(){
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
     <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
     </div>
-    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(u.color||({caleb:'#c8f04a',carmen:'#5a9fff',developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888')}22;color:${u.color||({caleb:'#c8f04a',carmen:'#5a9fff',developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888'}">${u.init||u.name?.slice(0,2)||'?'}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
+    <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888')}22;color:${u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888'}">${u.init||u.name?.slice(0,2)||'?'}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
 
 function renderTopbar(){
@@ -2848,7 +2837,7 @@ function renderDashboard(){
   const pendingTasks=pendingJobs.length;
 
   // Deadline alerts: user's own tasks due within 5 days (all months, not just selected)
-  const isCalebOrCarmen=S.user.id==='caleb'||S.user.id==='carmen';
+  const isCalebOrCarmen=false; // caleb and carmen removed
   // deadlineSource scoping:
   //   admins        → all content (full overview)
   //   content_creator (Leonard) → assigned content + all unstarted (his responsibility)
@@ -6469,7 +6458,7 @@ function renderDetailPage(id, forceTab){
       </div>
     </div>
 
-    ${(S.user.id==='caleb'||S.user.id==='carmen'||S.user.id==='developer')?`
+    ${(S.user.id==='developer')?`
     <div class="side-section" style="border-top:2px solid var(--redd)">
       <div class="side-label" style="color:var(--red)">⬅ Reverse Flow</div>
       <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:8px">Step this piece back one stage. Requires confirmation.</div>
@@ -9823,10 +9812,7 @@ function openBrandInfoModal(brandId){
       <div>
         <label class="form-label">🎵 TikTok Content</label>
         <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:10px;margin-top:4px">
-          <div class="form-row-2" style="margin-bottom:4px">
-            <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="bi-tiktok" type="number" min="0" value="${qb.tiktok||0}"></div>
-            <div><label style="font-size:12px;color:var(--t3)">Others (Content#)</label><input class="form-input" id="bi-other" type="number" min="0" value="${qb.other||0}"></div>
-          </div>
+          <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="bi-tiktok" type="number" min="0" value="${qb.tiktok||0}"></div>
         </div>
       </div>
     </div>
@@ -10098,7 +10084,7 @@ function saveBrandInfo(brandId, fillAllMonths){
   // Validate contract dates before generating
   data.brands[idx].monthlyReportLink=document.getElementById('bi-report')?.value?.trim()||'';
   data.brands[idx].brandFolderLink=document.getElementById('bi-folder')?.value?.trim()||'';
-  const _biOther=parseInt(document.getElementById('bi-other')?.value||0)||0;
+  const _biOther=0;
   if(!data.brands[idx].quotaBreakdown)data.brands[idx].quotaBreakdown={};
   data.brands[idx].quotaBreakdown.other=_biOther;
   data.brands[idx].quotaBreakdown.carousel=0; // carousel is a WP sub-type, not a separate quota
@@ -10152,11 +10138,7 @@ function openAddBrandModal(){
       <div>
         <label class="form-label">🎵 TikTok Content</label>
         <div style="background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:10px;margin-top:4px">
-          <div class="form-row-2" style="margin-bottom:6px">
-            <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0" oninput="updateNbTiktokTotal()"></div>
-            <div><label style="font-size:12px;color:var(--t3)">Others (Content#)</label><input class="form-input" id="nb-other" type="number" min="0" value="0" placeholder="0" oninput="updateNbTiktokTotal()"></div>
-          </div>
-          <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Total TikTok+Others: <span id="nb-tiktok-total" style="font-weight:700;color:var(--tel)">0</span></div>
+          <div><label style="font-size:12px;color:var(--t3)">TikTok (TikTok#)</label><input class="form-input" id="nb-tiktok" type="number" min="0" value="0" placeholder="0"></div>
         </div>
       </div>
     </div>
@@ -10185,7 +10167,7 @@ async function saveNewBrand(){
   const wallPosts2=wpCarousel+wpVideo+wpReels+wpImage;
   const ads=parseInt(document.getElementById('nb-ads').value)||0;
   const tiktoks=parseInt(document.getElementById('nb-tiktok').value)||0;
-  const otherContent=parseInt(document.getElementById('nb-other')?.value||0)||0;
+  const otherContent=0;
   const contractStart=document.getElementById('nb-cstart').value;
   const contractEnd=document.getElementById('nb-cend').value;
   const driveLink=document.getElementById('nb-drive').value.trim();
@@ -11559,8 +11541,6 @@ window.onload=function(){
   const savedId=sessionStorage.getItem('uspify_uid');
   if(savedId){
     const HARDCODED=[
-      {id:'caleb',name:'Caleb',role:'admin',pass:'caleb'},
-      {id:'carmen',name:'Carmen',role:'admin',pass:'carmen'},
       {id:'developer',name:'Developer',role:'admin',pass:'developer'},
       {id:'jack',name:'Jack',role:'senior',pass:'jack'},
       {id:'hualu',name:'Hualu',role:'designer',pass:'hualu'},
