@@ -2824,8 +2824,7 @@ function renderDashboard(){
   // Non-admin: only show content assigned to them
   const allContents=isAdmin
     ? data.contents
-    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open'));
-
+    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open')||(S.user.role==='content_creator'&&isUnstartedContent(c)));
   const allMonths=[...new Set(allContents.filter(c=>c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   if(!S.dashMonthFilter||S.dashMonthFilter==='all') S.dashMonthFilter=curMonth;
   const contents=allContents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
@@ -2837,7 +2836,12 @@ function renderDashboard(){
   const overdue=contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
 
   // Pending tasks = active jobs for this user right now
-  const pendingTasks=getActiveJobsForUser(data,S.user.id).length;
+  let pendingJobs=getActiveJobsForUser(data,S.user.id);
+  if(S.user.role==='content_creator'){
+    const unstarted=data.contents.filter(c=>isUnstartedContent(c)&&!pendingJobs.some(r=>r.id===c.id));
+    pendingJobs=[...pendingJobs,...unstarted];
+  }
+  const pendingTasks=pendingJobs.length;
 
   // Deadline alerts: user's own tasks due within 5 days (all months, not just selected)
   const isCalebOrCarmen=S.user.id==='caleb'||S.user.id==='carmen';
