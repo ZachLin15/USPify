@@ -7734,7 +7734,7 @@ function saveIdeation(id, verIdx){
   setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
 
-function _readRefImageFiles(id, verIdx, files){
+async function _readRefImageFiles(id, verIdx, files){
   if(!files||!files.length) return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
@@ -7762,33 +7762,43 @@ function _readRefImageFiles(id, verIdx, files){
 
   // Process files under 5MB normally
   if(!okFiles.length) return;
-  let pending=okFiles.length;
-  okFiles.forEach(file=>{
-    const blobUrl=URL.createObjectURL(file);
-    versions[verIdx].refImages.push({
-      url:blobUrl,
+
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+
+  const DRIVE_UPLOAD_URL='https://script.google.com/macros/s/AKfycbzdRMUTb2aNh50DBMfWO-YIIcekdpcl9C5Vb4s7KNphTD9QLCFfaL1QpLg_FHqR3J-74w/exec';
+
+  for(const file of okFiles){
+    const tempEntry={
+      url:URL.createObjectURL(file),
       isBlobUrl:true,
+      uploading:true,
       addedAt:new Date().toISOString().split('T')[0],
       name:file.name,
       size:file.size>=1024*1024
         ?(Math.round(file.size/1024/1024*10)/10)+'MB'
         :Math.round(file.size/1024)+'KB'
-    });
-    pending--;
-    if(!pending){
-      c.ideationVersions=versions;
-      const dataToSave=JSON.parse(JSON.stringify(data));
-      dataToSave.contents.forEach(ct=>{
-        (ct.ideationVersions||[]).forEach(v=>{
-          v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl);
-        });
+    };
+    versions[verIdx].refImages.push(tempEntry);
+    const panel0=document.getElementById('dp-ideation');
+    if(panel0) panel0.innerHTML=renderIdeationPanel(c,id);
+
+    try{
+      const base64=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(reader.result.split(',')[1]);
+        reader.onerror=reject;
+        reader.readAsDataURL(file);
       });
-      save(dataToSave);
-      const panel=document.getElementById('dp-ideation');
-      if(panel) panel.innerHTML=renderIdeationPanel(c,id);
-    }
-  });
-}
+      const res=await fetch(DRIVE_UPLOAD_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({
+          data:base64,
+          mimeType:file.type,
+          filename:file.name,
+          brandName:brandName,
 
 function _showDriveUploadPrompt(id, verIdx, fileNames){
   // Show a modal asking user to upload to Google Drive and paste the link
