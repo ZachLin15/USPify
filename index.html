@@ -7142,18 +7142,25 @@ function detectLinkType(url){
 }
 
 function renderDesignPreview(ver, id){
-  if(!ver.link) return `<div style="padding:28px;text-align:center;color:var(--t3);font-size:14px;font-family:monospace">No file linked yet - paste a Google Drive link below.</div>`;
+  if(!ver.link){
+    return `<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;background:var(--s2);border:1px dashed var(--b1);border-radius:var(--r2)">No file linked yet — upload or paste a Drive link below.</div>`;
+  }
   const type = ver.type||detectLinkType(ver.link);
-  if(type==='image'){
-    return `<div class="design-embed"><img src="${ver.link}" alt="Design ${ver.label}" onerror="this.src='';this.parentElement.innerHTML='<div style=padding:20px;color:var(--red);font-size:14px>Image failed to load \u2014 check URL</div>'"></div>`;
-  }
-  if(type==='video'){
-    return `<div class="design-embed" style="aspect-ratio:16/9"><video src="${ver.link}" controls style="width:100%;height:100%;border-radius:var(--r)"></video></div>`;
-  }
-  // Google Drive embed
-  return `<div class="design-embed" style="aspect-ratio:16/9"><iframe src="${driveEmbedUrl(ver.link)}" style="width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe></div>`;
+  const isImage = type==='image';
+  const icon = type==='video' ? '🎬' : type==='pdf' ? '📄' : isImage ? '🖼️' : '📁';
+  const label = type==='video' ? 'Video file' : type==='pdf' ? 'PDF file' : isImage ? 'Image file' : 'Drive file';
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2)">
+    ${isImage
+      ? `<img src="${ver.link}" alt="${ver.label}" style="width:52px;height:52px;border-radius:var(--r);object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
+      : `<div style="width:52px;height:52px;border-radius:var(--r);background:var(--s1);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${icon}</div>`
+    }
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ver.fileName||label}</div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${ver.uploadedBy?`Uploaded by ${ver.uploadedBy} · ${ver.uploadedAt||''}`:label}</div>
+    </div>
+    <a href="${ver.link}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open in Drive ↗</a>
+  </div>`;
 }
-
 function handleDesignFileSelect(event, id, verIdx){
   const file=event.target.files[0];if(!file)return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7225,12 +7232,17 @@ function renderDesignPanel(c, id){
   const seniorReviewHTML='';
 
   // Designer upload section — browse file OR paste URL
-  const uploaderHTML=isDesigner?`
+ const fileCardHTML = renderDesignPreview(ver, id);
+
+  const uploaderHTML = isDesigner ? `
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">🎨</span> Upload Design</div>
         <span class="idea-section-hint">Browse your file and upload to Drive, or paste a link directly</span>
       </div>
+
+      ${fileCardHTML}
+      <div style="height:14px"></div>
 
       <!-- Browse file button -->
       <label style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r2);cursor:pointer;transition:border-color .15s;margin-bottom:10px"
@@ -7262,8 +7274,13 @@ function renderDesignPanel(c, id){
         <button class="btn btn-ac btn-sm" onclick="saveDesignLink('${id}',${verIdx})">Save</button>
       </div>
       <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Drive tip: share link → "Anyone with link" → copy link → paste above</div>
-    </div>`:'';
-
+    </div>` : `
+    <div class="idea-section">
+      <div class="idea-section-header">
+        <div class="idea-section-title"><span class="idea-section-icon">🎨</span> Design File</div>
+      </div>
+      ${fileCardHTML}
+    </div>`;
   // Notes section
   const notesHTML=`
     <div class="idea-section">
@@ -7296,18 +7313,7 @@ function renderDesignPanel(c, id){
       ${versions.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteDesignVersion('${id}',${verIdx})" style="flex-shrink:0">Delete ${ver.label}</button>`:''}
     </div>
 
-    <div class="design-preview-box">
-      <div class="design-preview-header">
-        <span style="color:${color}">\uD83D\uDDBC ${ver.label}</span>
-        ${ver.uploadedBy?`<span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">uploaded by ${ver.uploadedBy} · ${ver.uploadedAt||''}</span>`:''}
-        ${ver.link?`<a href="${ver.link}" target="_blank" style="margin-left:auto;font-size:13px;color:var(--blu)">Open in Drive ↗</a>`:''}
-      </div>
-      <div class="design-preview-body">
-        ${renderDesignPreview(ver, id)}
-      </div>
-    </div>
-
-    ${uploaderHTML}
+   ${uploaderHTML}
     ${designerActionsHTML}
     ${notesHTML}
 
