@@ -2836,11 +2836,18 @@ function renderDashboard(){
   const overdue=contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
 
   // Pending tasks = active jobs for this user right now
-  let pendingJobs=getActiveJobsForUser(data,S.user.id);
+ let pendingJobs=getActiveJobsForUser(data,S.user.id);
   if(S.user.role==='content_creator'){
     const unstarted=data.contents.filter(c=>isUnstartedContent(c)&&!pendingJobs.some(r=>r.id===c.id));
     pendingJobs=[...pendingJobs,...unstarted];
   }
+  const _pendingCutoff=new Date();_pendingCutoff.setDate(_pendingCutoff.getDate()+30);
+  const _pendingCutoffStr=_pendingCutoff.toISOString().split('T')[0];
+  pendingJobs=pendingJobs.filter(c=>{
+    const due=c.dueDates?.[S.user.id]||c.postingDate||'';
+    if(!due) return false; // no due date set = not counted as pending yet
+    return due<=_pendingCutoffStr; // overdue (due < today) OR due within next 30 days
+  });
   const pendingTasks=pendingJobs.length;
 
   // Deadline alerts: user's own tasks due within 5 days (all months, not just selected)
