@@ -7147,8 +7147,22 @@ function renderDesignPreview(ver, id){
   }
   const type = ver.type||detectLinkType(ver.link);
   const isImage = type==='image';
-  const icon = type==='video' ? '🎬' : type==='pdf' ? '📄' : isImage ? '🖼️' : '📁';
-  const label = type==='video' ? 'Video file' : type==='pdf' ? 'PDF file' : isImage ? 'Image file' : 'Drive file';
+  const isVideo = type==='video';
+
+  const headerRow = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border:1px solid var(--b1);border-bottom:none;border-radius:var(--r2) var(--r2) 0 0">
+    <span style="font-size:13px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${ver.fileName||(isVideo?'Video file':isImage?'Image file':'Drive file')}</span>
+    <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">${ver.uploadedBy?`uploaded by ${ver.uploadedBy} · ${ver.uploadedAt||''}`:''}</span>
+    <a href="${ver.link}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open in Drive ↗</a>
+  </div>`;
+
+  if(isVideo){
+    return `${headerRow}<div style="border:1px solid var(--b1);border-top:none;border-radius:0 0 var(--r2) var(--r2);overflow:hidden;background:#000">
+      <video src="${ver.link}" controls style="width:100%;max-height:480px;display:block" preload="metadata"></video>
+    </div>`;
+  }
+
+  const icon = type==='pdf' ? '📄' : isImage ? '🖼️' : '📁';
+  const label = type==='pdf' ? 'PDF file' : isImage ? 'Image file' : 'Drive file';
   return `<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2)">
     ${isImage
       ? `<img src="${ver.link}" alt="${ver.label}" style="width:52px;height:52px;border-radius:var(--r);object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">`
