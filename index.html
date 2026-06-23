@@ -5235,7 +5235,7 @@ function renderAnalytics(){
 function renderTeam(){
   const data=D();
   const isAdmin=isAdminUser(S.user);
-  const staff=data.users.filter(u=>u.role!=='client');
+  const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
 
   const STAGE_LABELS={
     ideation:'💡 Ideation',senior_approval_ideation:'✅ Script Review',design:'🎨 Design',
