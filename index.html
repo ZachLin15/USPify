@@ -3616,7 +3616,7 @@ function renderBrandMiniCalendar(b,data){
       <div style="font-size:11px;color:${isToday?'var(--ac)':'var(--t3)'};font-family:'DM Mono',monospace;font-weight:${isToday?'700':'400'}">${d}</div>
       ${dayItems.slice(0,3).map(c=>{
         const st=getStatus(data,c.statusId);
-        return `<div onclick="openContentDetail('${c.id}')" title="${c.title} — ${st.name}" style="font-size:10px;background:${st.color}22;color:${st.color};border-left:2px solid ${st.color};padding:1px 4px;margin-top:2px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div>`;
+        return `<div onclick="openContentDetail('${c.id}')" title="${c.title} — ${st.name}" style="font-size:12px;background:${st.color}22;color:${st.color};border-left:2px solid ${st.color};padding:1px 4px;margin-top:2px;border-radius:3px;cursor:pointer;word-break:break-word;line-height:1.4">${c.title}</div>`;
       }).join('')}
       ${dayItems.length>3?`<div style="font-size:9px;color:var(--t4);margin-top:1px">+${dayItems.length-3} more</div>`:''}
     </div>`;
