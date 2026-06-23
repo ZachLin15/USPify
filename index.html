@@ -8245,8 +8245,7 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-title">🎨 Design Phase${isDesigner?' — Your Turn':''}</div>
       <div class="wf-action-sub">${isDesigner?`Upload your design in the <strong>Design tab</strong>, then submit for senior approval.`:`Waiting for the video editor to upload and submit the design.`}</div>
       <div class="wf-action-row">
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-design')">🎨 Open Design Tab →</button>
-        ${isDesigner?`<button class="wf-btn wf-btn-amb" onclick="carouselSubmitDesign('${id}')">📤 Submit Design for Approval</button>`:''}
+        ${isDesigner?`<button class="wf-btn wf-btn-amb" onclick="designerSubmitForReview('${id}',0)">📤 Submit V1 for Senior Review</button>`:''}
       </div>
     </div>`);
   }
