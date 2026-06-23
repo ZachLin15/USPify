@@ -2524,12 +2524,9 @@ function renderSidebar(){
     const badgeStyle=p.badgeColor?`style="background:${p.badgeColor}33;color:${p.badgeColor}"`:''
     return `<div class="sb-item${active?' active':''}" onclick="nav('${p.id}')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>${p.label}${p.badge?`<span class="sb-badge" ${badgeStyle}>${p.badge}</span>`:''}</div>`;
   }).join('');
-  const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" style="position:relative;padding-right:28px">
-    <div onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer">
-      <div class="bdot" style="background:${b.color}"></div>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.name}</span>
-    </div>
-    <button onclick="event.stopPropagation();confirmDeleteBrand('${b.id}')" title="Delete brand" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:15px;line-height:1;padding:3px 5px;border-radius:4px;transition:all .12s" onmouseenter="this.style.color='var(--red)';this.style.background='var(--redd)'" onmouseleave="this.style.color='var(--t4)';this.style.background='transparent'">×</button>
+  const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+    <div class="bdot" style="background:${b.color}"></div>
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.name}</span>
   </div>`).join('');
   const u=S.user;
   document.getElementById('sidebar').innerHTML=`
