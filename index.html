@@ -5073,7 +5073,7 @@ const REVIEWER_STAGES=[
 
 function renderWfReviewerSettings(data){
   const r=getWfReviewers();
-  const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen');
+  const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
   const brands=data.brands;
   if(!brands.length) return '';
 
