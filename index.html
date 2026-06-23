@@ -2524,7 +2524,7 @@ function renderSidebar(){
     const badgeStyle=p.badgeColor?`style="background:${p.badgeColor}33;color:${p.badgeColor}"`:''
     return `<div class="sb-item${active?' active':''}" onclick="nav('${p.id}')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>${p.label}${p.badge?`<span class="sb-badge" ${badgeStyle}>${p.badge}</span>`:''}</div>`;
   }).join('');
-  const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+ const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
     <div class="bdot" style="background:${b.color}"></div>
     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.name}</span>
   </div>`).join('');
