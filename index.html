@@ -7359,24 +7359,56 @@ function deleteDesignVersion(id, idx){
   if(panel) panel.innerHTML=renderDesignPanel(c,id);
 }
 
-function saveDesignLink(id, verIdx){
+async function saveDesignLink(id, verIdx){
   const inp=document.getElementById('design-link-input-'+id);
   const typeEl=document.getElementById('design-link-type-'+id);
   if(!inp) return;
+  const rawLink=inp.value.trim();
+  if(!rawLink) return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
-  versions[verIdx].link=inp.value.trim();
-  versions[verIdx].type=typeEl?typeEl.value:'drive';
-  versions[verIdx].uploadedAt=new Date().toISOString().split('T')[0];
-  versions[verIdx].uploadedBy=S.user.name;
-  c.designVersions=versions;
-  // Also keep top-level designLink in sync for backward compat
-  c.designLink=versions[verIdx].link;
-  save(data);
-  setAutosaveStatus('saved','✓ uploaded');
-  setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
-  const panel=document.getElementById('dp-design');
-  if(panel) panel.innerHTML=renderDesignPanel(c,id);
+
+  setAutosaveStatus('saving','copying to Drive…');
+
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  const DRIVE_UPLOAD_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+
+  try{
+    const res=await fetch(DRIVE_UPLOAD_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({
+        mode:'copyLink',
+        driveLink:rawLink,
+        brandName:brandName,
+        contentName:contentName,
+        folderType:'Design Draft'
+      })
+    });
+    const result=await res.json();
+    if(result.error){
+      alert(result.error);
+      setAutosaveStatus('idle','auto-save on');
+      return;
+    }
+    versions[verIdx].link=result.url;
+    versions[verIdx].type=typeEl?typeEl.value:'drive';
+    versions[verIdx].uploadedAt=new Date().toISOString().split('T')[0];
+    versions[verIdx].uploadedBy=S.user.name;
+    c.designVersions=versions;
+    c.designLink=versions[verIdx].link;
+    save(data);
+    setAutosaveStatus('saved','✓ uploaded');
+    setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
+    const panel=document.getElementById('dp-design');
+    if(panel) panel.innerHTML=renderDesignPanel(c,id);
+  }catch(err){
+    console.error('Design link copy failed:',err);
+    alert('Failed to copy file into the Drive folder. Make sure the link is shared as "Anyone with the link" and try again.');
+    setAutosaveStatus('idle','auto-save on');
+  }
 }
 
 function saveDesignNotes(id, verIdx){
