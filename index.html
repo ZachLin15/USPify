@@ -2917,7 +2917,8 @@ function renderDashboard(){
     qb.wallPost=(qb.carousel||0)+(qb.video||0);
   }const ql=b.quotaLabels||{};
     const TYPE_ICONS={video:'🎬',wallPost:'🖼',videoAds:'📢',tiktok:'🎵',carousel:'🃏'};
-    const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&ql[k]).map(([k,v])=>{
+    const DEFAULT_QLABELS={wallPost:'Wall Posts',videoAds:'Video Ads',tiktok:'TikTok',carousel:'Carousels',video:'Videos'};
+    const quotaItems=Object.entries(qb).filter(([k,v])=>v>0&&(ql[k]||DEFAULT_QLABELS[k])).map(([k,v])=>{
       const tc=bc.filter(c=>{
         if(k==='wallPost')return c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i));
         if(k==='videoAds')return c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i));
@@ -2929,7 +2930,7 @@ function renderDashboard(){
       const pc=tc.filter(c=>c.statusId==='posted').length;
       const left=Math.max(0,v-pc);const done=pc>=v;
       const pct=v>0?Math.round(pc/v*100):0;
-      return {icon:TYPE_ICONS[k]||'📌',label:ql[k],pc,v,left,done,pct};
+      return {icon:TYPE_ICONS[k]||'📌',label:ql[k]||DEFAULT_QLABELS[k],pc,v,left,done,pct};
     });
     const quotaRows=quotaItems.length?quotaItems.map(item=>`
       <div style="padding:6px 0;border-bottom:1px solid var(--b1)">
@@ -3406,8 +3407,8 @@ function renderBrandPage(){
   const _curM=new Date().toISOString().slice(0,7);
   if(!S.brandMonthFilter||S.brandMonthFilter==='all') S.brandMonthFilter=_curM;
   contents=contents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.brandMonthFilter));
+  const dir=S.brandSort==='date_desc'?-1:1;
   if(S.brandSort==='date'||S.brandSort==='date_desc'){
-    const dir=S.brandSort==='date'?1:-1;
     contents=[...contents].sort((a,c2)=>(!a.postingDate?1:!c2.postingDate?-1:a.postingDate.localeCompare(c2.postingDate)*dir));
   }else if(S.brandSort==='status'){
     contents=[...contents].sort((a,c2)=>getStepNumber(data,a.statusId)-getStepNumber(data,c2.statusId));
@@ -10064,13 +10065,13 @@ function saveBrandInfo(brandId, fillAllMonths){
   // MERGE into existing breakdown — never wipe fields the modal doesn't edit
   const _oldQB=data.brands[idx].quotaBreakdown||{};
   const _oldQL=data.brands[idx].quotaLabels||{};
-  const quotaBreakdown={..._oldQB,video:videos,carousel:0,wpCarousel:_biwpCarousel,wpVideo:_biwpVideo,wpReels:_biwpReels,wpImage:_biwpImage,wallPost:_biwpCarousel+_biwpVideo+_biwpReels+_biwpImage,videoAds:ads,tiktok:tiktoks};
+  const quotaBreakdown={..._oldQB,video:0,carousel:0,wpCarousel:_biwpCarousel,wpVideo:_biwpVideo,wpReels:_biwpReels,wpImage:_biwpImage,wallPost:_biwpCarousel+_biwpVideo+_biwpReels+_biwpImage,videoAds:ads,tiktok:tiktoks};
   const quotaLabels={..._oldQL};
-  if(videos>0&&!quotaLabels.video)quotaLabels.video='Videos / Reels';
-  if(carousels>0&&!quotaLabels.carousel)quotaLabels.carousel='Wall Posts / Carousels';
+  const _wpTotal=_biwpCarousel+_biwpVideo+_biwpReels+_biwpImage;
+  if(_wpTotal>0&&!quotaLabels.wallPost)quotaLabels.wallPost='Wall Posts';
   if(ads>0&&!quotaLabels.videoAds)quotaLabels.videoAds='Video Ads';
   if(tiktoks>0&&!quotaLabels.tiktok)quotaLabels.tiktok='TikTok Videos';
-  const quota=Object.values(quotaBreakdown).reduce((a,v)=>a+(Number(v)||0),0)||data.brands[idx].quota;
+  const quota=(quotaBreakdown.wallPost||0)+(quotaBreakdown.videoAds||0)+(quotaBreakdown.tiktok||0)+(quotaBreakdown.other||0)||data.brands[idx].quota;
   data.brands[idx]={...data.brands[idx],
     quota,quotaBreakdown,quotaLabels,
     driveLink:document.getElementById('bi-drive').value.trim(),
