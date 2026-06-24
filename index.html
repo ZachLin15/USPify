@@ -6695,7 +6695,7 @@ function renderCopywritingPanel(c,id){
   const ver=versions[verIdx];
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
   const data=D();
-  const isCreator=canActOnStage(data,c,'copywriting',S.user);
+  const isCreator=c.statusId==='copywriting'&&canActOnStage(data,c,'copywriting',S.user);
   const isLocked=!!ver.pendingReview||!!(ver.approvals||[]).find(a=>a.status==='approved');
   const VER_COLORS=['#3acca0','#5a9fff','#9a7aff','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS[verIdx%VER_COLORS.length];
@@ -6906,8 +6906,8 @@ function autoSaveShootNotes(id){
 function renderVideoEditingPanel(c, id){
   const data=D();
   const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
-  const isDesigner=canActOnStage(data,c,'video_editing',S.user);
-  const isCreator=canActOnStage(data,c,'shoot',S.user);
+  const isDesigner=c.statusId==='video_editing'&&canActOnStage(data,c,'video_editing',S.user);
+  const isCreator=c.statusId==='shoot'&&canActOnStage(data,c,'shoot',S.user);
   const designer=getDesigner(data,c);
   const isVideoLocked=!!c.videoReviewPending;
 
@@ -7206,7 +7206,7 @@ function renderDesignPanel(c, id){
   const ver=versions[verIdx];
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
   const data=D();
-  const isDesigner=canActOnStage(data,c,'design',S.user);
+  const isDesigner=c.statusId==='design'&&canActOnStage(data,c,'design',S.user);
   const VER_COLORS_D=['#5a9fff','#9a7aff','#3acca0','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS_D[verIdx%VER_COLORS_D.length];
 
@@ -7608,11 +7608,13 @@ function renderIdeationPanel(c, id){
 
   // Approval state for this version
   const approval = idea.approval || {status:'none'}; // none | pending | approved | amendment
+  const wfData=D();
   const isSeniorOrAdmin = isAdminUser(S.user)||S.user.role==='senior';
-  const isWorker = !isSeniorOrAdmin && S.user.role!=='client';
+  const isWorker = ['ideation','script'].includes(c.statusId) && canActOnStage(wfData, c, 'ideation', S.user);
   const isPending = approval.status==='pending';
   const isApproved = approval.status==='approved';
   const isAmendment = approval.status==='amendment';
+  const isLocked = approval.status!=='none';
 
   // Approval banner
   const approvalBannerHTML = (()=>{
@@ -7661,10 +7663,11 @@ function renderIdeationPanel(c, id){
     <div class="ideation-version-bar">
       <span class="iv-label">Version</span>
       <div class="iv-tabs" id="iv-tabs-${id}" style="flex-wrap:wrap;gap:3px">${tabsHTML}</div>
-      <button class="btn btn-ghost btn-sm" onclick="addIdeaVersion('${id}')" title="Add new version" style="flex-shrink:0">+ New version</button>
-      ${versions.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteIdeaVersion('${id}',${verIdx})" title="Delete this version" style="flex-shrink:0">Delete ${idea.label}</button>`:''}
-      <button class="btn btn-ac btn-sm" onclick="saveIdeation('${id}',${verIdx})" style="flex-shrink:0">Save ${idea.label}</button>
+      ${isWorker?`<button class="btn btn-ghost btn-sm" onclick="addIdeaVersion('${id}')" title="Add new version" style="flex-shrink:0">+ New version</button>`:''}
+      ${(isWorker&&versions.length>1&&!isLocked)?`<button class="btn btn-danger btn-sm" onclick="deleteIdeaVersion('${id}',${verIdx})" title="Delete this version" style="flex-shrink:0">Delete ${idea.label}</button>`:''}
+      ${(isWorker&&!isLocked)?`<button class="btn btn-ac btn-sm" onclick="saveIdeation('${id}',${verIdx})" style="flex-shrink:0">Save ${idea.label}</button>`:''}
     </div>
+    ${isLocked?`<div style="margin-bottom:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 ${idea.label} is locked${approval.status==='amendment'?' — click <strong>+ New version</strong> above to submit your revision':''}.</div>`:''}
 
     ${approvalBannerHTML}
     ${amendNoteHTML}
@@ -7675,7 +7678,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Brief / Concept Paragraph</div>
         <span class="idea-section-hint">Describe the idea, angle, target audience</span>
       </div>
-      <textarea class="form-textarea" id="idea-para-${id}" oninput="autosaveIdeation('${id}')" style="min-height:120px;line-height:1.8;font-size:15px;border-color:${color}44" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
+      <textarea class="form-textarea" id="idea-para-${id}" ${isLocked?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:120px;line-height:1.8;font-size:15px;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -7690,12 +7693,12 @@ function renderIdeationPanel(c, id){
         ondragleave="this.classList.remove('drag-over')"
         ondrop="handleRefFileDrop('${id}',${verIdx},event)">
         ${refImagesHTML}
-        <div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
+        ${!isLocked?`<div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
           <span style="font-size:20px">📁</span><span>Folder</span>
         </div>
         <div class="ref-img-add" onclick="document.getElementById('ref-file-${id}').click()">
           <span style="font-size:22px">+</span><span>Add reference</span>
-        </div>
+        </div>`:''}
       </div>
     </div>
 
@@ -7704,7 +7707,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Video Script / Storyboard</div>
         <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
       </div>
-      <textarea class="form-textarea" id="idea-script-${id}" oninput="autosaveIdeation('${id}')" style="min-height:180px;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
+      <textarea class="form-textarea" id="idea-script-${id}" ${isLocked?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:180px;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
     </div>
 
     ${submitBtnHTML}
