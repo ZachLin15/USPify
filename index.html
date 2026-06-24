@@ -6694,8 +6694,9 @@ function renderCopywritingPanel(c,id){
   const verIdx=Math.min(getCopyVerIdx(id),versions.length-1);
   const ver=versions[verIdx];
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
-  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
   const data=D();
+  const isCreator=canActOnStage(data,c,'copywriting',S.user);
+  const isLocked=!!ver.pendingReview||!!(ver.approvals||[]).find(a=>a.status==='approved');
   const VER_COLORS=['#3acca0','#5a9fff','#9a7aff','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS[verIdx%VER_COLORS.length];
 
@@ -6748,10 +6749,11 @@ function renderCopywritingPanel(c,id){
     <div class="design-ver-bar">
       <span class="iv-label">Version</span>
       <div class="iv-tabs" style="flex-wrap:wrap;gap:3px">${tabsHTML}</div>
-      <button class="btn btn-ghost btn-sm" onclick="addCopyVersion('${id}')" style="flex-shrink:0">+ New draft</button>
-      ${versions.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteCopyVersion('${id}',${verIdx})" style="flex-shrink:0">Delete ${ver.label}</button>`:''}
-      <button class="btn btn-ac btn-sm" onclick="saveCopyVersion('${id}',${verIdx})" style="flex-shrink:0">Save ${ver.label}</button>
+      ${isCreator?`<button class="btn btn-ghost btn-sm" onclick="addCopyVersion('${id}')" style="flex-shrink:0">+ New draft</button>`:''}
+      ${(isCreator&&versions.length>1&&!isLocked)?`<button class="btn btn-danger btn-sm" onclick="deleteCopyVersion('${id}',${verIdx})" style="flex-shrink:0">Delete ${ver.label}</button>`:''}
+      ${(isCreator&&!isLocked)?`<button class="btn btn-ac btn-sm" onclick="saveCopyVersion('${id}',${verIdx})" style="flex-shrink:0">Save ${ver.label}</button>`:''}
     </div>
+    ${isLocked?`<div style="margin-bottom:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 ${ver.label} is locked${(ver.approvals||[]).find(a=>a.status==='amendment')?' — click <strong>+ New draft</strong> above to submit your revision':''}.</div>`:''}
 
     ${amendNoteHTML}
 
@@ -6760,7 +6762,7 @@ function renderCopywritingPanel(c,id){
         <div class="idea-section-title"><span class="idea-section-icon">✍️</span> Copy / Caption — ${ver.label}</div>
         <span class="idea-section-hint">Script, caption, hashtags for this content piece</span>
       </div>
-      <textarea class="form-textarea" id="copy-ver-text-${id}" oninput="autosaveCopyVersion('${id}')" style="min-height:240px;line-height:1.8;font-size:15px;border-color:${color}44" placeholder="Write the caption, script, hashtags here…&#10;&#10;Hook: ...&#10;Body: ...&#10;CTA: ...&#10;&#10;#hashtag1 #hashtag2">${ver.text||''}</textarea>
+      <textarea class="form-textarea" id="copy-ver-text-${id}" ${isLocked?'readonly':''} oninput="autosaveCopyVersion('${id}')" style="min-height:240px;line-height:1.8;font-size:15px;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="Write the caption, script, hashtags here…&#10;&#10;Hook: ...&#10;Body: ...&#10;CTA: ...&#10;&#10;#hashtag1 #hashtag2">${ver.text||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -6768,7 +6770,7 @@ function renderCopywritingPanel(c,id){
         <div class="idea-section-title"><span class="idea-section-icon">📝</span> Copy Notes</div>
         <span class="idea-section-hint">Tone guide, instructions, revision context for this version</span>
       </div>
-      <textarea class="form-textarea" id="copy-ver-notes-${id}" oninput="autosaveCopyVersion('${id}')" style="min-height:90px;font-size:15px;line-height:1.7" placeholder="e.g. Keep it conversational, max 150 words, end with a CTA to DM us...">${ver.notes||''}</textarea>
+      textarea class="form-textarea"
     </div>
 
     ${apprListHTML?`<div class="idea-section" style="border-top:1px solid var(--b1);padding-top:14px">
@@ -8040,6 +8042,18 @@ function autosaveIdeation(id){
 
 // USER ROLE → ID MAP (looks up first user matching role)
 function getUserByRole(data, role){ return data.users.find(u=>u.role===role); }
+
+function isManagerUser(user){
+  return !!user && (user.id==='caleb' || user.id==='carmen');
+}
+
+function canActOnStage(data, c, statusId, user){
+  if(!user) return false;
+  if(isManagerUser(user)) return true;
+  const pic=getPIC(data, statusId, c);
+  return !!pic && pic.id===user.id;
+}
+
 // getPIC: looks up per-content pic map first, then falls back to role defaults
 // contentObj is optional — if passed, uses c.pic[statusId] first
 function getPIC(data, statusId, contentObj){
