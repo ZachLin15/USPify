@@ -7615,6 +7615,7 @@ function renderIdeationPanel(c, id){
   const isApproved = approval.status==='approved';
   const isAmendment = approval.status==='amendment';
   const isLocked = approval.status!=='none';
+  const isReadOnly = !isWorker || isLocked;
 
   // Approval banner
   const approvalBannerHTML = (()=>{
@@ -7678,7 +7679,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Brief / Concept Paragraph</div>
         <span class="idea-section-hint">Describe the idea, angle, target audience</span>
       </div>
-      <textarea class="form-textarea" id="idea-para-${id}" ${isLocked?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:120px;line-height:1.8;font-size:15px;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
+      <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:120px;line-height:1.8;font-size:15px;border-color:${color}44${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -7693,7 +7694,7 @@ function renderIdeationPanel(c, id){
         ondragleave="this.classList.remove('drag-over')"
         ondrop="handleRefFileDrop('${id}',${verIdx},event)">
         ${refImagesHTML}
-        ${!isLocked?`<div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
+        ${!isReadOnly?`<div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
           <span style="font-size:20px">📁</span><span>Folder</span>
         </div>
         <div class="ref-img-add" onclick="document.getElementById('ref-file-${id}').click()">
@@ -7707,7 +7708,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Video Script / Storyboard</div>
         <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
       </div>
-      <textarea class="form-textarea" id="idea-script-${id}" ${isLocked?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:180px;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
+      <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:180px;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
     </div>
 
     ${submitBtnHTML}
