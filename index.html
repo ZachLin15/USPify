@@ -6904,11 +6904,12 @@ function autoSaveShootNotes(id){
 }
 
 function renderVideoEditingPanel(c, id){
-  const isDesigner=S.user.role==='designer'||isAdminUser(S.user);
-  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
-  const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
   const data=D();
+  const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
+  const isDesigner=canActOnStage(data,c,'video_editing',S.user);
+  const isCreator=canActOnStage(data,c,'shoot',S.user);
   const designer=getDesigner(data,c);
+  const isVideoLocked=!!c.videoReviewPending;
 
   const editedEmbed = c.videoEditLink ? `
     <div style="margin-top:10px;border-radius:var(--r);overflow:hidden;background:var(--s3);aspect-ratio:16/9">
@@ -6981,7 +6982,7 @@ function renderVideoEditingPanel(c, id){
       ${editedEmbed}`:
       `<div style="padding:18px;background:var(--s2);border-radius:var(--r);text-align:center;color:var(--t3);font-family:'DM Mono',monospace;font-size:14px;margin-bottom:10px">No edited video uploaded yet</div>`}
 
-      ${isDesigner?`
+     ${(isDesigner&&!isVideoLocked)?`
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
         <!-- Browse & auto-upload button -->
         <label id="edited-video-label-${id}" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r2);cursor:pointer;transition:border-color .15s"
@@ -7022,7 +7023,7 @@ function renderVideoEditingPanel(c, id){
             <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Paste the shareable Drive link — saves automatically</div>
           </div>
         </details>
-      </div>`:''}
+      </div>`:(isDesigner?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Edited video is locked while awaiting senior review.</div>`:'')}
     </div>
 
     <div class="idea-section">
@@ -7349,6 +7350,7 @@ function deleteDesignVersion(id, idx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
   if(versions.length<=1){alert('Cannot delete the last version.');return;}
+  if(versions[idx]&&versions[idx].link){alert('This version has an uploaded file and cannot be deleted.');return;}
   if(!confirm(`Delete ${versions[idx].label}?`))return;
   versions.splice(idx,1);
   versions.forEach((v,i)=>v.label='V'+(i+1));
