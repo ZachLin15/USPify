@@ -7260,7 +7260,7 @@ function renderDesignPanel(c, id){
       <!-- Paste link -->
       <div style="font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Paste Google Drive / image link</div>
       <div class="design-link-row">
-        <input class="form-input" id="design-link-input-${id}" type="url" placeholder="https://drive.google.com/... or image URL" value="${ver.link||''}" style="font-size:14px;padding:9px 12px" oninput="autoSaveDesignLink('${id}',${verIdx},this.value)">
+        <input class="form-input" id="design-link-input-${id}" type="url" placeholder="https://drive.google.com/... or image URL" value="${ver.link||''}" style="font-size:14px;padding:9px 12px">
         <select class="form-select" id="design-link-type-${id}" style="width:110px;font-size:14px;padding:9px 10px">
           <option value="drive" ${(!ver.type||ver.type==='drive')?'selected':''}>Drive</option>
           <option value="image" ${ver.type==='image'?'selected':''}>Image</option>
