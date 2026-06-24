@@ -8196,10 +8196,10 @@ function renderWorkflowActionBox(data, c){
   const reviewStageId=reviewStageMap[c.statusId]||(c.ideationPendingApproval?'ideation_review':c.videoReviewPending?'video_review':'copywriting_review');
   const data2=D();
   const brandReviewer=getBrandReviewer(data2,c.brandId,reviewStageId);
-  const isSenior=role==='senior'||isAdmin||S.user.id===brandReviewer.id;
-  const isDesigner=role==='designer'||isAdmin;
-  const isCreator=role==='content_creator'||isAdmin;
+  const isSenior=isManagerUser(S.user)||role==='senior'||S.user.id===brandReviewer.id;
   const st=c.statusId;
+  const isDesigner=(st==='design'||st==='video_editing')&&canActOnStage(data2,c,st,S.user);
+  const isCreator=['ideation','script','shoot','copywriting'].includes(st)&&canActOnStage(data2,c,st,S.user);
 
   // ── Helper: review comment box ────────────────────────────────────────────
   const reviewCommentBox=(placeholder)=>`
