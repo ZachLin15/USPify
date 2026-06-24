@@ -7204,7 +7204,8 @@ function renderDesignPanel(c, id){
   const verIdx=Math.min(getDesignVerIdx(id), versions.length-1);
   const ver=versions[verIdx];
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
-  const isDesigner=S.user.role==='designer'||isAdminUser(S.user);
+  const data=D();
+  const isDesigner=canActOnStage(data,c,'design',S.user);
   const VER_COLORS_D=['#5a9fff','#9a7aff','#3acca0','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS_D[verIdx%VER_COLORS_D.length];
 
@@ -7302,8 +7303,8 @@ function renderDesignPanel(c, id){
     <div class="design-ver-bar">
       <span class="iv-label">Version</span>
       <div class="iv-tabs" style="flex-wrap:wrap;gap:3px">${tabsHTML}</div>
-      <button class="btn btn-ghost btn-sm" onclick="addDesignVersion('${id}')" style="flex-shrink:0">+ New version</button>
-      ${versions.length>1?`<button class="btn btn-danger btn-sm" onclick="deleteDesignVersion('${id}',${verIdx})" style="flex-shrink:0">Delete ${ver.label}</button>`:''}
+      ${isDesigner?`<button class="btn btn-ghost btn-sm" onclick="addDesignVersion('${id}')" style="flex-shrink:0">+ New version</button>`:''}
+      ${(isDesigner&&versions.length>1&&!ver.link)?`<button class="btn btn-danger btn-sm" onclick="deleteDesignVersion('${id}',${verIdx})" style="flex-shrink:0">Delete ${ver.label}</button>`:''}
     </div>
 
    ${uploaderHTML}
@@ -7366,7 +7367,10 @@ async function saveDesignLink(id, verIdx){
   if(!rawLink) return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
-
+  if(versions[verIdx] && versions[verIdx].link){
+    alert('This version already has a file uploaded and is locked. Start a new version to upload an updated file.');
+    return;
+  }
   setAutosaveStatus('saving','copying to Drive…');
 
   const brand=data.brands.find(b=>b.id===c.brandId);
