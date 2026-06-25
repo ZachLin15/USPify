@@ -2621,15 +2621,16 @@ function getActiveJobsForUser(data, userId){
   const u=data.users.find(x=>x.id===userId);
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
+  const stageOk=c=>activeStages.includes(c.statusId)||(c.pic&&c.pic[c.statusId]===userId);
   return [...new Set([
     // 1. Has an explicit open workflow task AND content is at one of their active stages
-    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&activeStages.includes(c.statusId)),
+    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&stageOk(c)),
     // 2. Explicitly in assignees AND at one of their active stages
     ...data.contents.filter(c=>
       c.jobKind!=='task'&&
       c.assignees.includes(userId)&&
       c.statusId!=='posted'&&
-      activeStages.includes(c.statusId)
+      stageOk(c)
     ),
   ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted'&&c.jobKind!=='task');
 }
@@ -5475,9 +5476,22 @@ function saveContentPIC(contentId, statusId, userId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   if(!c.pic)c.pic={};
   if(userId){c.pic[statusId]=userId;}else{delete c.pic[statusId];}
+
+  // Keep assignees/workflowTasks in sync when reassigning the CURRENT active
+  // stage, so the dashboard (My Active Jobs / Pending Tasks) reflects it immediately.
+  if(statusId===c.statusId){
+    const today=new Date().toISOString().split('T')[0];
+    if(!Array.isArray(c.workflowTasks)) c.workflowTasks=[];
+    c.workflowTasks.filter(t=>t.statusId===statusId&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+    const effectiveUser=userId?data.users.find(x=>x.id===userId):getPIC(data,statusId,c);
+    c.assignees=effectiveUser?[effectiveUser.id]:[];
+    if(effectiveUser){
+      c.workflowTasks.push({id:'wt'+uid(),assigneeId:effectiveUser.id,status:'open',statusId,label:(getStatus(data,statusId)||{}).name||statusId,openedAt:today});
+    }
+  }
+
   save(data);
   const panel=document.getElementById('page-root');
-  // Re-render just the select's default label without full page reload for speed
   renderPage();
   const u=userId?data.users.find(x=>x.id===userId):null;
   showAIToast(u?`✓ ${u.name} set as PIC for ${statusId} on this piece`:`✓ Reset to default`);
