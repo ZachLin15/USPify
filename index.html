@@ -6814,10 +6814,69 @@ function renderCopywritingPanel(c,id){
 }
 
 // ===================== SHOOTING PANEL =====================
+function getFootageItems(c){
+  if(!Array.isArray(c.footageItems)){
+    c.footageItems = c.footageLink ? [{id:'fi'+uid(), url:c.footageLink, name:c.footageFileName||'Footage', driveFileId:c.footageDriveFileId||null, addedAt:''}] : [];
+  }
+  return c.footageItems;
+}
+
+async function addFootageItem(id){
+  const inp=document.getElementById('footage-link-input-'+id);
+  if(!inp) return;
+  const rawLink=inp.value.trim();
+  if(!rawLink) return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const items=getFootageItems(c);
+  const statusEl=document.getElementById('footage-add-status-'+id);
+  if(statusEl) statusEl.textContent='Copying to Drive…';
+
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  const DRIVE_UPLOAD_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+
+  try{
+    const res=await fetch(DRIVE_UPLOAD_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,folderType:'Raw Footage'})
+    });
+    const result=await res.json();
+    if(result.error){alert(result.error);if(statusEl)statusEl.textContent='';return;}
+    items.push({id:'fi'+uid(), url:result.url, name:result.name||'Footage', driveFileId:result.fileId, addedAt:new Date().toISOString().split('T')[0]});
+    c.footageItems=items;
+    c.footageLink=items[0]?.url||'';
+    c.footageFileName=items[0]?.name||'';
+    save(data);
+    inp.value='';
+    if(statusEl) statusEl.textContent='';
+    const panel=document.getElementById('dp-shoot');
+    if(panel) panel.innerHTML=renderShootingPanel(data.contents.find(x=>x.id===id),id);
+    showAIToast('✅ Footage link added');
+  }catch(err){
+    console.error('Footage link copy failed:',err);
+    alert('Failed to copy footage into the Drive folder. Make sure the link is shared as "Anyone with the link" and try again.');
+    if(statusEl) statusEl.textContent='';
+  }
+}
+
+function removeFootageItem(id, itemId){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const items=getFootageItems(c).filter(it=>it.id!==itemId);
+  c.footageItems=items;
+  c.footageLink=items[0]?.url||'';
+  c.footageFileName=items[0]?.name||'';
+  save(data);
+  const panel=document.getElementById('dp-shoot');
+  if(panel) panel.innerHTML=renderShootingPanel(data.contents.find(x=>x.id===id),id);
+}
+
 function renderShootingPanel(c, id){
-  const isCreator=S.user.role==='content_creator'||isAdminUser(S.user);
   const data=D();
+  const isCreator=c.statusId==='shoot'&&canActOnStage(data,c,'shoot',S.user);
   const designer=getDesigner(data,c);
+  const footageItems=getFootageItems(c);
 
   return `
     ${c.shootNotified?`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(154,122,255,0.12);border:1px solid rgba(154,122,255,0.4);border-radius:var(--r);margin-bottom:16px">
@@ -6831,67 +6890,30 @@ function renderShootingPanel(c, id){
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">🎥</span> Raw Footage</div>
-        <span class="idea-section-hint">Upload after shooting — designer downloads from here</span>
+        <span class="idea-section-hint">Paste Drive links after shooting — designer downloads from here</span>
       </div>
 
-      ${c.footageLink?`
-      <div style="margin-bottom:12px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);display:flex;align-items:center;gap:10px">
-        <span style="font-size:20px">✅</span>
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:700;color:var(--ac)">Footage uploaded</div>
-          ${c.footageFileName?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${c.footageFileName}${c.footageFileSize?' · '+c.footageFileSize:''}</div>`:''}
+      ${footageItems.length?footageItems.map(it=>`
+      <div style="margin-bottom:8px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">🎥</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;color:var(--ac);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name||'Footage'}</div>
+          ${it.addedAt?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">added ${it.addedAt}</div>`:''}
         </div>
-        <a href="${c.footageLink}" target="_blank" style="padding:7px 14px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--t1);text-decoration:none">📁 Open ↗</a>
-      </div>`:
+        <a href="${it.url}" target="_blank" style="padding:7px 14px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--t1);text-decoration:none;flex-shrink:0">📁 Open ↗</a>
+        ${isCreator?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="removeFootageItem('${id}','${it.id}')">✕</button>`:''}
+      </div>`).join(''):
       `<div style="padding:20px;background:var(--s2);border-radius:var(--r);text-align:center;color:var(--t3);font-family:'DM Mono',monospace;font-size:14px;margin-bottom:12px">No footage uploaded yet</div>`}
 
       ${isCreator?`
-      <div style="display:flex;flex-direction:column;gap:10px">
-
-        <!-- Single upload button — picks file AND uploads to Drive -->
-        <div id="footage-upload-area-${id}">
-          <label id="footage-label-${id}" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r2);cursor:pointer;transition:border-color .15s"
-            onmouseenter="this.style.borderColor='var(--pur)'" onmouseleave="this.style.borderColor='var(--b2)'">
-            <div style="width:44px;height:44px;border-radius:50%;background:rgba(154,122,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--pur)" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            </div>
-            <div style="flex:1">
-              <div style="font-size:15px;font-weight:700;color:var(--t1)">Browse & Upload to Google Drive</div>
-              <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">MP4, MOV, AVI — select file and it uploads automatically</div>
-            </div>
-            <input type="file" accept="video/*" id="footage-file-input-${id}" style="display:none" onchange="uploadFootageToDrive(event,'${id}')">
-          </label>
-          <input type="file" webkitdirectory directory multiple id="footage-folder-input-${id}" style="display:none" onchange="uploadFolderItems(event,'${id}','footage')">
-          <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="document.getElementById('footage-folder-input-${id}').click()">📁 Upload whole folder</button>
-          <div id="footage-upload-status-${id}" style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:6px">
-            ${c.footageFileName?`<span style="color:var(--ac)">✓ Uploaded: <strong>${c.footageFileName}</strong>${c.footageFileSize?' ('+c.footageFileSize+')':''}</span>`:'No file selected'}
-          </div>
-        </div>
-
-        <!-- Progress bar (hidden by default) -->
-        <div id="footage-progress-wrap-${id}" style="display:none">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--t2)" id="footage-progress-label-${id}">Uploading…</span>
-            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--pur)" id="footage-progress-pct-${id}">0%</span>
-          </div>
-          <div style="background:var(--s3);border-radius:8px;height:8px;overflow:hidden">
-            <div id="footage-progress-bar-${id}" style="height:100%;background:var(--pur);border-radius:8px;width:0%;transition:width .2s ease"></div>
-          </div>
-        </div>
-
-        <!-- Manual link fallback -->
-        <details id="footage-manual-link-${id}" style="margin-top:4px">
-          <summary style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer;user-select:none">Or paste Drive link manually ▸</summary>
-          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-            <input class="form-input" id="footage-input-${id}" type="url" placeholder="Any link — Drive file, folder, Dropbox, etc." value="${c.footageLink||''}" style="font-size:14px;padding:10px 12px"
-              oninput="saveVideoFieldLive('${id}','footageLink',this.value)">
-            <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Paste the shareable Drive link — saves automatically</div>
-          </div>
-        </details>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="form-input" id="footage-link-input-${id}" type="url" placeholder="Paste Google Drive link for one footage clip" style="font-size:14px;padding:9px 12px;flex:1">
+        <button class="btn btn-ac btn-sm" onclick="addFootageItem('${id}')">+ Add</button>
       </div>
+      <div id="footage-add-status-${id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Add one link per clip — share each as "Anyone with link" before pasting. Repeat for multiple footage files.</div>
       `:''}
     </div>
-
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">📝</span> Shoot Notes</div>
@@ -6902,11 +6924,10 @@ function renderShootingPanel(c, id){
         oninput="autoSaveShootNotes('${id}')">${c.shootNotes||''}</textarea>
     </div>
 
-    ${isCreator&&c.footageLink?`
+    ${isCreator?(footageItems.length?`
     <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--b1);margin-top:4px">
       <button class="wf-btn wf-btn-green" onclick="wfShootDone('${id}')">✅ Shooting Done → Assign to Video Editor</button>
-    </div>
-    ${isCreator&&!c.footageLink?`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload footage first to enable the action buttons</div>`:''}`:''}
+    </div>`:`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Add at least one footage link first</div>`):''}
     ${renderReviewHistory(c)}`;
 }
 
@@ -6918,6 +6939,73 @@ function autoSaveShootNotes(id){
     const inp=document.getElementById('shoot-notes-'+id);
     if(inp){c.shootNotes=inp.value;save(data);}
   },800);
+}
+
+function renderVideoEditPreview(c){
+  if(!c.videoEditLink){
+    return `<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;background:var(--s2);border:1px dashed var(--b1);border-radius:var(--r2)">No edited video uploaded yet — paste a Drive link below.</div>`;
+  }
+  const type=c.videoEditType||'video';
+  const headerRow=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border:1px solid var(--b1);border-bottom:none;border-radius:var(--r2) var(--r2) 0 0">
+    <span style="font-size:13px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${c.editedFileName||'Edited video'}</span>
+    <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">${c.editedUploadedBy?`uploaded by ${c.editedUploadedBy} · ${c.editedUploadedAt||''}`:''}</span>
+    <a href="${c.videoEditLink}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open in Drive ↗</a>
+  </div>`;
+  if(type==='video'){
+    const embedSrc=c.videoEditDriveFileId?`https://drive.google.com/file/d/${c.videoEditDriveFileId}/preview`:c.videoEditLink;
+    return `${headerRow}<div style="border:1px solid var(--b1);border-top:none;border-radius:0 0 var(--r2) var(--r2);overflow:hidden;background:#000;aspect-ratio:16/9">
+      <iframe src="${embedSrc}" style="width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>
+    </div>`;
+  }
+  const icon=type==='pdf'?'📄':'📁';
+  return `<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2)">
+    <div style="width:52px;height:52px;border-radius:var(--r);background:var(--s1);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.editedFileName||'Drive file'}</div>
+    </div>
+    <a href="${c.videoEditLink}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0">Open in Drive ↗</a>
+  </div>`;
+}
+
+async function saveVideoEditLink(id){
+  const inp=document.getElementById('video-edit-link-input-'+id);
+  if(!inp) return;
+  const rawLink=inp.value.trim();
+  if(!rawLink) return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  if(c.videoEditLink){
+    alert('An edited video is already uploaded and locked. This cannot be replaced once submitted.');
+    return;
+  }
+  setAutosaveStatus('saving','copying to Drive…');
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  const DRIVE_UPLOAD_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+  try{
+    const res=await fetch(DRIVE_UPLOAD_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,folderType:'Edited Video'})
+    });
+    const result=await res.json();
+    if(result.error){alert(result.error);setAutosaveStatus('idle','auto-save on');return;}
+    c.videoEditLink=result.url;
+    c.videoEditDriveFileId=result.fileId;
+    c.videoEditType=result.detectedType||'video';
+    c.editedFileName=result.name||'Edited video';
+    c.editedUploadedAt=new Date().toISOString().split('T')[0];
+    c.editedUploadedBy=S.user.name;
+    save(data);
+    setAutosaveStatus('saved','✓ uploaded');
+    setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
+    const panel=document.getElementById('dp-video');
+    if(panel) panel.innerHTML=renderVideoEditingPanel(data.contents.find(x=>x.id===id),id);
+  }catch(err){
+    console.error('Edited video link copy failed:',err);
+    alert('Failed to copy file into the Drive folder. Make sure the link is shared as "Anyone with the link" and try again.');
+    setAutosaveStatus('idle','auto-save on');
+  }
 }
 
 function renderVideoEditingPanel(c, id){
@@ -6960,87 +7048,42 @@ function renderVideoEditingPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">📥</span> Download Raw Footage</div>
         <span class="idea-section-hint">Uploaded by Leonard from the Shooting tab</span>
       </div>
-      ${c.footageLink
-        ?`<a href="${c.footageLink}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--acd);border:2px solid var(--ac)66;border-radius:var(--r2);text-decoration:none;transition:all .15s;margin-top:8px"
-            onmouseenter="this.style.borderColor='var(--ac)';this.style.background='var(--acd)'" onmouseleave="this.style.borderColor='var(--ac)66';this.style.background='var(--acd)'">
-            <div style="width:44px;height:44px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0c0c0e" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </div>
-            <div style="flex:1">
-              <div style="font-size:15px;font-weight:700;color:var(--ac)">Download Raw Footage</div>
-              <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-top:2px">
-                ${c.footageFileName?c.footageFileName+' ':''}${c.footageFileSize?'('+c.footageFileSize+') · ':''} Click to open in Google Drive
-              </div>
-            </div>
-            <span style="font-size:13px;font-weight:700;color:var(--ac)">Open ↗</span>
-          </a>`
-        :`<div style="padding:18px;background:var(--s2);border:1px dashed var(--b2);border-radius:var(--r2);text-align:center;margin-top:8px">
+      ${getFootageItems(c).length?getFootageItems(c).map(it=>`
+      <a href="${it.url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--acd);border:2px solid var(--ac)66;border-radius:var(--r2);text-decoration:none;transition:all .15s;margin-top:8px"
+          onmouseenter="this.style.borderColor='var(--ac)'" onmouseleave="this.style.borderColor='var(--ac)66'">
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0c0c0e" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700;color:var(--ac)">${it.name||'Footage'}</div>
+            <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-top:2px">Click to open in Google Drive</div>
+          </div>
+          <span style="font-size:13px;font-weight:700;color:var(--ac)">Open ↗</span>
+        </a>`).join(''):
+        `<div style="padding:18px;background:var(--s2);border:1px dashed var(--b2);border-radius:var(--r2);text-align:center;margin-top:8px">
             <div style="font-size:22px;margin-bottom:6px">⏳</div>
             <div style="font-size:14px;color:var(--t3);font-family:'DM Mono',monospace">No footage yet — waiting for Leonard to shoot and upload</div>
           </div>`}
     </div>
 
-    <!-- EDITED VIDEO UPLOAD -->
+    <!-- EDITED VIDEO -->
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">✂️</span> Edited Video</div>
-        <span class="idea-section-hint">Browse your edited video — uploads automatically to Drive</span>
+        <span class="idea-section-hint">${c.videoEditLink?'Locked once uploaded — preview shown above':'Paste a Drive link to your edited video'}</span>
       </div>
 
-      ${c.videoEditLink?`
-      <div style="margin-bottom:12px;padding:12px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);display:flex;align-items:center;gap:10px">
-        <span style="font-size:20px">✅</span>
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:700;color:var(--ac)">Edited video uploaded</div>
-          ${c.editedFileName?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${c.editedFileName}${c.editedFileSize?' · '+c.editedFileSize:''}</div>`:''}
+      ${renderVideoEditPreview(c)}
+
+      ${(isDesigner&&!c.videoEditLink&&!isVideoLocked)?`
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Paste Google Drive link</div>
+        <div class="design-link-row">
+          <input class="form-input" id="video-edit-link-input-${id}" type="url" placeholder="https://drive.google.com/...">
+          <button class="btn btn-ac btn-sm" onclick="saveVideoEditLink('${id}')">Save</button>
         </div>
-        <a href="${c.videoEditLink}" target="_blank" style="padding:7px 14px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--t1);text-decoration:none">📁 Open ↗</a>
-      </div>
-      ${editedEmbed}`:
-      `<div style="padding:18px;background:var(--s2);border-radius:var(--r);text-align:center;color:var(--t3);font-family:'DM Mono',monospace;font-size:14px;margin-bottom:10px">No edited video uploaded yet</div>`}
-
-     ${(isDesigner&&!isVideoLocked)?`
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        <!-- Browse & auto-upload button -->
-        <label id="edited-video-label-${id}" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r2);cursor:pointer;transition:border-color .15s"
-          onmouseenter="this.style.borderColor='var(--ora)'" onmouseleave="this.style.borderColor='var(--b2)'">
-          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,159,67,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--ora)" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:15px;font-weight:700;color:var(--t1)">Browse & Upload Edited Video</div>
-            <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">Select your file — uploads automatically to Google Drive</div>
-          </div>
-          <input type="file" accept="video/*" id="edited-video-file-input-${id}" style="display:none" onchange="uploadEditedVideoToDrive(event,'${id}')">
-        </label>
-        <input type="file" webkitdirectory directory multiple id="edited-folder-input-${id}" style="display:none" onchange="uploadFolderItems(event,'${id}','edited')">
-        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="document.getElementById('edited-folder-input-${id}').click()">📁 Upload whole folder</button>
-
-        <div id="edited-video-status-${id}" style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">
-          ${c.editedFileName?`<span style="color:var(--ac)">✓ Uploaded: <strong>${c.editedFileName}</strong>${c.editedFileSize?' ('+c.editedFileSize+')':''}</span>`:'No file selected'}
-        </div>
-
-        <!-- Progress bar -->
-        <div id="edited-video-progress-wrap-${id}" style="display:none">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--t2)" id="edited-video-progress-label-${id}">Uploading…</span>
-            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--ora)" id="edited-video-progress-pct-${id}">0%</span>
-          </div>
-          <div style="background:var(--s3);border-radius:8px;height:8px;overflow:hidden">
-            <div id="edited-video-progress-bar-${id}" style="height:100%;background:var(--ora);border-radius:8px;width:0%;transition:width .2s ease"></div>
-          </div>
-        </div>
-
-        <!-- Manual link fallback -->
-        <details id="edited-video-manual-link-${id}" style="margin-top:2px">
-          <summary style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer;user-select:none">Or paste Drive link manually ▸</summary>
-          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-            <input class="form-input" id="video-edit-input-${id}" type="url" placeholder="Any link — Drive file, folder, Dropbox, etc." value="${c.videoEditLink||''}" style="font-size:14px;padding:10px 12px"
-              oninput="saveVideoFieldLive('${id}','videoEditLink',this.value)">
-            <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Paste the shareable Drive link — saves automatically</div>
-          </div>
-        </details>
-      </div>`:(isDesigner?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Edited video is locked while awaiting senior review.</div>`:'')}
+        <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Drive tip: share link → "Anyone with link" → copy link → paste above</div>
+      </div>`:(isDesigner&&isVideoLocked)?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Edited video is locked while awaiting senior review.</div>`:''}
     </div>
 
     <div class="idea-section">
@@ -8384,30 +8427,15 @@ function renderWorkflowActionBox(data, c){
 
   // ── VIDEO: Shoot phase ────────────────────────────────────────────────────
   if(isVideo && st==='shoot' && isCreator){
+    const footageCount=getFootageItems(c).length;
     return withHistory(`<div class="wf-action-box edit">
       <div class="wf-action-title">🎬 Shooting Phase — Your Turn</div>
-      <div class="wf-action-sub">Upload your raw footage or paste a Google Drive link below, then hand off to the editor.</div>
-      <div style="margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📤 Upload footage file</div>
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--s2);border:2px dashed var(--b2);border-radius:var(--r);cursor:pointer;font-size:14px;color:var(--t2);transition:border-color .15s"
-          onmouseenter="this.style.borderColor='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)'">
-          <span style="font-size:22px">🎥</span>
-          <div><div style="font-weight:600;color:var(--t1)">Choose video file</div><div style="font-size:12px;font-family:'DM Mono',monospace;color:var(--t3)">MP4, MOV, AVI</div></div>
-          <input type="file" accept="video/*" style="display:none" onchange="handleFootageUpload(event,'${id}')">
-        </label>
-        <div id="footage-upload-status-${id}" style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">${c.footageFileName?`✓ File: ${c.footageFileName}`:'No file selected'}</div>
-      </div>
-      <div style="margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🔗 Or paste Google Drive link</div>
-        <div class="wf-link-row">
-          <input class="form-input" id="wf-footage-link-${id}" placeholder="https://drive.google.com/…" value="${c.footageLink||''}">
-          <button class="btn btn-ghost btn-sm" onclick="wfSaveFootageLink('${id}')">Save</button>
-        </div>
-        ${c.footageLink?`<div style="margin-top:4px"><a href="${c.footageLink}" target="_blank" style="font-size:13px;color:var(--blu);font-family:'DM Mono',monospace">📁 View footage ↗</a></div>`:''}
-      </div>
+      <div class="wf-action-sub">Add your raw footage links in the <strong>Shooting tab</strong>, then hand off to the editor.</div>
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
-        <button class="wf-btn wf-btn-green" onclick="wfShootDone('${id}')">✅ Shooting Done → Assign to Video Editor</button>
+        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-shoot')">🎥 Open Shooting Tab →</button>
+        <button class="wf-btn wf-btn-${footageCount?'green':'ghost'}" style="${!footageCount?'opacity:.5;cursor:not-allowed':''}" onclick="${footageCount?`wfShootDone('${id}')`:``}">✅ Shooting Done → Assign to Video Editor</button>
       </div>
+      ${!footageCount?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Add at least one footage link in the tab above first</div>`:''}
     </div>`);
   }
 
