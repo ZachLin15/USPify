@@ -9496,8 +9496,15 @@ function autoInsertBrandContent(data, brandId){
   let created=0;
 
   b.templates.forEach((t,i)=>{
-    // Skip if a content piece with this title already exists for this brand
-    const existing=data.contents.find(c=>c.brandId===brandId&&c.title===t.title);
+    // Skip if this template slot already has content — match by stable slot index,
+    // NOT by title (titles get renamed by Leonard during ideation and must not
+    // trigger a duplicate re-creation here).
+    let existing=data.contents.find(c=>c.brandId===brandId&&c.templateIndex===i&&!c.title.includes(' — '));
+    if(!existing){
+      // Backfill: one-time migration for older content created before templateIndex existed
+      existing=data.contents.find(c=>c.brandId===brandId&&c.title===t.title&&c.templateIndex===undefined);
+      if(existing) existing.templateIndex=i;
+    }
     if(existing) return;
 
     let dayNum=Math.min(daysInMonth,3+(i*interval));
@@ -9509,7 +9516,7 @@ function autoInsertBrandContent(data, brandId){
 
     data.contents.push({
       id:'ct'+uid(),brandId,
-      title:t.title,type:t.type,
+      title:t.title,type:t.type,templateIndex:i,
       assignees:[],statusId:'ideation',
       postingDate,
       driveLink:'',copywriting:'',comments:[],
@@ -9559,8 +9566,16 @@ function autoInsertAllMonths(data, brandId){
 
     b.templates.forEach((t,i)=>{
       const pieceTitle=`${t.title} — ${monthLabel}`;
-      // Skip if already exists
-      if(data.contents.find(c=>c.brandId===brandId&&c.title===pieceTitle)) return;
+      // Skip if this template slot for this month already has content — match by
+      // stable slot index + month, NOT by title (renamed titles must not trigger
+      // a duplicate re-creation here).
+      let existing=data.contents.find(c=>c.brandId===brandId&&c.templateIndex===i&&(c.postingDate||'').slice(0,7)===month);
+      if(!existing){
+        // Backfill: one-time migration for older content created before templateIndex existed
+        existing=data.contents.find(c=>c.brandId===brandId&&c.title===pieceTitle&&c.templateIndex===undefined);
+        if(existing) existing.templateIndex=i;
+      }
+      if(existing) return;
 
       let dayNum=Math.min(daysInMonth,3+(i*interval));
       let postingDate=`${month}-${String(dayNum).padStart(2,'0')}`;
@@ -9572,7 +9587,7 @@ function autoInsertAllMonths(data, brandId){
       const isVid=(t.type==='Video'||t.type==='Reels');
       data.contents.push({
         id:'ct'+uid(),brandId,
-        title:pieceTitle,type:t.type,cat:t.cat||'carousel',
+        title:pieceTitle,type:t.type,cat:t.cat||'carousel',templateIndex:i,
         assignees:[],statusId:'ideation',
         postingDate,
         driveLink:'',copywriting:'',comments:[],
