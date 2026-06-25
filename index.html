@@ -8213,8 +8213,26 @@ function renderWorkflowActionBox(data, c){
       <textarea id="wf-review-note-${id}" class="form-textarea" style="min-height:70px;font-size:14px;resize:vertical" placeholder="${placeholder||'Add your review comment here…'}"></textarea>
     </div>`;
 
-  // ── Helper: wrap a box HTML with the review history pinned at bottom ──────
-  const withHistory=(html)=>html+renderReviewHistory(c);
+  // ── Helper: wrap a box HTML with PIC reassignment (top) + review history (bottom) ──
+  const withHistory=(html)=>{
+    let reassignHTML='';
+    if(isSenior){
+      const fallbackUser=getPIC(data2, st, null);
+      const currentOverride=(c.pic&&c.pic[st])||'';
+      const staffOptions=data2.users.filter(u=>u.role!=='client').map(u=>
+        `<option value="${u.id}" ${currentOverride===u.id?'selected':''}>${u.name}</option>`
+      ).join('');
+      reassignHTML=`
+        <div style="margin-bottom:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em">👤 PIC for this stage:</span>
+          <select class="form-select" style="font-size:13px;padding:5px 8px;width:auto" onchange="saveContentPIC('${id}','${st}',this.value)">
+            <option value="" ${currentOverride===''?'selected':''}>— Default (${fallbackUser.name}) —</option>
+            ${staffOptions}
+          </select>
+        </div>`;
+    }
+    return reassignHTML+html+renderReviewHistory(c);
+  };
 
   // ── TASK KIND ─────────────────────────────────────────────────────────────
   if(c.jobKind==='task'){
