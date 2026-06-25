@@ -6697,6 +6697,7 @@ function renderCopywritingPanel(c,id){
   const data=D();
   const isCreator=c.statusId==='copywriting'&&canActOnStage(data,c,'copywriting',S.user);
   const isLocked=!!ver.pendingReview||!!(ver.approvals||[]).find(a=>a.status==='approved');
+  const isReadOnly=!isCreator||isLocked;
   const VER_COLORS=['#3acca0','#5a9fff','#9a7aff','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
   const color=VER_COLORS[verIdx%VER_COLORS.length];
 
@@ -6762,7 +6763,7 @@ function renderCopywritingPanel(c,id){
         <div class="idea-section-title"><span class="idea-section-icon">✍️</span> Copy / Caption — ${ver.label}</div>
         <span class="idea-section-hint">Script, caption, hashtags for this content piece</span>
       </div>
-      <textarea class="form-textarea" id="copy-ver-text-${id}" ${isLocked?'readonly':''} oninput="autosaveCopyVersion('${id}')" style="min-height:240px;line-height:1.8;font-size:15px;border-color:${color}44${isLocked?';opacity:.65;cursor:not-allowed':''}" placeholder="Write the caption, script, hashtags here…&#10;&#10;Hook: ...&#10;Body: ...&#10;CTA: ...&#10;&#10;#hashtag1 #hashtag2">${ver.text||''}</textarea>
+      <textarea class="form-textarea" id="copy-ver-text-${id}" ${isReadOnly?'readonly':''} oninput="autosaveCopyVersion('${id}')" style="min-height:240px;line-height:1.8;font-size:15px;border-color:${color}44${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="Write the caption, script, hashtags here…&#10;&#10;Hook: ...&#10;Body: ...&#10;CTA: ...&#10;&#10;#hashtag1 #hashtag2">${ver.text||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -6770,7 +6771,7 @@ function renderCopywritingPanel(c,id){
         <div class="idea-section-title"><span class="idea-section-icon">📝</span> Copy Notes</div>
         <span class="idea-section-hint">Tone guide, instructions, revision context for this version</span>
       </div>
-      textarea class="form-textarea"
+      <textarea class="form-textarea" id="copy-ver-notes-${id}" ${isReadOnly?'readonly':''} oninput="autosaveCopyVersion('${id}')" style="min-height:90px;font-size:15px;line-height:1.7${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="e.g. Keep it conversational, max 150 words, end with a CTA to DM us...">${ver.notes||''}</textarea>
     </div>
 
     ${apprListHTML?`<div class="idea-section" style="border-top:1px solid var(--b1);padding-top:14px">
