@@ -2394,6 +2394,8 @@ function doLogin(){
     {id:'hualu',name:'Hualu',role:'designer',title:'Designer',init:'H',color:'#e06aaa',pass:'hualu'},
     {id:'leonard',name:'Leonard',role:'content_creator',title:'Content Creator',init:'L',color:'#3acca0',pass:'leonard'},
     {id:'lunox_client',name:'Lunox',role:'client',title:'Client',init:'LX',color:'#ff5a5a',pass:'lunox',brandId:'lunox'},
+    {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
+    {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
   ];
   const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
   if(!hc||hc.pass!==pass){if(errEl)errEl.textContent='Invalid name or password.';return;}
