@@ -6287,236 +6287,8 @@ function getDefaultTabForContent(c){
   return map[c.statusId]||'dp-ideation';
 }
 
-function renderDetailPage(id, forceTab){
-  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
-  const isAdmin=isAdminUser(S.user);
-  const prog=getProgressForContent(c);
-  const days=daysUntil(c.postingDate);
 
-  // Choose flow
-  const flow = c.type==='Video' ? VIDEO_FLOW : CAROUSEL_FLOW;
-
-  // --- TOPBAR ---
-  document.getElementById('detail-title').innerHTML='';
-  const _titleSpan=document.createElement('span');
-  _titleSpan.id='detail-title-text';
-  _titleSpan.textContent=c.title;
-  _titleSpan.title='Click to rename';
-  _titleSpan.style.cssText='cursor:pointer;border-bottom:1px dashed var(--t4);transition:border-color .12s';
-  _titleSpan.onmouseenter=()=>_titleSpan.style.borderColor='var(--ac)';
-  _titleSpan.onmouseleave=()=>_titleSpan.style.borderColor='var(--t4)';
-  _titleSpan.onclick=()=>startEditTitle(id);
-  const _titlePen=document.createElement('span');
-  _titlePen.textContent=' ✏';
-  _titlePen.title='Rename';
-  _titlePen.style.cssText='font-size:13px;cursor:pointer;color:var(--t3);margin-left:4px';
-  _titlePen.onmouseenter=()=>_titlePen.style.color='var(--ac)';
-  _titlePen.onmouseleave=()=>_titlePen.style.color='var(--t3)';
-  _titlePen.onclick=()=>startEditTitle(id);
-  document.getElementById('detail-title').appendChild(_titleSpan);
-  document.getElementById('detail-title').appendChild(_titlePen);
-  document.getElementById('detail-topbar-actions').innerHTML=`
-    <span class="autosave-indicator idle" id="autosave-status">auto-save on</span>
-    ${brandBadge(b)}
-    <span class="tag-type ${c.type==='Carousel'?'t-carousel':'t-video'}" style="font-size:14px">${c.type}</span>
-    ${needsReminder(c)?`<span class="reminder">⚠ ${days===0?'TODAY':days+'d left'} \u2014 ${prog}%</span>`:''}
-    <button class="btn btn-ghost btn-sm" id="detail-side-toggle" onclick="toggleDetailSide()" style="display:none" title="Show info panel">\u24D8 Info</button>
-    ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openEditContentModal('${id}')">Edit</button>`:''}
-    ${isAdmin?`<button class="btn btn-warn btn-sm" onclick="sendWhatsApp('${id}')">\uD83D\uDCF1 Remind</button>`:''}
-    <button class="btn btn-danger btn-sm" onclick="confirmDeleteContent('${id}')">🗑 Remove</button>
-  `;
-
-  // --- MAIN (left panel) ---
-  const commentsHTML=(c.comments||[]).map(cm=>{const cu=getUser(data,cm.userId);return`<div class="comment-item"><div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div><div class="comment-body"><div class="comment-header"><span class="comment-name">${cu.name}</span><span class="comment-time">${fmt(cm.createdAt)}</span><span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span></div><div class="comment-text">${cm.text}</div></div></div>`;}).join('');
-  const historyHTML=(c.statusHistory||[]).map(h=>{const hst=getStatus(data,h.statusId);const hu=getUser(data,h.changedBy);return`<div class="history-item"><div class="history-dot" style="background:${hst.color}"></div><span class="history-status" style="color:${hst.color}">${hst.name}</span><div class="history-line"></div><span class="history-by">${hu.name}</span><span class="history-time">${fmt(h.changedAt)}</span></div>`;}).join('');
-  const canChangeStatus=isAdmin||(S.user.id==='leonard'||S.user.role==='content_creator');
-  const statusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
-
-  // Smart default tab — type-aware, supports forceTab override
-  const defaultTab = forceTab || getDefaultTabForContent(c);
-  const isVideoType = c.type==='Video';
-
-  // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
-  if(c.jobKind==='task'){
-    const isDone=c.taskDone||c.statusId==='posted';
-    const taskStatusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
-    document.getElementById('detail-main').innerHTML=`
-      <div class="panel" style="margin-bottom:0">
-        <div class="ph" style="gap:10px">
-          <span style="font-size:22px">${isDone?'✅':'📋'}</span>
-          <div>
-            <div class="ph-title" style="${isDone?'text-decoration:line-through;color:var(--t3)':''}">${c.title}</div>
-            <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${isDone?`Completed ${c.taskDoneAt?'on '+fmt(c.taskDoneAt):''}`:c.postingDate?'Due '+fmt(c.postingDate):''}</div>
-          </div>
-        </div>
-        ${c.taskDescription?`<div class="pb"><div style="font-size:15px;line-height:1.7;color:var(--t1)">${c.taskDescription}</div></div>`:''}
-      </div>
-      ${isDone?'':`<div style="margin-top:16px">
-        <button class="btn btn-ac" style="width:100%;padding:12px;font-size:16px" onclick="markTaskDone('${id}')">✅ Mark as Done</button>
-      </div>`}
-      ${taskStatusBtns?`<div style="margin-top:16px;padding:14px;background:var(--s2);border-radius:var(--r2);border:1px solid var(--b1)">
-        <div style="font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🔄 Change Status</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">${taskStatusBtns}</div>
-      </div>`:''}
-      <div style="margin-top:20px;border-top:1px solid var(--b1);padding-top:16px">
-        <div style="font-size:13px;font-weight:700;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace">Comments</div>
-        <div>${commentsHTML||`<div class="empty-msg" style="padding:10px 0">No comments yet</div>`}</div>
-        <div style="margin-top:12px">
-          <textarea class="form-textarea" id="comment-input-${id}" placeholder="Add a comment..." style="min-height:70px;font-size:15px"></textarea>
-          <div style="display:flex;justify-content:flex-end;margin-top:8px">
-            <button class="btn btn-ac" onclick="saveComment('${id}')">Add comment</button>
-          </div>
-        </div>
-      </div>
-    `;
-  } else {
-  document.getElementById('detail-main').innerHTML=`
-    <div class="flow-section">
-      <div class="flow-label">${c.type} Production Flow</div>
-      ${renderFlowPipeline(flow, c.statusHistory, c.statusId, id, c)}
-    </div>
-
-    <div class="detail-tabs">
-      <button class="detail-tab ${defaultTab==='dp-ideation'?'active':''}" onclick="switchDTab(this,'dp-ideation')">💡 Ideation</button>
-      ${isVideoType
-        ?`<button class="detail-tab ${defaultTab==='dp-shoot'?'active':''}" onclick="switchDTab(this,'dp-shoot')">🎬 Shooting</button>
-          <button class="detail-tab ${defaultTab==='dp-video'?'active':''}" onclick="switchDTab(this,'dp-video')">✂️ Video Editing</button>`
-        :`<button class="detail-tab ${defaultTab==='dp-design'?'active':''}" onclick="switchDTab(this,'dp-design')">🎨 Design</button>`
-      }
-      <button class="detail-tab ${defaultTab==='dp-copy'?'active':''}" onclick="switchDTab(this,'dp-copy')">✍️ Copywriting</button>
-      <button class="detail-tab${c.statusId==='client_approval'?' active':''}" onclick="switchDTab(this,'dp-comments')">${c.statusId==='client_approval'?'🤝 Client Approval':'💬 Comments ('+((c.comments||[]).length)+')'}</button>
-      <button class="detail-tab ${defaultTab==='dp-history'?'active':''}" onclick="switchDTab(this,'dp-history')">📋 History</button>
-      ${isAdmin||S.user.role==='senior'||S.user.id==='leonard'||S.user.role==='content_creator'?`<button class="detail-tab" onclick="switchDTab(this,'dp-status')">🔄 Status</button>`:''}
-    </div>
-
-    <div id="dp-ideation" ${defaultTab!=='dp-ideation'?'style="display:none"':''}>${renderIdeationPanel(c,id)}</div>
-
-    ${isVideoType
-      ?`<div id="dp-shoot" ${defaultTab!=='dp-shoot'?'style="display:none"':''}>${renderShootingPanel(c,id)}</div>
-        <div id="dp-video" ${defaultTab!=='dp-video'?'style="display:none"':''}>${renderVideoEditingPanel(c,id)}</div>`
-      :`<div id="dp-design" ${defaultTab!=='dp-design'?'style="display:none"':''}>${renderDesignPanel(c,id)}</div>`
-    }
-
-    <div id="dp-copy" ${defaultTab!=='dp-copy'?'style="display:none"':''}>
-      ${renderCopywritingPanel(c,id)}
-    </div>
-    <div id="dp-comments" ${defaultTab!=='dp-comments'?'style="display:none"':''}>
-      ${c.statusId==='client_approval'?renderClientApprovalPanel(c,id,data,b,st):`
-      <div style="margin-bottom:14px">${commentsHTML||`<div class="empty-msg">No comments yet</div>`}</div>
-      <div style="border-top:1px solid var(--b1);padding-top:14px">
-        <textarea class="form-textarea" id="comment-input-${id}" placeholder="Add a comment..." style="min-height:80px;font-size:15px"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <select class="form-select" id="comment-type-${id}" style="width:200px;font-size:14px"><option value="general">General</option><option value="copy">Copy amendment</option><option value="design">Design amendment</option></select>
-          <button class="btn btn-ac" onclick="saveComment('${id}')">Add comment</button>
-        </div>
-      </div>`}
-    </div>
-    <div id="dp-history" ${defaultTab!=='dp-history'?'style="display:none"':''}>${historyHTML||`<div class="empty-msg">No history yet</div>`}</div>
-    ${isAdmin||S.user.role==='senior'||S.user.id==='leonard'||S.user.role==='content_creator'?`<div id="dp-status" style="display:none">
-      <div style="font-size:14px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">Click a status to force-update this content piece</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${statusBtns}</div>
-      <div style="margin-top:20px;padding-top:14px;border-top:2px solid var(--redd)">
-        <div style="font-size:14px;font-weight:700;color:var(--red);margin-bottom:4px">⬅ Reverse Flow</div>
-        <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:10px">Step this content piece back one stage in the workflow. A confirmation will be required.</div>
-        <button class="btn btn-danger" onclick="openReverseFlowConfirm('${id}')">⬅ Reverse to Previous Stage</button>
-      </div>
-    </div>`:''}
-  `;
-  } // end else (not task kind)
-
-  // --- SIDE PANEL (right) ---
-  const avs=c.assignees.map(uid=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1)">${userAvatar(getUser(data,uid),26)}<span style="font-size:15px;font-weight:600">${getUser(data,uid).name}</span><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${getUser(data,uid).title||getUser(data,uid).role}</span></div>`).join('');
-  const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
-  const wfActionBox=renderWorkflowActionBox(data,c);
-  document.getElementById('detail-side').innerHTML=`
-    ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
-
-    <div class="side-section">
-      <div class="side-label">Progress</div>
-      ${progressBar(prog, st.color, 200)}
-      <div style="margin-top:8px">${statusBadge(st)}</div>
-    </div>
-
-    <div class="side-section">
-      <div class="side-label">Dates</div>
-      <div class="meta-item" style="margin-bottom:10px;background:${lateClass?'var(--redd)':'var(--s2)'}">
-        <div class="meta-item-label">\uD83D\uDCC5 Posting date</div>
-        <div class="meta-item-val" style="color:${lateClass?'var(--red)':st.color}">${fmt(c.postingDate)||'Not set'}${lateClass?' ⚠':''}</div>
-      </div>
-      ${c.dueDates?`
-      <div class="due-row"><span class="due-person">Hualu due</span><span class="due-val" style="color:var(--pnk)">${fmt(c.dueDates.hualu)||'\u2014'}</span></div>
-      <div class="due-row"><span class="due-person">Leonard due</span><span class="due-val" style="color:var(--tel)">${fmt(c.dueDates.leonard)||'\u2014'}</span></div>
-      ${c.dueDates.jack?`<div class="due-row"><span class="due-person">Jack due</span><span class="due-val" style="color:var(--blu)">${fmt(c.dueDates.jack)}</span></div>`:''}
-      `:''}
-    </div>
-
-    <div class="side-section">
-      <div class="side-label">Assigned Team</div>
-      ${avs}
-    </div>
-
-    <div class="side-section">
-      <div class="side-label">Google Drive</div>
-      ${c.driveLink?`<div style="margin-bottom:8px"><a href="${c.driveLink}" target="_blank" style="font-size:15px;color:var(--blu);word-break:break-all">\uD83D\uDCC1 Open Drive folder ↗</a></div>`:`<div style="font-size:14px;color:var(--t3);margin-bottom:8px">No Drive link yet</div>`}
-      <div style="display:flex;gap:7px">
-        <input class="form-input" id="drive-input-${id}" type="url" placeholder="Paste Drive link..." value="${c.driveLink||''}" style="font-size:14px;padding:6px 10px">
-        <button class="btn btn-ghost btn-sm" onclick="saveDriveLink('${id}')">Save</button>
-      </div>
-    </div>
-
-    <div class="side-section">
-      <div class="side-label">Meta</div>
-      <div class="meta-grid">
-        <div class="meta-item"><div class="meta-item-label">Brand</div><div class="meta-item-val" style="color:${b.color}">${b.name}</div></div>
-        <div class="meta-item"><div class="meta-item-label">Type</div><div class="meta-item-val">${c.type}</div></div>
-        <div class="meta-item"><div class="meta-item-label">Comments</div><div class="meta-item-val">${(c.comments||[]).length}</div></div>
-        <div class="meta-item"><div class="meta-item-label">History</div><div class="meta-item-val">${(c.statusHistory||[]).length} steps</div></div>
-      </div>
-    </div>
-
-    ${(S.user.id==='developer')?`
-    <div class="side-section" style="border-top:2px solid var(--redd)">
-      <div class="side-label" style="color:var(--red)">⬅ Reverse Flow</div>
-      <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:8px">Step this piece back one stage. Requires confirmation.</div>
-      <button class="btn btn-danger btn-sm" onclick="openReverseFlowConfirm('${id}')">⬅ Reverse to Previous Stage</button>
-    </div>
-
-    <div class="side-section" style="border-top:2px solid var(--acd)">
-      <div class="side-label" style="color:var(--ac)">🎯 PIC per Stage</div>
-      <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:10px">Override who is responsible for each stage of this content piece.</div>
-      ${(()=>{
-        const STAGES=[
-          {id:'ideation',name:'Ideation',icon:'💡'},
-          {id:'script',name:'Script',icon:'✍️'},
-          {id:'design',name:'Design',icon:'🎨'},
-          {id:'shoot',name:'Shoot',icon:'🎬'},
-          {id:'video_editing',name:'Video Edit',icon:'✂️'},
-          {id:'copywriting',name:'Copywriting',icon:'📝'},
-          {id:'senior_approval',name:'Sr Approval',icon:'✅'},
-          {id:'client_approval',name:'Client Appr.',icon:'🤝'},
-        ];
-        const picMap=c.pic||{};
-        const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
-        return STAGES.map(st=>{
-          const picId=picMap[st.id]||'';
-          const defUser=getPIC(data,st.id,null);
-          const opts=`<option value="">Default (${defUser.name})</option>`+staff.map(u=>`<option value="${u.id}" ${u.id===picId?'selected':''}>${u.init} ${u.name}</option>`).join('');
-          const curPic=(picId?data.users.find(u=>u.id===picId):null)||defUser;
-          return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--b1)">
-            <span style="font-size:15px;width:18px;text-align:center;flex-shrink:0">${st.icon}</span>
-            <span style="font-size:13px;color:var(--t2);min-width:72px">${st.name}</span>
-            <select class="filter-select" style="flex:1;font-size:13px;padding:3px 5px;background:${picId?curPic.color+'18':'var(--s2)'}" onchange="saveContentPIC('${id}','${st.id}',this.value)">${opts}</select>
-          </div>`;
-        }).join('');
-      })()}
-      <button class="btn btn-ghost btn-sm" style="margin-top:8px;width:100%" onclick="clearContentPIC('${id}')">↩ Reset all to defaults</button>
-    </div>`:''}
-  `;
-
-  document.getElementById('detail-overlay').classList.add('open');
-}
-
+  
 // ── REVERSE FLOW WITH CONFIRMATION ───────────────────────────
 function openReverseFlowConfirm(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -6851,8 +6623,7 @@ async function addFootageItem(id){
     save(data);
     inp.value='';
     if(statusEl) statusEl.textContent='';
-    const panel=document.getElementById('dp-shoot');
-    if(panel) panel.innerHTML=renderShootingPanel(data.contents.find(x=>x.id===id),id);
+    renderDetailPage(id,'dp-shoot');
     showAIToast('✅ Footage link added');
   }catch(err){
     console.error('Footage link copy failed:',err);
@@ -6868,8 +6639,7 @@ function removeFootageItem(id, itemId){
   c.footageLink=items[0]?.url||'';
   c.footageFileName=items[0]?.name||'';
   save(data);
-  const panel=document.getElementById('dp-shoot');
-  if(panel) panel.innerHTML=renderShootingPanel(data.contents.find(x=>x.id===id),id);
+  renderDetailPage(id,'dp-shoot');
 }
 
 function renderShootingPanel(c, id){
@@ -6999,8 +6769,7 @@ async function saveVideoEditLink(id){
     save(data);
     setAutosaveStatus('saved','✓ uploaded');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
-    const panel=document.getElementById('dp-video');
-    if(panel) panel.innerHTML=renderVideoEditingPanel(data.contents.find(x=>x.id===id),id);
+    renderDetailPage(id,'dp-video');
   }catch(err){
     console.error('Edited video link copy failed:',err);
     alert('Failed to copy file into the Drive folder. Make sure the link is shared as "Anyone with the link" and try again.');
