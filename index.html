@@ -6436,10 +6436,6 @@ function renderDetailPage(id, forceTab){
     </div>`:''}
   `;
 
-  document.getElementById('detail-side').innerHTML=`
-    ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
-  ` + document.getElementById('detail-side').innerHTML;
-
   document.getElementById('detail-overlay').classList.add('open');
 }
 function startEditTitle(id){
