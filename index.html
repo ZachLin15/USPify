@@ -2736,10 +2736,6 @@ function renderJobTodoList(){
 
   // ── Active jobs section ──────────────────────────────────────────────────
   if(jobs.length){
-  let html='';
-
-  // ── Active jobs section ──────────────────────────────────────────────────
-  if(jobs.length){
     const byBrand={};
     jobs.forEach(c=>{
       if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
@@ -2781,30 +2777,6 @@ function renderJobTodoList(){
           </div>
           ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLate?'color:var(--red);font-weight:700':'color:var(--t3)'}">📅 ${fmt(c.postingDate)}${isLate?' ⚠':''}</span>`:''}
           <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
-
-  // ── Scheduled calendar blocks (separate from content jobs) ─────────────
-  if(upcomingBlocks.length){
-    const fmtH=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
-    html+=`<div>
-      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s3);position:sticky;top:0;border-bottom:1px solid var(--b1)">
-        <span style="font-size:13px;font-weight:700;color:var(--t2)">📅 Scheduled Blocks</span>
-        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${upcomingBlocks.length}</span>
-      </div>
-      ${upcomingBlocks.map(b=>{
-        const isToday=b.date===today;
-        return `<div class="todo-item" onclick="nav('calendar')" style="cursor:pointer">
-          <div style="width:10px;height:10px;border-radius:50%;background:${b.color||'#5a9fff'};flex-shrink:0;margin-top:1px"></div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.label}</div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-              <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--t3)">${fmtH(b.startHour)}–${fmtH(b.endHour)}</span>
-            </div>
-          </div>
-          <span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isToday?'color:var(--ac);font-weight:700':'color:var(--t3)'}">${isToday?'Today':fmt(b.date)}</span>
         </div>`;
       }).join('')}
     </div>`;
