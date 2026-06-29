@@ -4509,7 +4509,8 @@ function openAddBlockModalDate(dateStr, startH){
   const data=D();
   const hourOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===startH?'selected':''}>${l}</option>`;}).join('');
   const endOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===(startH+2)?'selected':''}>${l}</option>`;}).join('');
-  const userOpts=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`<option value="${u.id}" ${u.id===S.user.id?'selected':''}>${u.name}</option>`).join('');
+  const isCalAdmin=isManagerUser(S.user);
+  const userOpts=data.users.filter(u=>u.role!=='client'&&(isCalAdmin||u.role!=='admin')).map(u=>`<option value="${u.id}" ${u.id===S.user.id?'selected':''}>${u.name}</option>`).join('');
   openModal(`<div class="modal-title">+ Add Block — ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
     <div class="form-row"><label class="form-label">Person</label><select class="form-select" id="sb-user">${userOpts}</select></div>
