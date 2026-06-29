@@ -3885,9 +3885,25 @@ function renderCalendar(){
   const data=D();
   if(!data.scheduleBlocks) data.scheduleBlocks=[];
   const todayStr=new Date().toISOString().split('T')[0];
-  S.calUser=S.user.id;
+  if(!S.calUser) S.calUser=S.user.id;
   if(!S.calView) S.calView='week';
   if(!S.calDate) S.calDate=todayStr;
+
+  // Who can this user view on the calendar?
+  const calIsManager=isManagerUser(S.user);
+  const viewableUsers=data.users.filter(u=>{
+    if(u.role==='client') return false;
+    if(calIsManager) return true; // Caleb/Carmen see everyone, including each other
+    return u.role!=='admin'; // everyone else: staff only, not Caleb/Carmen
+  });
+  if(!viewableUsers.some(u=>u.id===S.calUser)) S.calUser=S.user.id; // safety fallback
+
+  const calUserSwitcher=`<div style="display:flex;align-items:center;gap:6px">
+    <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Viewing:</span>
+    <select onchange="setCalUser(this.value)" style="font-size:13px;padding:5px 10px;border-radius:6px;background:var(--s2);border:1px solid var(--b2);color:var(--t1);font-family:'Syne',sans-serif;cursor:pointer">
+      ${viewableUsers.map(u=>`<option value="${u.id}" ${u.id===S.calUser?'selected':''}>${u.id===S.user.id?'My Calendar':u.name}</option>`).join('')}
+    </select>
+  </div>`;
 
   const HOURS_START=7,HOURS_END=22,SLOT_H=90;
   const totalH=(HOURS_END-HOURS_START)*SLOT_H;
@@ -3908,6 +3924,7 @@ function renderCalendar(){
     <span style="font-size:15px;font-weight:700;min-width:200px;text-align:center">${navLabel}</span>
     <button class="cal-nav-btn" onclick="calNavNext()">▶</button>
     <button class="cal-today-btn" onclick="S.calDate='${todayStr}';renderPage()">Today</button>
+    <div style="margin-left:auto">${calUserSwitcher}</div>
   </div>`;
 
   // ── AUTO-SEED LEONARD'S DEFAULT RECURRING BLOCKS ──────────────────────────
@@ -4511,6 +4528,11 @@ function openAddBlockModalDate(dateStr, startH){
   const endOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;return`<option value="${h}" ${h===(startH+2)?'selected':''}>${l}</option>`;}).join('');
   const isCalAdmin=isManagerUser(S.user);
   const userOpts=data.users.filter(u=>u.role!=='client'&&(isCalAdmin||u.role!=='admin')).map(u=>`<option value="${u.id}" ${u.id===S.user.id?'selected':''}>${u.name}</option>`).join('');
+  const dayDefs=[{k:'mon',l:'Mon'},{k:'tue',l:'Tue'},{k:'wed',l:'Wed'},{k:'thu',l:'Thu'},{k:'fri',l:'Fri'},{k:'sat',l:'Sat'},{k:'sun',l:'Sun'}];
+  const dayChecks=dayDefs.map(d=>`<label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer">
+    <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${d.l}</span>
+    <input type="checkbox" id="sb-repeat-${d.k}" style="width:17px;height:17px;cursor:pointer">
+  </label>`).join('');
   openModal(`<div class="modal-title">+ Add Block — ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
     <div class="form-row"><label class="form-label">Person</label><select class="form-select" id="sb-user">${userOpts}</select></div>
@@ -4520,6 +4542,11 @@ function openAddBlockModalDate(dateStr, startH){
     </div>
     <div class="form-row"><label class="form-label">Color</label>
       <input type="color" id="sb-color" value="#3acca0" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Repeat weekly on (optional)</label>
+      <div style="display:flex;gap:10px;padding:6px 0">${dayChecks}</div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">Tick the days this repeats every week. Leave unticked for a one-time block.</div>
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBlockDate('${dateStr}')">Add block</button></div>`);
 }
@@ -4531,9 +4558,30 @@ function saveBlockDate(dateStr){
   const color=document.getElementById('sb-color')?.value||getUser(D(),userId).color;
   if(endHour<=startHour){alert('End must be after start');return;}
   const data=D();
-  // Store date-specific blocks with a date field rather than dayOfWeek
-  data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color});
+
+  const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];
+  const checkedDows=dayDefs.filter(d=>document.getElementById('sb-repeat-'+d.k)?.checked).map(d=>d.dow);
+
+  if(!checkedDows.length){
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color});
+  } else {
+    const groupId='rg'+uid();
+    const WEEKS_AHEAD=12; // rolling 3-month window
+    const base=new Date(dateStr+'T12:00:00');
+    const baseDow=base.getDay();
+    const mon=new Date(base);mon.setDate(base.getDate()-((baseDow+6)%7));
+    for(let w=0;w<WEEKS_AHEAD;w++){
+      checkedDows.forEach(dow=>{
+        const offsetFromMon=(dow+6)%7;
+        const occ=new Date(mon);occ.setDate(mon.getDate()+w*7+offsetFromMon);
+        const occStr=occ.toISOString().split('T')[0];
+        if(occStr<dateStr) return;
+        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color,recurringGroupId:groupId});
+      });
+    }
+  }
   save(data);closeModal();renderPage();
+  showAIToast(checkedDows.length?'✓ Recurring block added (next 12 weeks)':'✓ Block added');
 }
 
 function setCalUser(id){S.calUser=id;renderPage();}
@@ -4604,9 +4652,19 @@ function openMetaSettingsModal(){
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Ad Account ID per Brand</div>
     ${brandRows}
     <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete this</button>
+      ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete this & future</button>`:''}
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-ac" onclick="saveMetaSettingsFromModal()">Save</button>
-    </div>`,null,'wide');
+      <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
+    </div>`);
+}
+
+function deleteBlockSeries(groupId, fromDate){
+  if(!confirm('Delete this and all future occurrences in this recurring series?'))return;
+  const data=D();
+  data.scheduleBlocks=data.scheduleBlocks.filter(b=>!(b.recurringGroupId===groupId&&b.date>=fromDate));
+  saveNow(data);closeModal();renderPage();
+  showAIToast('🗑 Recurring series removed from this date forward');
 }
 function saveMetaSettingsFromModal(){
   const data=D();
