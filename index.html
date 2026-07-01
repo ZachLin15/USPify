@@ -4591,6 +4591,7 @@ function openAddBlockModalDate(dateStr, startH){
   </label>`).join('');
   openModal(`<div class="modal-title">+ Add Block — ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
+    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">(optional)</span></label><textarea class="form-textarea" id="sb-desc" placeholder="e.g. Edit Lunox TikTok batch 3, upload by EOD" style="min-height:70px;font-size:14px"></textarea></div>
     <div class="form-row"><label class="form-label">Person</label><select class="form-select" id="sb-user">${userOpts}</select></div>
     <div class="form-row-2">
       <div><label class="form-label">Start</label><select class="form-select" id="sb-start">${hourOpts}</select></div>
@@ -4612,6 +4613,7 @@ function saveBlockDate(dateStr){
   const startHour=parseInt(document.getElementById('sb-start').value);
   const endHour=parseInt(document.getElementById('sb-end').value);
   const color=document.getElementById('sb-color')?.value||getUser(D(),userId).color;
+  const desc=document.getElementById('sb-desc')?.value.trim()||'';
   if(endHour<=startHour){alert('End must be after start');return;}
   const data=D();
 
@@ -4619,10 +4621,10 @@ function saveBlockDate(dateStr){
   const checkedDows=dayDefs.filter(d=>document.getElementById('sb-repeat-'+d.k)?.checked).map(d=>d.dow);
 
   if(!checkedDows.length){
-    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color});
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color,...(desc?{desc}:{})});
   } else {
     const groupId='rg'+uid();
-    const WEEKS_AHEAD=12; // rolling 3-month window
+    const WEEKS_AHEAD=12;
     const base=new Date(dateStr+'T12:00:00');
     const baseDow=base.getDay();
     const mon=new Date(base);mon.setDate(base.getDate()-((baseDow+6)%7));
@@ -4632,14 +4634,13 @@ function saveBlockDate(dateStr){
         const occ=new Date(mon);occ.setDate(mon.getDate()+w*7+offsetFromMon);
         const occStr=occ.toISOString().split('T')[0];
         if(occStr<dateStr) return;
-        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color,recurringGroupId:groupId});
+        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color,recurringGroupId:groupId,...(desc?{desc}:{})});
       });
     }
   }
   save(data);closeModal();renderPage();
   showAIToast(checkedDows.length?'✓ Recurring block added (next 12 weeks)':'✓ Block added');
 }
-
 function setCalUser(id){S.calUser=id;renderPage();}
 function calNavWeek(d){S.calWeek+=d;renderPage();}
 function calNavToday(){S.calWeek=0;renderPage();}
