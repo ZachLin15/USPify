@@ -3996,10 +3996,16 @@ function renderCalendar(){
     const h=Math.max(30,(b.endHour-b.startHour)*SLOT_H);
     const tLabel=`${b.startHour<12?b.startHour+'am':b.startHour===12?'12pm':(b.startHour-12)+'pm'}–${b.endHour<12?b.endHour+'am':b.endHour===12?'12pm':(b.endHour-12)+'pm'}`;
     const gutter=2,pct=100/numCols,left=colIdx*pct;
-    return `<div class="cal-block" style="top:${top}px;height:${h}px;left:calc(${left}% + ${colIdx===0?3:gutter}px);right:calc(${100-(left+pct)}% + ${colIdx===numCols-1?3:gutter}px);background:${b.color}22;border-left:3px solid ${b.color};border-radius:4px"
+    const isCompleted=!!b.completed;
+    const blockColor=isCompleted?'#c8f04a':b.color;
+    const completedTag=isCompleted?`<div style="font-size:10px;color:#c8f04a99;font-family:'DM Mono',monospace;font-weight:700;text-transform:uppercase;letter-spacing:.04em">✓ Done</div>`:'';
+    return `<div class="cal-block" draggable="true"
+      ondragstart="calBlockDragStart(event,'${b.id}')"
+      style="top:${top}px;height:${h}px;left:calc(${left}% + ${colIdx===0?3:gutter}px);right:calc(${100-(left+pct)}% + ${colIdx===numCols-1?3:gutter}px);background:${blockColor}22;border-left:3px solid ${blockColor};border-radius:4px;${isCompleted?'opacity:0.75;':''}"
       onclick="openBlockDetail('${b.id}')" title="${b.label} (${tLabel})">
-      <div style="color:${b.color};font-size:12px;font-weight:600;overflow:hidden;${h>=54?'white-space:normal;word-break:break-word;':'white-space:nowrap;text-overflow:ellipsis;'}">${b.label}</div>
-      <div style="color:${b.color}99;font-size:11px">${tLabel}</div>
+      <div style="color:${blockColor};font-size:12px;font-weight:600;overflow:hidden;${h>=54?'white-space:normal;word-break:break-word;':'white-space:nowrap;text-overflow:ellipsis;'}">${b.label}</div>
+      <div style="color:${blockColor}99;font-size:11px">${tLabel}</div>
+      ${completedTag}
     </div>`;
   };
 
@@ -4515,11 +4521,58 @@ function calTodoDragStart(e, contentId){
 
 const HOURS_RANGE_START=7,HOURS_RANGE_END=22;
 
+function calBlockDragStart(event, blockId){
+  event.stopPropagation();
+  event.dataTransfer.setData('text/plain','BLOCK:'+blockId);
+  event.dataTransfer.effectAllowed='move';
+}
+
 function calDropTodo(e, dateStr, hour, slotEl){
   e.preventDefault();
   slotEl.classList.remove('cal-drop-highlight');
-  const contentId=e.dataTransfer.getData('text/plain');
-  if(!contentId) return;
+  const raw=e.dataTransfer.getData('text/plain');
+  if(!raw) return;
+
+  // Handle existing block drag-to-reschedule
+  if(raw.startsWith('BLOCK:')){
+    const blockId=raw.slice(6);
+    const data=D();
+    const b=data.scheduleBlocks.find(x=>x.id===blockId);
+    if(!b) return;
+    const isManager=isManagerUser(S.user);
+    const dur=b.endHour-b.startHour;
+    const doMove=(reason)=>{
+      const oldDate=b.date||'';
+      const oldStart=b.startHour;
+      b.date=dateStr;
+      b.startHour=hour;
+      b.endHour=Math.min(hour+dur,HOURS_RANGE_END);
+      if(!isManager&&reason) logReschedule(data,b.label,`${oldDate} ${oldStart}:00`,`${dateStr} ${hour}:00`,reason,S.user.id);
+      save(data);renderPage();
+      showAIToast('📅 Block moved');
+    };
+    if(isManager){
+      doMove('');
+    } else {
+      openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
+        <div style="font-size:14px;color:var(--t2);margin-bottom:14px">Moving <strong>${b.label}</strong> to <strong>${dateStr} at ${hour<12?hour+':00 AM':hour===12?'12:00 PM':(hour-12)+':00 PM'}</strong>. All team members will be notified.</div>
+        <div class="form-row"><label class="form-label">Reason</label>
+          <textarea class="form-textarea" id="blk-rs-reason" placeholder="e.g. Conflict with client meeting..." style="min-height:80px;font-size:15px"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-ac" onclick="
+            const r=document.getElementById('blk-rs-reason').value.trim();
+            if(!r){alert('Please enter a reason.');return;}
+            closeModal();
+            (${doMove.toString()})(r);
+          ">Confirm</button>
+        </div>`);
+    }
+    return;
+  }
+
+  const contentId=raw;
   const data=D();
   const c=data.contents.find(x=>x.id===contentId);
   if(!c) return;
@@ -4614,14 +4667,18 @@ function saveBlockDate(dateStr){
   const endHour=parseInt(document.getElementById('sb-end').value);
   const color=document.getElementById('sb-color')?.value||getUser(D(),userId).color;
   const desc=document.getElementById('sb-desc')?.value.trim()||'';
+  const brandId=document.getElementById('sb-brand')?.value||'';
   if(endHour<=startHour){alert('End must be after start');return;}
   const data=D();
+
+  const selectedBrand=brandId&&brandId!=='other'?data.brands.find(b=>b.id===brandId):null;
+  const finalColor=selectedBrand?selectedBrand.color:color;
 
   const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];
   const checkedDows=dayDefs.filter(d=>document.getElementById('sb-repeat-'+d.k)?.checked).map(d=>d.dow);
 
   if(!checkedDows.length){
-    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color,...(desc?{desc}:{})});
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color:finalColor,...(desc?{desc}:{}),...(brandId?{brandId}:{})});
   } else {
     const groupId='rg'+uid();
     const WEEKS_AHEAD=12;
@@ -4634,49 +4691,13 @@ function saveBlockDate(dateStr){
         const occ=new Date(mon);occ.setDate(mon.getDate()+w*7+offsetFromMon);
         const occStr=occ.toISOString().split('T')[0];
         if(occStr<dateStr) return;
-        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color,recurringGroupId:groupId,...(desc?{desc}:{})});
+        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color:finalColor,recurringGroupId:groupId,...(desc?{desc}:{}),...(brandId?{brandId}:{})});
       });
     }
   }
   save(data);closeModal();renderPage();
   showAIToast(checkedDows.length?'✓ Recurring block added (next 12 weeks)':'✓ Block added');
 }
-function setCalUser(id){S.calUser=id;renderPage();}
-function calNavWeek(d){S.calWeek+=d;renderPage();}
-function calNavToday(){S.calWeek=0;renderPage();}
-
-function showProductivityReport(){
-  const data=D();
-  const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
-  let html=`<div class="modal-title">Productivity Report<button class="modal-close" onclick="closeModal()">×</button></div>`;
-  staff.forEach(u=>{
-    const assigned=data.contents.filter(c=>c.assignees.includes(u.id));
-    const avgDaysPerStatus={};
-    assigned.forEach(c=>{
-      c.statusHistory.forEach((h,i)=>{
-        if(i===0)return;
-        const prev=c.statusHistory[i-1];
-        const days=Math.round((new Date(h.changedAt)-new Date(prev.changedAt))/(1000*60*60*24));
-        if(!avgDaysPerStatus[prev.statusId])avgDaysPerStatus[prev.statusId]=[];
-        avgDaysPerStatus[prev.statusId].push(days);
-      });
-    });
-    const completed=assigned.filter(c=>c.statusId==='posted').length;
-    const onTime=assigned.filter(c=>c.statusId==='posted'&&c.postingDate&&c.statusHistory[c.statusHistory.length-1]?.changedAt<=c.postingDate).length;
-    html+=`<div class="prod-card">
-      <div class="prod-header">${userAvatar(u,26)}<strong style="font-size:16px">${u.name}</strong><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${u.title}</span><span style="margin-left:auto;font-size:13px;color:var(--t2)">Assigned: ${assigned.length}</span></div>
-      <div class="prod-metric"><span class="prod-label">Completed</span><span class="prod-val">${completed} pieces</span></div>
-      <div class="prod-metric"><span class="prod-label">On-time rate</span><span class="prod-val">${assigned.length?Math.round(onTime/Math.max(completed,1)*100):0}%<span class="prod-flag ${onTime>=completed*0.8?'flag-ok':onTime>=completed*0.5?'flag-warn':'flag-over'}" style="margin-left:6px">${onTime>=completed*0.8?'Good':'Needs attention'}</span></span></div>
-      ${Object.entries(avgDaysPerStatus).map(([sid,days])=>{
-        const avg=Math.round(days.reduce((a,b)=>a+b,0)/days.length);const st=getStatus(data,sid);
-        const flag=avg>5?'flag-over':avg>3?'flag-warn':'flag-ok';
-        return `<div class="prod-metric"><span class="prod-label">Avg days on: ${st.name}</span><span class="prod-val">${avg}d<span class="prod-flag ${flag}" style="margin-left:6px">${avg>5?'⚠ Slow':avg>3?'Review':'✓'}</span></span></div>`;
-      }).join('')}
-    </div>`;
-  });
-  openModal(html,null,'wide');
-}
-
 // ===================== ADS =====================
 // ===================== META ADS SETTINGS =====================
 function getMetaSettings(){
@@ -10813,7 +10834,6 @@ function openBlockDetail(id){
   if(b.contentId){
     const c=data.contents.find(x=>x.id===b.contentId);
     if(c){openContentDetail(b.contentId);return;}
-    // content was deleted — fall through to show block normally
   }
 
   const u=getUser(data,b.userId);
@@ -10823,30 +10843,76 @@ function openBlockDetail(id){
   const isOwner=S.user.id===b.userId;
   const isAdmin=isAdminUser(S.user);
   const canEdit=isAdmin||isOwner;
-  const whenStr=b.date?`📅 ${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
+  const isCompleted=!!b.completed;
+  const whenStr=b.date?`${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
 
-  if(!canEdit){
-    openModal(`<div class="modal-title">${b.label}<button class="modal-close" onclick="closeModal()">×</button></div>
-      <div style="display:grid;gap:12px;font-size:15px;padding:4px 0">
-        <div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div>
-        <div><span style="color:var(--t2)">When:</span> <strong>${whenStr}</strong></div>
-        <div><span style="color:var(--t2)">Time:</span> <strong>${sl} – ${el}</strong></div>
+  // Brand info
+  const brand=b.brandId&&b.brandId!=='other'?data.brands.find(x=>x.id===b.brandId):null;
+  const brandHTML=brand
+    ?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:${brand.color}18;border:1px solid ${brand.color}44;border-radius:var(--r);margin-bottom:10px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${brand.color};flex-shrink:0"></div>
+        <span style="font-size:14px;font-weight:700;color:${brand.color}">${brand.name}</span>
+      </div>`
+    :b.brandId==='other'
+      ?`<div style="padding:8px 14px;background:var(--s2);border-radius:var(--r);margin-bottom:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">No specific brand</div>`
+      :'';
+
+  // Completed status banner
+  const completedBanner=isCompleted
+    ?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);margin-bottom:10px">
+        <span style="font-size:16px">✅</span>
+        <span style="font-size:14px;font-weight:700;color:var(--ac)">Completed${b.completedAt?' on '+b.completedAt:''}</span>
+      </div>`
+    :'';
+
+  const actionBtns=canEdit?`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--b1)">
+      ${!isCompleted?`<button class="btn btn-ac btn-sm" onclick="markBlockComplete('${id}')">✅ Complete</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditBlockModal('${id}')">✏️ Edit</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();openRescheduleBlock('${id}')">📅 Reschedule</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteBlock('${id}')">🗑 Delete</button>
+      ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete series</button>`:''}
+    </div>`
+    :`<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`;
+
+  openModal(`<div class="modal-title">${b.label}<button class="modal-close" onclick="closeModal()">×</button></div>
+    ${completedBanner}
+    ${brandHTML}
+    <div style="display:grid;gap:10px;font-size:15px;padding:4px 0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Person</span>
+        <strong>${u.name}</strong>
       </div>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
-    return;
-  }
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Date</span>
+        <strong>${whenStr}</strong>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Time</span>
+        <strong>${sl} – ${el}</strong>
+      </div>
+      ${b.desc?`<div style="margin-top:4px;padding:10px 12px;background:var(--s2);border-radius:var(--r);font-size:14px;color:var(--t2);line-height:1.7">${b.desc}</div>`:''}
+    </div>
+    ${actionBtns}`);
+}
 
-  // Build hour options
+function openEditBlockModal(id){
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const u=getUser(data,b.userId);
+  const whenStr=b.date||'—';
   const hourOpts=(selected)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{
     const h=HOURS_RANGE_START+i;
     const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
     return `<option value="${h}" ${h===selected?'selected':''}>${l}</option>`;
   }).join('');
-
   openModal(`<div class="modal-title">✏️ Edit Block<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">${whenStr} · 👤 ${u.name}</div>
+    <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">📅 ${whenStr} · 👤 ${u.name}</div>
     <div class="form-row"><label class="form-label">Label</label>
       <input class="form-input" id="be-label" type="text" value="${b.label.replace(/"/g,'&quot;')}">
+    </div>
+    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">(optional)</span></label>
+      <textarea class="form-textarea" id="be-desc" style="min-height:70px;font-size:14px">${(b.desc||'').replace(/</g,'&lt;')}</textarea>
     </div>
     <div class="form-row"><label class="form-label">Color</label>
       <input type="color" id="be-color" value="${b.color||'#3acca0'}" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
@@ -10856,53 +10922,19 @@ function openBlockDetail(id){
       <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete this</button>
-      ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete this & future</button>`:''}
-      <button class="btn btn-ghost btn-sm" onclick="closeModal();openRescheduleBlock('${id}')">📅 Reschedule</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
     </div>`);
 }
 
-function showFixedBlockInfo(label, time, userId){
-  const data=D();const u=getUser(data,userId);
-  openModal(`<div class="modal-title">🔒 ${label}<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div style="font-size:15px;display:grid;gap:10px">
-      <div><span style="color:var(--t2)">Person:</span> <strong>${u.name}</strong></div>
-      <div><span style="color:var(--t2)">Time:</span> <strong>${time}</strong></div>
-      <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;padding:8px 12px;background:var(--s2);border-radius:var(--r)">🔒 This is a fixed recurring block and cannot be edited.</div>
-    </div>`);
-}
-
-function saveBlockEdit(id){
+function markBlockComplete(id){
   const data=D();
   const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
-  const label=document.getElementById('be-label')?.value.trim();
-  const startHour=parseInt(document.getElementById('be-start')?.value);
-  const endHour=parseInt(document.getElementById('be-end')?.value);
-  const color=document.getElementById('be-color')?.value||b.color;
-  if(!label){alert('Enter a label');return;}
-  if(endHour<=startHour){alert('End time must be after start time');return;}
-  b.label=label;b.startHour=startHour;b.endHour=endHour;b.color=color;
+  b.completed=true;
+  b.completedAt=new Date().toISOString().split('T')[0];
+  b.color='#c8f04a'; // green
   save(data);closeModal();renderPage();
-  showAIToast('✓ Block updated');
-}
-function deleteBlock(id){
-  const data=D();
-  const block=data.scheduleBlocks.find(b=>b.id===id);
-  if(block?.contentId){
-    const c=data.contents.find(x=>x.id===block.contentId);
-    if(c){
-      if(!c.calScheduled)c.calScheduled={};
-      c.calScheduled[S.user.id]=false;
-      // Clear personal due date so it goes back to job list
-      if(!c.dueDates)c.dueDates={};
-      c.dueDates[S.user.id]='';
-    }
-  }
-  data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);
-  saveNow(data);closeModal();renderPage();
-  showAIToast('↩ Job moved back to list');
+  showAIToast('✅ Block marked as completed');
 }
 
 // ===================== ADS EDIT =====================
