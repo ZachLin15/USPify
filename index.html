@@ -10936,7 +10936,20 @@ function markBlockComplete(id){
   save(data);closeModal();renderPage();
   showAIToast('✅ Block marked as completed');
 }
-
+function saveBlockEdit(id){
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const label=document.getElementById('be-label')?.value.trim();
+  const startHour=parseInt(document.getElementById('be-start')?.value);
+  const endHour=parseInt(document.getElementById('be-end')?.value);
+  const color=document.getElementById('be-color')?.value||b.color;
+  const newDesc=document.getElementById('be-desc')?.value.trim()||'';
+  if(!label){alert('Enter a label');return;}
+  if(endHour<=startHour){alert('End time must be after start time');return;}
+  b.label=label;b.startHour=startHour;b.endHour=endHour;b.color=color;b.desc=newDesc;
+  save(data);closeModal();renderPage();
+  showAIToast('✓ Block updated');
+}
 // ===================== ADS EDIT =====================
 function openEditAdModal(brandId,month){
   const data=D();const b=getBrand(data,brandId);const m=data.adMetrics.find(x=>x.brandId===brandId&&x.month===month)||{budgetAlloc:0,amountSpent:0,messages:0,comments:0,appointments:0,sales:0,gSheetUrl:''};
