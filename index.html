@@ -4464,17 +4464,41 @@ function calDrop(event,newDate){
   event.preventDefault();
   const contentId=event.dataTransfer.getData('text/plain');
   if(!contentId||!newDate) return;
-  if(!S._calPendingDates) S._calPendingDates={};
-  S._calPendingDates[contentId]=newDate;
-  // Optimistically update local data for instant visual
   const data=D();
   const c=data.contents.find(x=>x.id===contentId);
-  if(c){
+  if(!c) return;
+  const isManager=isManagerUser(S.user);
+  const doMove=(reason)=>{
+    const oldDate=c.postingDate||'';
+    if(!S._calPendingDates) S._calPendingDates={};
+    S._calPendingDates[contentId]=newDate;
     c.postingDate=newDate;
+    if(!isManager&&reason){
+      logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
+    }
     localStorage.setItem(KEY,JSON.stringify(data));
+    renderPageOnly();
+    showAIToast('📅 Date moved — click Save to confirm');
+  };
+  if(isManager){
+    doMove('');
+  } else {
+    openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
+      <div style="font-size:14px;color:var(--t2);margin-bottom:14px;line-height:1.6">Moving <strong>${c.title}</strong> to <strong>${newDate}</strong>. Please provide a reason — all team members will be notified.</div>
+      <div class="form-row">
+        <label class="form-label">Reason</label>
+        <textarea class="form-textarea" id="cal-rs-reason" placeholder="e.g. Client requested date change, shooting conflict..." style="min-height:90px;font-size:15px"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-ac" onclick="
+          const r=document.getElementById('cal-rs-reason').value.trim();
+          if(!r){alert('Please enter a reason.');return;}
+          closeModal();
+          (${doMove.toString()})(r);
+        ">Confirm Reschedule</button>
+      </div>`);
   }
-  renderPageOnly();
-  showAIToast('📅 Date moved — click Save to confirm');
 }
 
 function brandCalNav(dir){
@@ -4684,10 +4708,55 @@ function openMetaSettingsModal(){
     <div style="margin-bottom:6px;font-size:13px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em">Ad Account ID per Brand</div>
     ${brandRows}
     <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete this</button>
-      ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete this & future</button>`:''}
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
+      <button class="btn btn-ac" onclick="saveMetaSettingsFromModal()">Save</button>
+    </div>`);
+}
+
+function openRescheduleBlock(id){
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const isManager=isManagerUser(S.user);
+  const doReschedule=(newDate, newStart, newEnd, reason)=>{
+    const oldDate=b.date||'';
+    const oldLabel=b.label;
+    b.date=newDate;
+    b.startHour=newStart;
+    b.endHour=newEnd;
+    if(!isManager){
+      logReschedule(data, oldLabel, oldDate+(b.startHour?` ${b.startHour}:00`:''), newDate+(newStart?` ${newStart}:00`:''), reason, S.user.id);
+    }
+    save(data);closeModal();renderPage();
+    showAIToast('📅 Block rescheduled');
+  };
+  const hourOpts=(sel)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{
+    const h=HOURS_RANGE_START+i;
+    const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+    return `<option value="${h}" ${h===sel?'selected':''}>${l}</option>`;
+  }).join('');
+  openModal(`<div class="modal-title">📅 Reschedule Block<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:12px">${b.label}</div>
+    <div class="form-row"><label class="form-label">New Date</label>
+      <input class="form-input" id="rs-date" type="date" value="${b.date||''}">
+    </div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start</label><select class="form-select" id="rs-start">${hourOpts(b.startHour)}</select></div>
+      <div><label class="form-label">End</label><select class="form-select" id="rs-end">${hourOpts(b.endHour)}</select></div>
+    </div>
+    ${!isManager?`<div class="form-row"><label class="form-label">Reason (required)</label>
+      <textarea class="form-textarea" id="rs-reason" placeholder="e.g. Client call conflict, public holiday..." style="min-height:80px;font-size:15px"></textarea>
+    </div>`:''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="
+        const nd=document.getElementById('rs-date').value;
+        const ns=parseInt(document.getElementById('rs-start').value);
+        const ne=parseInt(document.getElementById('rs-end').value);
+        ${!isManager?`const nr=document.getElementById('rs-reason').value.trim();if(!nr){alert('Please enter a reason.');return;}`:'const nr=\"\";'}
+        if(!nd){alert('Please select a date.');return;}
+        if(ne<=ns){alert('End must be after start.');return;}
+        (${doReschedule.toString()})(nd,ns,ne,nr);
+      ">Confirm</button>
     </div>`);
 }
 
@@ -10786,7 +10855,9 @@ function openBlockDetail(id){
       <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteBlock('${id}')">🗑 Delete this</button>
+      ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete this & future</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();openRescheduleBlock('${id}')">📅 Reschedule</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
     </div>`);
@@ -11408,9 +11479,104 @@ function getNotifCount(data){
     const _7dAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
     delCount=(data.deletionLog||[]).filter(e=>!e.dismissedBy.includes(uid)&&e.deletedById!==uid&&(e.deletedAt||'')>=_7dAgo).length;
   }
-  return seen.size+delCount;
+  // Reschedule notifications — visible to everyone except the person who moved it
+  const _7dAgoRs=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
+  const rsCount=(data.rescheduleLog||[]).filter(e=>
+    !e.dismissedBy.includes(uid)&&
+    e.movedBy!==uid&&
+    (e.movedAt||'')>=_7dAgoRs
+  ).length;
+  return seen.size+delCount+rsCount;
+}
+function promptReschedule(onConfirm){
+  openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:14px;color:var(--t2);margin-bottom:14px;line-height:1.6">Please provide a reason for rescheduling. All team members will be notified.</div>
+    <div class="form-row">
+      <label class="form-label">Reason</label>
+      <textarea class="form-textarea" id="reschedule-reason" placeholder="e.g. Client requested date change, shooting conflict..." style="min-height:90px;font-size:15px"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="
+        const r=document.getElementById('reschedule-reason').value.trim();
+        if(!r){alert('Please enter a reason.');return;}
+        closeModal();
+        (${onConfirm.toString()})(r);
+      ">Confirm Reschedule</button>
+    </div>`);
 }
 
+function logReschedule(data, label, fromDate, toDate, reason, moverUserId){
+  if(!Array.isArray(data.rescheduleLog)) data.rescheduleLog=[];
+  const entry={
+    id:'rs'+uid(),
+    label,
+    fromDate,
+    toDate,
+    reason,
+    movedBy:moverUserId,
+    movedByName:getUser(data,moverUserId)?.name||moverUserId,
+    movedAt:new Date().toISOString().split('T')[0],
+    dismissedBy:[]
+  };
+  data.rescheduleLog.push(entry);
+  if(data.rescheduleLog.length>60) data.rescheduleLog=data.rescheduleLog.slice(-60);
+}
+
+function dismissRescheduleNotif(entryId){
+  const data=D();
+  if(!Array.isArray(data.rescheduleLog)) return;
+  const entry=data.rescheduleLog.find(e=>e.id===entryId);
+  if(!entry) return;
+  if(!entry.dismissedBy.includes(S.user.id)) entry.dismissedBy.push(S.user.id);
+  save(data);closeNotifPanel();renderTopbar();
+}
+function openRescheduleBlock(id){
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const isManager=isManagerUser(S.user);
+  const hourOpts=(sel)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{
+    const h=HOURS_RANGE_START+i;
+    const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+    return `<option value="${h}" ${h===sel?'selected':''}>${l}</option>`;
+  }).join('');
+  openModal(`<div class="modal-title">📅 Reschedule Block<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:12px">${b.label}</div>
+    <div class="form-row"><label class="form-label">New Date</label>
+      <input class="form-input" id="rs-date" type="date" value="${b.date||''}">
+    </div>
+    <div class="form-row-2">
+      <div><label class="form-label">Start</label><select class="form-select" id="rs-start">${hourOpts(b.startHour)}</select></div>
+      <div><label class="form-label">End</label><select class="form-select" id="rs-end">${hourOpts(b.endHour)}</select></div>
+    </div>
+    ${!isManager?`<div class="form-row"><label class="form-label">Reason (required)</label>
+      <textarea class="form-textarea" id="rs-reason" placeholder="e.g. Client call conflict, public holiday..." style="min-height:80px;font-size:15px"></textarea>
+    </div>`:''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="confirmRescheduleBlock('${id}',${isManager})">Confirm</button>
+    </div>`);
+}
+
+function confirmRescheduleBlock(id, isManager){
+  const nd=document.getElementById('rs-date').value;
+  const ns=parseInt(document.getElementById('rs-start').value);
+  const ne=parseInt(document.getElementById('rs-end').value);
+  const nr=isManager?'':(document.getElementById('rs-reason')?.value.trim()||'');
+  if(!nd){alert('Please select a date.');return;}
+  if(ne<=ns){alert('End must be after start.');return;}
+  if(!isManager&&!nr){alert('Please enter a reason.');return;}
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const oldDate=b.date||'';
+  const oldStart=b.startHour;
+  b.date=nd;b.startHour=ns;b.endHour=ne;
+  if(!isManager&&nr){
+    logReschedule(data,b.label,`${oldDate} ${oldStart}:00`,`${nd} ${ns}:00`,nr,S.user.id);
+  }
+  save(data);closeModal();renderPage();
+  showAIToast('📅 Block rescheduled');
+}
 function renderNotifBell(data){
   const count=getNotifCount(data);
   const hasAlerts=count>0;
@@ -11608,6 +11774,32 @@ function renderNotifPanel(){
               </div>
             </div>
             <button onclick="dismissDeletionNotif('${entry.logId}')" title="Acknowledge" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
+          </div>`).join(''));
+    }
+  }
+
+  // ── RESCHEDULE NOTIFICATIONS — for everyone ──────────────────────────────
+  if(Array.isArray(data.rescheduleLog)){
+    const _7dAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
+    const rsEntries=data.rescheduleLog.filter(e=>
+      !e.dismissedBy.includes(uid)&&
+      e.movedBy!==uid&&
+      (e.movedAt||'')>=_7dAgo
+    );
+    if(rsEntries.length){
+      sections.push(`<div class="np-section-header" style="background:var(--blud);color:var(--blu)">📅 RESCHEDULED (${rsEntries.length})</div>`
+        +rsEntries.map(e=>`
+          <div class="np-item" style="border-left:3px solid var(--blu)">
+            <div class="np-icon" style="background:var(--blud);color:var(--blu);font-size:18px;flex-shrink:0">📅</div>
+            <div class="np-info" style="flex:1">
+              <div class="np-name">${e.label}</div>
+              <div class="np-meta">
+                <span style="color:var(--blu);font-weight:700">Rescheduled by ${e.movedByName}</span> on ${e.movedAt}<br>
+                <span style="color:var(--t3)">${e.fromDate} → ${e.toDate}</span><br>
+                <span style="color:var(--t2);font-style:italic">"${e.reason}"</span>
+              </div>
+            </div>
+            <button onclick="dismissRescheduleNotif('${e.id}')" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t4)'">×</button>
           </div>`).join(''));
     }
   }
