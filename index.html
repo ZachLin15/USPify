@@ -4319,9 +4319,10 @@ function calDropTodoMonth(e,dateStr){
 function initCalendarInteractions(){
   try{
     if(S.calView!=='day'&&S.calView!=='week') return;
+    if(S._calScrolled) return; // only auto-scroll once per page load
+    S._calScrolled=true;
     const now=new Date();
     const top=(now.getHours()-7)*90+(now.getMinutes()/60)*90;
-    // Scroll the page to show current time (offset by topbar ~72px)
     setTimeout(()=>{window.scrollTo({top:Math.max(0,top+72-200),behavior:'smooth'});},80);
   }catch(e){}
 }
