@@ -4315,7 +4315,12 @@ function calDropTodoMonth(e,dateStr){
     </div>
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="calDropConfirm('${contentId}','${dateStr}')">📌 Add to Calendar</button></div>`);
 }
-
+function autoExpandTextareas(){
+  document.querySelectorAll('textarea[style*="overflow:hidden"]').forEach(ta=>{
+    ta.style.height='auto';
+    ta.style.height=ta.scrollHeight+'px';
+  });
+}
 function initCalendarInteractions(){
   try{
     if(S.calView!=='day'&&S.calView!=='week') return;
@@ -6620,6 +6625,7 @@ function renderDetailPage(id, forceTab){
   `;
 
   document.getElementById('detail-overlay').classList.add('open');
+  setTimeout(autoExpandTextareas,50);
 }
 function startEditTitle(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
@@ -7919,7 +7925,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Brief / Concept Paragraph</div>
         <span class="idea-section-hint">Describe the idea, angle, target audience</span>
       </div>
-      <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:120px;line-height:1.8;font-size:15px;border-color:${color}44${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
+      <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="min-height:120px;height:auto;line-height:1.8;font-size:15px;border-color:${color}44;resize:none;overflow:hidden;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -7948,7 +7954,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Video Script / Storyboard</div>
         <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
       </div>
-      <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}')" style="min-height:180px;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44${isReadOnly?';opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
+      <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="min-height:180px;height:auto;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44;resize:none;overflow:hidden;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
     </div>
 
     ${submitBtnHTML}
