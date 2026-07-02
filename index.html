@@ -11141,33 +11141,18 @@ function openEditBlockModal(id){
   const data=D();
   const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
   const u=getUser(data,b.userId);
-  const whenStr=b.date||'—';
+  const isTask=b.blockType==='task';
   const hourOpts=(selected)=>Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{
     const h=HOURS_RANGE_START+i;
     const l=h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
     return `<option value="${h}" ${h===selected?'selected':''}>${l}</option>`;
   }).join('');
-  openModal(`<div class="modal-title">✏️ Edit Block<button class="modal-close" onclick="closeModal()">×</button></div>
-    <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">📅 ${whenStr} · 👤 ${u.name}</div>
+  openModal(`<div class="modal-title">✏️ Edit ${isTask?'Task':'Block'}<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px">👤 ${u.name}</div>
     <div class="form-row"><label class="form-label">Label</label>
       <input class="form-input" id="be-label" type="text" value="${b.label.replace(/"/g,'&quot;')}">
     </div>
-    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">(optional)</span></label>
-      <textarea class="form-textarea" id="be-desc" style="min-height:70px;font-size:14px">${(b.desc||'').replace(/</g,'&lt;')}</textarea>
-    </div>
-    <div class="form-row"><label class="form-label">Color</label>
-      <input type="color" id="be-color" value="${b.color||'#3acca0'}" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
-    </div>
-    <div class="form-row-2">
-      <div><label class="form-label">Start</label><select class="form-select" id="be-start">${hourOpts(b.startHour)}</select></div>
-      <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
-    </div>`);
-}
-
+    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">
 function markBlockComplete(id){
   const data=D();
   const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
@@ -11181,15 +11166,25 @@ function saveBlockEdit(id){
   const data=D();
   const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
   const label=document.getElementById('be-label')?.value.trim();
-  const startHour=parseInt(document.getElementById('be-start')?.value);
-  const endHour=parseInt(document.getElementById('be-end')?.value);
   const color=document.getElementById('be-color')?.value||b.color;
   const newDesc=document.getElementById('be-desc')?.value.trim()||'';
   if(!label){alert('Enter a label');return;}
-  if(endHour<=startHour){alert('End time must be after start time');return;}
-  b.label=label;b.startHour=startHour;b.endHour=endHour;b.color=color;b.desc=newDesc;
+  b.label=label;b.color=color;b.desc=newDesc;
+  if(b.blockType==='task'){
+    const taskStart=document.getElementById('be-task-start')?.value||b.taskStart||'';
+    const deadline=document.getElementById('be-deadline')?.value||b.deadline||'';
+    if(!deadline){alert('Please set a deadline.');return;}
+    if(taskStart&&taskStart>deadline){alert('Start date must be before or equal to deadline.');return;}
+    b.taskStart=taskStart;
+    b.deadline=deadline;
+  } else {
+    const startHour=parseInt(document.getElementById('be-start')?.value);
+    const endHour=parseInt(document.getElementById('be-end')?.value);
+    if(endHour<=startHour){alert('End time must be after start time');return;}
+    b.startHour=startHour;b.endHour=endHour;
+  }
   save(data);closeModal();renderPage();
-  showAIToast('✓ Block updated');
+  showAIToast('✓ Updated');
 }
 // ===================== ADS EDIT =====================
 function openEditAdModal(brandId,month){
