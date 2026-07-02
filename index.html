@@ -4077,7 +4077,7 @@ function renderCalendar(){
         </div>
         ${wkDays.map(d=>{
           const ds=d.toISOString().split('T')[0];
-          const dayTasks=taskBlocks.filter(b=>!b.completed&&b.deadline>=ds&&(b.taskStart||b.deadline)<=ds);
+          const dayTasks=taskBlocks.filter(b=>!b.completed&&ds<=(b.deadline||'')&&ds>=(b.taskStart||b.deadline||''));
           const isT=ds===todayStr;
           return `<div style="border-right:1px solid var(--b1);padding:3px 4px;min-height:28px;${isT?'background:rgba(200,240,74,0.03)':''}">
             ${dayTasks.map(b=>{
@@ -4134,7 +4134,7 @@ function renderCalendar(){
           <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${dayBlocks.map(b=>`<div style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}22;color:${b.color};margin-bottom:2px;font-weight:600;word-break:break-word;line-height:1.4;display:flex;align-items:flex-start;gap:3px"><span onclick="openBlockDetail('${b.id}')" style="flex:1;cursor:pointer">${b.label}</span>${b.contentId?`<span onclick="event.stopPropagation();deleteBlock('${b.id}')" style="cursor:pointer;opacity:.5;font-size:13px;flex-shrink:0" title="Remove from calendar">×</span>`:''}</div>`).join('')}
           ${(()=>{
-            const dayTasks=userBlocks.filter(b=>b.blockType==='task'&&!b.completed&&b.deadline>=ds&&(b.taskStart||b.deadline)<=ds);
+            const dayTasks=userBlocks.filter(b=>b.blockType==='task'&&!b.completed&&ds<=(b.deadline||'')&&ds>=(b.taskStart||b.deadline||''));
             return dayTasks.map(b=>{
               const isLate=b.deadline<todayStr;
               return `<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${isLate?'var(--redd)':b.color+'22'};color:${isLate?'var(--red)':b.color};border-left:2px solid ${isLate?'var(--red)':b.color};margin-bottom:2px;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.label}">✅ ${b.label}</div>`;
@@ -4763,6 +4763,23 @@ function openAddBlockModalDate(dateStr, startH){
       </div>
     </div>
 
+    <!-- Attachments (both modes) -->
+    <div class="form-row">
+      <label class="form-label">Attachments <span style="font-weight:400;color:var(--t3)">(optional)</span></label>
+      <div id="sb-attachments-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);cursor:pointer;font-size:13px;color:var(--t2);transition:border-color .15s" onmouseenter="this.style.borderColor='var(--ac)'" onmouseleave="this.style.borderColor='var(--b2)'">
+          📎 Upload file
+          <input type="file" id="sb-attach-file" multiple style="display:none" onchange="handleBlockAttachFile(event)">
+        </label>
+        <div style="display:flex;gap:6px;flex:1;min-width:180px">
+          <input class="form-input" id="sb-attach-link" type="url" placeholder="Paste Drive link..." style="flex:1;font-size:13px">
+          <button class="btn btn-ghost btn-sm" onclick="handleBlockAttachLink()">+ Add</button>
+        </div>
+      </div>
+      <div id="sb-attach-status" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
+    </div>
+
     <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="saveBlockDate('${dateStr}')">Add</button></div>`);
 }
 
@@ -4785,10 +4802,10 @@ function saveBlockDate(dateStr){
   const brandId=document.getElementById('sb-brand')?.value||'';
   const data=D();
   const selectedBrand=brandId&&brandId!=='other'?data.brands.find(b=>b.id===brandId):null;
+  const attachments=(window._blockAttachments||[]).filter(a=>a.url).map(a=>({id:a.id,name:a.name,type:a.type,url:a.url,fileId:a.fileId}));
+  window._blockAttachments=[];
 
-  // Check which mode is active
   const isTaskMode=document.getElementById('sb-task-fields')?.style.display!=='none';
-
   if(isTaskMode){
     const taskStart=document.getElementById('sb-task-start')?.value||new Date().toISOString().split('T')[0];
     const deadline=document.getElementById('sb-deadline')?.value||dateStr;
@@ -4796,38 +4813,14 @@ function saveBlockDate(dateStr){
     if(taskStart>deadline){alert('Start date must be before or equal to deadline.');return;}
     const taskColor=document.getElementById('sb-color-task')?.value||'#5a9fff';
     const finalColor=selectedBrand?selectedBrand.color:taskColor;
-    data.scheduleBlocks.push({id:'sb'+uid(),userId,deadline,taskStart,label,color:finalColor,blockType:'task',...(desc?{desc}:{}),...(brandId?{brandId}:{})});
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,deadline,taskStart,label,color:finalColor,blockType:'task',...(desc?{desc}:{}),...(brandId?{brandId}:{}),...(attachments.length?{attachments}:{})});
     save(data);closeModal();renderPage();
     showAIToast('✅ Deadline task added');
     return;
   }
-
   if(endHour<=startHour){alert('End must be after start');return;}
   const finalColor=selectedBrand?selectedBrand.color:color;
-  const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];
-  const checkedDows=dayDefs.filter(d=>document.getElementById('sb-repeat-'+d.k)?.checked).map(d=>d.dow);
-
-  if(!checkedDows.length){
-    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color:finalColor,...(desc?{desc}:{}),...(brandId?{brandId}:{})});
-  } else {
-    const groupId='rg'+uid();
-    const WEEKS_AHEAD=12;
-    const base=new Date(dateStr+'T12:00:00');
-    const baseDow=base.getDay();
-    const mon=new Date(base);mon.setDate(base.getDate()-((baseDow+6)%7));
-    for(let w=0;w<WEEKS_AHEAD;w++){
-      checkedDows.forEach(dow=>{
-        const offsetFromMon=(dow+6)%7;
-        const occ=new Date(mon);occ.setDate(mon.getDate()+w*7+offsetFromMon);
-        const occStr=occ.toISOString().split('T')[0];
-        if(occStr<dateStr) return;
-        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color:finalColor,recurringGroupId:groupId,...(desc?{desc}:{}),...(brandId?{brandId}:{})});
-      });
-    }
-  }
-  save(data);closeModal();renderPage();
-  showAIToast(checkedDows.length?'✓ Recurring block added (next 12 weeks)':'✓ Block added');
-}// ===================== ADS =====================
+  const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];// ===================== ADS =====================
 // ===================== META ADS SETTINGS =====================
 function getMetaSettings(){
   try{return JSON.parse(localStorage.getItem('uspify_meta')||'{}');}catch(e){return {};}
@@ -10991,7 +10984,9 @@ function openBlockDetail(id){
   const isAdmin=isAdminUser(S.user);
   const canEdit=isAdmin||isOwner;
   const isCompleted=!!b.completed;
-  const whenStr=b.date?`${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
+  const whenStr=b.blockType==='task'
+    ?(b.taskStart&&b.taskStart!==b.deadline?`${b.taskStart} → ${b.deadline} (deadline)`:b.deadline?`Due: ${b.deadline}`:'—')
+    :b.date?`${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
 
   // Brand info
   const brand=b.brandId&&b.brandId!=='other'?data.brands.find(x=>x.id===b.brandId):null;
@@ -11034,10 +11029,10 @@ function openBlockDetail(id){
         <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Date</span>
         <strong>${whenStr}</strong>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      ${b.blockType!=='task'?`<div style="display:flex;align-items:center;gap:8px">
         <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Time</span>
         <strong>${sl} – ${el}</strong>
-      </div>
+      </div>`:''}
       ${b.desc?`<div style="margin-top:4px;padding:10px 12px;background:var(--s2);border-radius:var(--r);font-size:14px;color:var(--t2);line-height:1.7">${b.desc}</div>`:''}
     </div>
     ${actionBtns}`);
