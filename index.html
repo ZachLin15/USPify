@@ -7937,7 +7937,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Brief / Concept Paragraph</div>
         <span class="idea-section-hint">Describe the idea, angle, target audience</span>
       </div>
-      <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="min-height:120px;height:auto;line-height:1.8;font-size:15px;border-color:${color}44;resize:none;overflow:hidden;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
+      <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="line-height:1.8;font-size:15px;border-color:${color}44;resize:vertical;min-height:120px;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" rows="${Math.max(4,((idea.paragraph||'').split('\n').length)+2)}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
     </div>
 
     <div class="idea-section">
@@ -7966,7 +7966,7 @@ function renderIdeationPanel(c, id){
         <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Video Script / Storyboard</div>
         <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
       </div>
-      <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="min-height:180px;height:auto;line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44;resize:none;overflow:hidden;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
+      <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44;resize:vertical;min-height:180px;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" rows="${Math.max(6,((idea.videoScript||'').split('\n').length)+2)}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
     </div>
 
     ${submitBtnHTML}
