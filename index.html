@@ -4911,6 +4911,23 @@ function openRescheduleBlock(id){
     </div>`);
 }
 
+function deleteBlock(id){
+  const data=D();
+  const block=data.scheduleBlocks.find(b=>b.id===id);
+  if(block?.contentId){
+    const c=data.contents.find(x=>x.id===block.contentId);
+    if(c){
+      if(!c.calScheduled)c.calScheduled={};
+      c.calScheduled[S.user.id]=false;
+      if(!c.dueDates)c.dueDates={};
+      c.dueDates[S.user.id]='';
+    }
+  }
+  data.scheduleBlocks=data.scheduleBlocks.filter(b=>b.id!==id);
+  saveNow(data);closeModal();renderPage();
+  showAIToast('🗑 Block deleted');
+}
+
 function deleteBlockSeries(groupId, fromDate){
   if(!confirm('Delete this and all future occurrences in this recurring series?'))return;
   const data=D();
