@@ -2687,18 +2687,15 @@ function renderJobTodoList(){
   const today=new Date().toISOString().split('T')[0];
   const jobs=getActiveJobsForUser(data,uid);
   const isContentCreator=S.user.role==='content_creator';
-
-  // For Leonard: also gather unstarted content for the selected/current month
   const targetMonth=S.dashMonthFilter||new Date().toISOString().slice(0,7);
   const unstartedForMonth=isContentCreator
     ? data.contents.filter(c=>
         isUnstartedContent(c)&&
         c.postingDate&&c.postingDate.startsWith(targetMonth)&&
         !jobs.some(j=>j.id===c.id)
-      ).sort((a,b)=>(a.postingDate||'').localeCompare(b.postingDate||''))
+      )
     : [];
 
-  // Upcoming calendar blocks for this user — separate from content jobs
   const upcomingBlocks=(data.scheduleBlocks||[])
     .filter(b=>b.userId===uid&&b.date&&b.date>=today&&!b.completed)
     .sort((a,b)=>(a.date+String(a.startHour).padStart(2,'0')).localeCompare(b.date+String(b.startHour).padStart(2,'0')))
@@ -2710,7 +2707,7 @@ function renderJobTodoList(){
 
   let html='';
 
-  // ── Scheduled calendar blocks — shown first, no scrolling needed ───────
+  // ── Scheduled calendar blocks — top ─────────────────────────────────────
   if(upcomingBlocks.length){
     const fmtH=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
     html+=`<div>
@@ -2724,9 +2721,7 @@ function renderJobTodoList(){
           <div style="width:10px;height:10px;border-radius:50%;background:${b.color||'#5a9fff'};flex-shrink:0;margin-top:1px"></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.label}</div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-              <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--t3)">${fmtH(b.startHour)}–${fmtH(b.endHour)}</span>
-            </div>
+            <div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:2px">${fmtH(b.startHour)}–${fmtH(b.endHour)}</div>
           </div>
           <span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isToday?'color:var(--ac);font-weight:700':'color:var(--t3)'}">${isToday?'Today':fmt(b.date)}</span>
         </div>`;
@@ -2734,49 +2729,51 @@ function renderJobTodoList(){
     </div>`;
   }
 
-  // ── Active jobs section ──────────────────────────────────────────────────
-  if(jobs.length){
-    const byBrand={};
-    jobs.forEach(c=>{
-      if(!byBrand[c.brandId]) byBrand[c.brandId]=[];
-      byBrand[c.brandId].push(c);
-    });
-    Object.values(byBrand).forEach(arr=>arr.sort((a,b)=>(a.postingDate||'9999').localeCompare(b.postingDate||'9999')));
-    html+=Object.entries(byBrand).map(([brandId,bJobs])=>{
-      const b=getBrand(data,brandId);
-      return `<div style="border-bottom:1px solid var(--b1)">
-        <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s2);position:sticky;top:0">
-          <div style="width:8px;height:8px;border-radius:50%;background:${b.color}"></div>
-          <span style="font-size:13px;font-weight:700;color:${b.color}">${b.name}</span>
-          <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${bJobs.length} active</span>
-        </div>
-        ${bJobs.map(c=>makeTodoJobRow(c,uid,today)).join('')}
-      </div>`;
-    }).join('');
-  }
+  // ── Active content jobs — flat, sorted by due date ───────────────────────
+  const allJobs=[
+    ...jobs.map(c=>({c,type:'job'})),
+    ...unstartedForMonth.map(c=>({c,type:'unstarted'})),
+  ].sort((a,b)=>{
+    const da=a.c.dueDates?.[uid]||a.c.postingDate||'9999';
+    const db=b.c.dueDates?.[uid]||b.c.postingDate||'9999';
+    return da.localeCompare(db);
+  });
 
-  // ── Unstarted queue section (Leonard only) ──────────────────────────────
-  if(unstartedForMonth.length){
-    const monthLabel=new Date(targetMonth+'-01').toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
-    html+=`<div>
-      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s3);position:sticky;top:0;border-bottom:1px solid var(--b1)">
-        <span style="font-size:13px;font-weight:700;color:var(--t2)">💡 Ideation Queue — ${monthLabel}</span>
-        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${unstartedForMonth.length} piece${unstartedForMonth.length!==1?'s':''}</span>
+  if(allJobs.length){
+    html+=`<div style="border-bottom:1px solid var(--b1)">
+      <div style="display:flex;align-items:center;gap:7px;padding:7px 14px 5px;background:var(--s2);position:sticky;top:0;border-bottom:1px solid var(--b1)">
+        <span style="font-size:13px;font-weight:700;color:var(--t2)">📋 Content Jobs</span>
+        <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${allJobs.length} active</span>
       </div>
-      ${unstartedForMonth.map(c=>{
+      ${allJobs.map(({c,type})=>{
         const b=getBrand(data,c.brandId);
-        const isLate=c.postingDate&&c.postingDate<today;
-        return `<div class="todo-item" onclick="openContentDetail('${c.id}')" style="cursor:pointer;opacity:0.8">
-          <div style="width:10px;height:10px;border-radius:50%;background:#88878044;flex-shrink:0;margin-top:1px;border:1.5px dashed var(--t3)"></div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)" title="${c.title}">${c.title}</div>
-            <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
-              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:#88878022;color:#888780;font-weight:700">💡 Ideation</span>
-              <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${b.color}18;color:${b.color}">${b.name}</span>
-            </div>
+        const st=getStatus(data,c.statusId);
+        const dueDate=c.dueDates?.[uid]||c.postingDate||'';
+        const isLate=dueDate&&dueDate<today;
+        const daysLeft=dueDate?Math.round((new Date(dueDate)-new Date(today))/(1000*60*60*24)):null;
+        const isToday=dueDate===today;
+        const prog=getProgressForContent(c);
+        const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
+        const isAmend=openTask&&openTask.label&&openTask.label.toLowerCase().includes('amendment');
+        const stageColor=isAmend?'var(--red)':getJobStageColor(c.statusId);
+        const stageLabel=isAmend?'🔄 Amendment':type==='unstarted'?'💡 Ideation':getJobStageLabel(c.statusId);
+        const urgColor=isLate?'var(--red)':isToday?'var(--red)':daysLeft!==null&&daysLeft<=2?'var(--amb)':daysLeft!==null&&daysLeft<=5?'var(--ora)':'var(--t3)';
+        const urgLabel=isLate?`${Math.abs(daysLeft)}d overdue`:isToday?'TODAY':daysLeft===1?'1d left':daysLeft!==null?`${daysLeft}d left`:'';
+        const tabTarget=getDefaultTabForContent(c);
+        return `<div class="todo-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px">
+          <div style="display:flex;align-items:center;gap:8px;width:100%">
+            <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0"></div>
+            <span style="font-size:14px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.title}">${c.title}</span>
+            ${urgLabel?`<span style="font-size:11px;font-weight:700;color:${urgColor};font-family:'DM Mono',monospace;flex-shrink:0;white-space:nowrap">${urgLabel}</span>`:''}
           </div>
-          ${c.postingDate?`<span style="font-size:11px;font-family:'DM Mono',monospace;white-space:nowrap;${isLate?'color:var(--red);font-weight:700':'color:var(--t3)'}">📅 ${fmt(c.postingDate)}${isLate?' ⚠':''}</span>`:''}
-          <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">→</span>
+          <div style="display:flex;align-items:center;gap:8px;width:100%;padding-left:18px">
+            <span style="font-size:11px;font-family:'DM Mono',monospace;padding:1px 6px;border-radius:8px;background:${isAmend?'var(--redd)':stageColor+'22'};color:${stageColor};font-weight:700;white-space:nowrap">${stageLabel}</span>
+            <span style="font-size:11px;font-weight:700;color:${b.color};font-family:'DM Mono',monospace;white-space:nowrap">${b.name}</span>
+            <div style="flex:1;background:var(--s3);border-radius:3px;height:4px;overflow:hidden;min-width:40px">
+              <div style="height:100%;width:${prog}%;background:${st.color};border-radius:3px;transition:width .3s"></div>
+            </div>
+            <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">${prog}%</span>
+          </div>
         </div>`;
       }).join('')}
     </div>`;
@@ -2784,7 +2781,6 @@ function renderJobTodoList(){
 
   return html;
 }
-
 function buildTodoPanelHTML(){
   const data=D();
   const uid=S.user.id;
@@ -3033,21 +3029,49 @@ function renderDashboard(){
       }).join('')
     : `<div class="todo-empty">✅ No deadlines in the next 5 days!</div>`;
 
-  // ── Assemble 3-column dashboard ─────────────────────────────────────────
+  // ── My Schedule panel ────────────────────────────────────────────────────
+  const uid=S.user.id;
+  const schedBlocks=(data.scheduleBlocks||[])
+    .filter(b=>b.userId===uid&&b.date&&b.date>=today&&!b.completed)
+    .sort((a,b)=>(a.date+String(a.startHour).padStart(2,'0')).localeCompare(b.date+String(b.startHour).padStart(2,'0')));
+  const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr=tomorrow.toISOString().split('T')[0];
+  const nextWeek=new Date();nextWeek.setDate(nextWeek.getDate()+7);
+  const nextWeekStr=nextWeek.toISOString().split('T')[0];
+  const fmtH=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+  const schedGroups=[
+    {label:'Today',color:'var(--red)',blocks:schedBlocks.filter(b=>b.date===today)},
+    {label:'Tomorrow',color:'var(--amb)',blocks:schedBlocks.filter(b=>b.date===tomorrowStr)},
+    {label:'This week',color:'var(--blu)',blocks:schedBlocks.filter(b=>b.date>tomorrowStr&&b.date<=nextWeekStr)},
+    {label:'Later',color:'var(--t3)',blocks:schedBlocks.filter(b=>b.date>nextWeekStr)},
+  ];
+  const schedHTML=schedGroups.some(g=>g.blocks.length)?schedGroups.map(g=>{
+    if(!g.blocks.length) return '';
+    return `<div>
+      <div style="padding:6px 14px 4px;font-size:11px;font-weight:700;color:${g.color};font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;background:var(--s2);border-bottom:1px solid var(--b1)">${g.label}</div>
+      ${g.blocks.map(b=>{
+        const brand=b.brandId&&b.brandId!=='other'?data.brands.find(x=>x.id===b.brandId):null;
+        return `<div class="todo-item" onclick="nav('calendar')" style="cursor:pointer;flex-direction:column;align-items:flex-start;gap:4px;padding:10px 14px">
+          <div style="display:flex;align-items:center;gap:8px;width:100%">
+            <div style="width:10px;height:10px;border-radius:50%;background:${b.color||'#5a9fff'};flex-shrink:0"></div>
+            <span style="font-size:14px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.label}</span>
+            <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex-shrink:0">${fmtH(b.startHour)}–${fmtH(b.endHour)}</span>
+          </div>
+          ${brand||b.desc?`<div style="display:flex;align-items:center;gap:6px;padding-left:18px;flex-wrap:wrap">
+            ${brand?`<span style="font-size:11px;font-weight:700;color:${brand.color};font-family:'DM Mono',monospace">${brand.name}</span>`:''}
+            ${b.desc?`<span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${b.desc}</span>`:''}
+          </div>`:''}
+          ${b.date!==today?`<div style="padding-left:18px;font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${fmt(b.date)}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join(''):`<div class="todo-empty">📅 No upcoming blocks scheduled.</div>`;
+
+  // ── Assemble 2-column dashboard ─────────────────────────────────────────
   return statsHTML+`
-  <div class="dash-grid">
+  <div class="dash-grid" style="grid-template-columns:2fr 1fr">
 
-    <!-- Column 1: Deadline Alerts -->
-    <div class="dash-col">
-      <div class="dash-col-hdr">
-        <span style="font-size:16px">⏰</span>
-        <span class="dash-col-title">Deadline Alerts</span>
-        <span class="dash-col-sub">${reminders.length} within 5d</span>
-      </div>
-      <div class="dash-col-body">${deadlineColContent}</div>
-    </div>
-
-    <!-- Column 2: My Active Jobs -->
+    <!-- Column 1: My Active Jobs (expanded) -->
     <div class="dash-col">
       <div class="dash-col-hdr">
         <span style="font-size:16px">📋</span>
@@ -3057,30 +3081,18 @@ function renderDashboard(){
       <div class="dash-col-body" id="todo-panel-inner">${renderJobTodoList()}</div>
     </div>
 
-    <!-- Column 3: Brand Progress -->
+    <!-- Column 2: My Schedule -->
     <div class="dash-col">
       <div class="dash-col-hdr">
-        <span style="font-size:16px">📊</span>
-        <span class="dash-col-title">Brand Progress</span>
-        <button onclick="toggleAllBrands()" id="bp-toggle-all-btn" style="background:transparent;border:1px solid var(--b2);color:var(--t3);border-radius:5px;padding:2px 7px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .12s" onmouseenter="this.style.color='var(--ac)';this.style.borderColor='var(--ac)'" onmouseleave="this.style.color='var(--t3)';this.style.borderColor='var(--b2)'">Collapse all ▼</button>
+        <span style="font-size:16px">📅</span>
+        <span class="dash-col-title">My Schedule</span>
+        <span class="dash-col-sub">${schedBlocks.length} upcoming</span>
       </div>
-      <div class="dash-col-filters">
-        <select class="filter-select" style="font-size:12px;padding:3px 7px;flex:1" onchange="S.dashMonthFilter=this.value;renderPage()">
-          ${allMonths.map(m=>{const d=new Date(m+'-01');const label=d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});return`<option value="${m}" ${S.dashMonthFilter===m?'selected':''}>${label}</option>`;}).join('')}
-        </select>
-        <select class="filter-select" style="font-size:12px;padding:3px 7px;flex:1" onchange="S.dashSort=this.value;renderPage()">
-          <option value="name" ${S.dashSort==='name'?'selected':''}>Name</option>
-          <option value="posted" ${S.dashSort==='posted'?'selected':''}>Most posted</option>
-          <option value="progress" ${S.dashSort==='progress'?'selected':''}>In-progress</option>
-          <option value="quota" ${S.dashSort==='quota'?'selected':''}>Quota left</option>
-        </select>
-      </div>
-      <div class="dash-col-body">${brandCardsInner}</div>
+      <div class="dash-col-body">${schedHTML}</div>
     </div>
 
   </div>`;
 }
-
 // ===================== CONTENT TRACKER =====================
 function renderTracker(){
   const data=D();
