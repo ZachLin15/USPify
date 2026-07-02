@@ -4702,6 +4702,9 @@ function openAddBlockModalDate(dateStr, startH){
     <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${d.l}</span>
     <input type="checkbox" id="sb-repeat-${d.k}" style="width:17px;height:17px;cursor:pointer">
   </label>`).join('');
+  const brandOpts=`<option value="">— None —</option>`
+    +data.brands.map(br=>`<option value="${br.id}">${br.name}</option>`).join('')
+    +`<option value="other">Other (not brand-related)</option>`;
   openModal(`<div class="modal-title">+ Add Block — ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
 
     <!-- Mode toggle -->
