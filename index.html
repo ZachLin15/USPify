@@ -4896,7 +4896,30 @@ function saveBlockDate(dateStr){
   }
   if(endHour<=startHour){alert('End must be after start');return;}
   const finalColor=selectedBrand?selectedBrand.color:color;
-  const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];// ===================== ADS =====================
+  const dayDefs=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];
+  const checkedDows=dayDefs.filter(d=>document.getElementById('sb-repeat-'+d.k)?.checked).map(d=>d.dow);
+  if(!checkedDows.length){
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,date:dateStr,startHour,endHour,label,color:finalColor,...(desc?{desc}:{}),...(brandId?{brandId}:{}),...(attachments.length?{attachments}:{})});
+  } else {
+    const groupId='rg'+uid();
+    const WEEKS_AHEAD=12;
+    const base=new Date(dateStr+'T12:00:00');
+    const baseDow=base.getDay();
+    const mon=new Date(base);mon.setDate(base.getDate()-((baseDow+6)%7));
+    for(let w=0;w<WEEKS_AHEAD;w++){
+      checkedDows.forEach(dow=>{
+        const offsetFromMon=(dow+6)%7;
+        const occ=new Date(mon);occ.setDate(mon.getDate()+w*7+offsetFromMon);
+        const occStr=occ.toISOString().split('T')[0];
+        if(occStr<dateStr) return;
+        data.scheduleBlocks.push({id:'sb'+uid(),userId,date:occStr,startHour,endHour,label,color:finalColor,recurringGroupId:groupId,...(desc?{desc}:{}),...(brandId?{brandId}:{}),...(attachments.length?{attachments}:{})});
+      });
+    }
+  }
+  save(data);closeModal();renderPage();
+  showAIToast(checkedDows.length?'✓ Recurring block added (next 12 weeks)':'✓ Block added');
+}
+// ===================== ADS =====================
 // ===================== META ADS SETTINGS =====================
 function getMetaSettings(){
   try{return JSON.parse(localStorage.getItem('uspify_meta')||'{}');}catch(e){return {};}
