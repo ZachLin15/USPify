@@ -2700,7 +2700,7 @@ function renderJobTodoList(){
 
   // Upcoming calendar blocks for this user — separate from content jobs
   const upcomingBlocks=(data.scheduleBlocks||[])
-    .filter(b=>b.userId===uid&&b.date&&b.date>=today)
+    .filter(b=>b.userId===uid&&b.date&&b.date>=today&&!b.completed)
     .sort((a,b)=>(a.date+String(a.startHour).padStart(2,'0')).localeCompare(b.date+String(b.startHour).padStart(2,'0')))
     .slice(0,10);
 
@@ -2794,8 +2794,7 @@ function buildTodoPanelHTML(){
     ? data.contents.filter(c=>isUnstartedContent(c)&&c.postingDate&&c.postingDate.startsWith(targetMonth)&&!jobs.some(j=>j.id===c.id)).length
     : 0;
   const todayForBlocks=new Date().toISOString().split('T')[0];
-  const upcomingBlocksCount=(data.scheduleBlocks||[]).filter(b=>b.userId===uid&&b.date&&b.date>=todayForBlocks).length;
-  const totalCount=jobs.length+unstartedCount+upcomingBlocksCount;
+  const upcomingBlocksCount=(data.scheduleBlocks||[]).filter(b=>b.userId===uid&&b.date&&b.date>=todayForBlocks&&!b.completed).length;  const totalCount=jobs.length+unstartedCount+upcomingBlocksCount;
   return `<div class="todo-panel">
     <div class="todo-header">
       <span style="font-size:18px">📋</span>
