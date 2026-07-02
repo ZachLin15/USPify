@@ -4791,6 +4791,82 @@ function switchBlockMode(mode){
   document.getElementById('mode-timeblock').style.color=isTask?'var(--t2)':'#0f0f11';
   document.getElementById('mode-task').style.background=isTask?'var(--ac)':'transparent';
   document.getElementById('mode-task').style.color=isTask?'#0f0f11':'var(--t2)';
+}window._blockAttachments=[];
+
+function renderBlockAttachList(){
+  const list=document.getElementById('sb-attachments-list');
+  if(!list) return;
+  if(!window._blockAttachments.length){list.innerHTML='';return;}
+  list.innerHTML=window._blockAttachments.map((a,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border-radius:var(--r);border:1px solid var(--b1)">
+      <span style="font-size:16px">${a.type==='image'?'🖼':a.type==='video'?'🎬':a.type==='pdf'?'📄':'📁'}</span>
+      <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1)">${a.name}</span>
+      <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${a.source==='uploading'?'uploading…':a.source}</span>
+      <button onclick="window._blockAttachments.splice(${i},1);renderBlockAttachList()" style="background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:15px;padding:2px 4px" onmouseenter="this.style.color='var(--red)'" onmouseleave="this.style.color='var(--t3)'">×</button>
+    </div>`).join('');
+}
+
+async function handleBlockAttachFile(event){
+  const files=Array.from(event.target.files);
+  if(!files.length) return;
+  const statusEl=document.getElementById('sb-attach-status');
+  const DRIVE_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+  for(const file of files){
+    if(statusEl) statusEl.textContent=`Uploading ${file.name}…`;
+    const placeholder={id:'att'+uid(),name:file.name,type:file.type.startsWith('image/')?'image':file.type.startsWith('video/')?'video':file.type==='application/pdf'?'pdf':'file',source:'uploading',url:'',fileId:''};
+    window._blockAttachments.push(placeholder);
+    renderBlockAttachList();
+    try{
+      const base64=await new Promise((res,rej)=>{
+        const r=new FileReader();
+        r.onload=()=>res(r.result.split(',')[1]);
+        r.onerror=rej;
+        r.readAsDataURL(file);
+      });
+      const resp=await fetch(DRIVE_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({data:base64,mimeType:file.type,filename:file.name,brandName:'Blocks',contentName:'Attachments',folderType:'Block Attachments'})
+      });
+      const result=await resp.json();
+      if(result.error){throw new Error(result.error);}
+      placeholder.url=result.url;
+      placeholder.fileId=result.fileId;
+      placeholder.source='Drive';
+      renderBlockAttachList();
+    }catch(err){
+      placeholder.source='failed';
+      renderBlockAttachList();
+      console.error('Attachment upload failed:',err);
+    }
+  }
+  if(statusEl) statusEl.textContent='';
+  event.target.value='';
+}
+
+async function handleBlockAttachLink(){
+  const inp=document.getElementById('sb-attach-link');
+  if(!inp||!inp.value.trim()) return;
+  const rawLink=inp.value.trim();
+  const statusEl=document.getElementById('sb-attach-status');
+  if(statusEl) statusEl.textContent='Copying to Drive…';
+  const DRIVE_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+  try{
+    const resp=await fetch(DRIVE_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName:'Blocks',contentName:'Attachments',folderType:'Block Attachments'})
+    });
+    const result=await resp.json();
+    if(result.error){alert(result.error);if(statusEl)statusEl.textContent='';return;}
+    window._blockAttachments.push({id:'att'+uid(),name:result.name||'Attachment',type:result.detectedType||'drive',source:'Drive',url:result.url,fileId:result.fileId});
+    renderBlockAttachList();
+    inp.value='';
+    if(statusEl) statusEl.textContent='';
+  }catch(err){
+    console.error('Link attach failed:',err);
+    if(statusEl) statusEl.textContent='Failed — check link and try again';
+  }
 }
 function saveBlockDate(dateStr){
   const label=document.getElementById('sb-label').value.trim();if(!label){alert('Enter a label');return;}
