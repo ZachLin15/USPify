@@ -8625,8 +8625,17 @@ function getPIC(data, statusId, contentObj){
     const r=getWfReviewers();
     const contentType=contentObj?.type||'';
     const typeKey=contentType==='Video'?'video':contentType==='Reels'?'reels':contentType==='Carousel'?'carousel':'single';
-    // Try type-specific key first, then fall back to legacy key
-    const uid=r[`${brandId}:${typeKey}:${statusId}`]||r[`${brandId}:${statusId}`];
+    // Map flow step IDs to reviewer stage IDs
+    const stageMap={
+      'senior_approval_ideation':'ideation_review',
+      'senior_approval_video':'video_review',
+      'senior_approval_copy':'copywriting_review',
+      'senior_approval_design':'video_review',
+      'client_approval':'client_approval',
+      'posted':'posted',
+    };
+    const lookupId=stageMap[statusId]||statusId;
+    const uid=r[`${brandId}:${typeKey}:${lookupId}`]||r[`${brandId}:${lookupId}`];
     if(uid){const u=data.users.find(x=>x.id===uid);if(u)return u;}
   }
   // 3. Global role fallback
