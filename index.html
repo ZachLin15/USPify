@@ -1335,6 +1335,8 @@ async function cloudLoad(retries=3, delay=1000){
         tasks:settings.tasks||[],
         deletedBrandIds:settings.deletedBrandIds||[],
         deletionLog:settings.deletionLog||[],
+        wfReviewers:settings.wfReviewers||{},
+        rescheduleLog:settings.rescheduleLog||[],
         __savedBy:settings.__savedBy||'',
       };
       reapplyDefaultPasswords(data.users);
