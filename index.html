@@ -1378,7 +1378,7 @@ async function cloudSave(data){
     const by=S.user?.name||'?';
     const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
     const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
-    const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
+    const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],wfReviewers:data.wfReviewers||{},rescheduleLog:data.rescheduleLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
     // ALWAYS save ALL contents — never partial saves
     const allC=(data.contents||[]).filter(c=>c&&c.id);
     const chunks=[];
