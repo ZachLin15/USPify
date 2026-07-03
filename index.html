@@ -5470,9 +5470,9 @@ function renderSettings(){
 
 function getWfReviewers(){
   try{
-    const local=JSON.parse(localStorage.getItem('uspify_wf_reviewers')||'{}');
     const cloud=D().wfReviewers||{};
-    return {...cloud,...local};
+    const local=JSON.parse(localStorage.getItem('uspify_wf_reviewers')||'{}');
+    return Object.keys(cloud).length?cloud:local;
   }catch(e){return {};}
 }
 function saveWfReviewerSettings(){
