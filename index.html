@@ -5483,8 +5483,10 @@ function saveWfReviewerSettings(){
     });
   });
   localStorage.setItem('uspify_wf_reviewers',JSON.stringify(r));
-  showAIToast('✅ Saved');
+  console.log('SAVED WF REVIEWERS:', JSON.stringify(r));
+  showAIToast('✅ Saved — check console');
   renderPage();
+  console.log('AFTER RENDER:', localStorage.getItem('uspify_wf_reviewers'));
 }
 
 // Which stages have a configurable reviewer
