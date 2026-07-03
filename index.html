@@ -5475,7 +5475,7 @@ function getWfReviewers(){
     return Object.keys(cloud).length?cloud:local;
   }catch(e){return {};}
 }
-function saveWfReviewerSettings(){
+async function saveWfReviewerSettings(){
   const data=D();
   const r=getWfReviewers();
   const activeTab=S.respTab||'video';
@@ -5486,11 +5486,10 @@ function saveWfReviewerSettings(){
       if(el) r[`${b.id}:${activeTab}:${s.id}`]=el.value;
     });
   });
+  data.wfReviewers=r;
   localStorage.setItem('uspify_wf_reviewers',JSON.stringify(r));
-  const data2=D();
-  data2.wfReviewers=r;
-  save(data2);
-  showAIToast(`✅ ${activeTab.toUpperCase()} settings saved`);
+  await saveNow(data);
+  showAIToast(`✅ ${activeTab.toUpperCase()} settings saved — syncing to all users`);
   renderPage();
 }
 
