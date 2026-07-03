@@ -5474,41 +5474,92 @@ function getWfReviewers(){
 function saveWfReviewerSettings(){
   const data=D();
   const r=getWfReviewers();
-  // Read all brand+stage selects
+  const activeTab=S.respTab||'video';
+  const stages=REVIEWER_STAGES_BY_TYPE[activeTab]||REVIEWER_STAGES_BY_TYPE.video;
   data.brands.forEach(b=>{
-    REVIEWER_STAGES.forEach(s=>{
+    stages.forEach(s=>{
       const el=document.getElementById(`wfrev-${b.id}-${s.id}`);
-      if(el) r[`${b.id}:${s.id}`]=el.value;
+      if(el) r[`${b.id}:${activeTab}:${s.id}`]=el.value;
     });
   });
   localStorage.setItem('uspify_wf_reviewers',JSON.stringify(r));
-  showAIToast('✅ Reviewer settings saved');
+  showAIToast('✅ Saved');
   renderPage();
 }
 
 // Which stages have a configurable reviewer
+const CONTENT_TYPES=[
+  {id:'video',       label:'🎬 Video',        types:['Video']},
+  {id:'reels',       label:'📱 Reels',        types:['Reels']},
+  {id:'carousel',    label:'🎠 Carousel',     types:['Carousel']},
+  {id:'single',      label:'🖼 Single Image', types:['Single Image']},
+];
+
+// stages per type group
+const REVIEWER_STAGES_BY_TYPE={
+  video:[
+    {id:'ideation',          label:'💡 Ideation / Script',   hint:'Writes the brief and script',                  isWorker:true,  defaultRole:'content_creator'},
+    {id:'shoot',             label:'🎬 Shooting',             hint:'Shoots the footage',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'video_editing',     label:'✂️ Video Editing',        hint:'Edits the video',                              isWorker:true,  defaultRole:'designer'},
+    {id:'copywriting',       label:'✍️ Copywriting',          hint:'Writes the caption',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'ideation_review',   label:'✅ Ideation Approval',    hint:'Approves the script before shooting',          isWorker:false, defaultRole:'senior'},
+    {id:'video_review',      label:'✅ Video Approval',       hint:'Approves the edited video before copywriting', isWorker:false, defaultRole:'senior'},
+    {id:'copywriting_review',label:'✅ Copywriting Approval', hint:'Approves the caption before client',           isWorker:false, defaultRole:'senior'},
+    {id:'client_approval',   label:'🤝 Client Approval',     hint:'Handles client sign-off',                      isWorker:false, defaultRole:'senior'},
+    {id:'posted',            label:'🚀 Posted',               hint:'Marks content as posted',                      isWorker:false, defaultRole:'senior'},
+  ],
+  reels:[
+    {id:'ideation',          label:'💡 Ideation / Script',   hint:'Writes the brief and script',                  isWorker:true,  defaultRole:'content_creator'},
+    {id:'shoot',             label:'🎬 Shooting',             hint:'Shoots the footage',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'video_editing',     label:'✂️ Video Editing',        hint:'Edits the video',                              isWorker:true,  defaultRole:'designer'},
+    {id:'copywriting',       label:'✍️ Copywriting',          hint:'Writes the caption',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'ideation_review',   label:'✅ Ideation Approval',    hint:'Approves the script before shooting',          isWorker:false, defaultRole:'senior'},
+    {id:'video_review',      label:'✅ Video Approval',       hint:'Approves the edited video before copywriting', isWorker:false, defaultRole:'senior'},
+    {id:'copywriting_review',label:'✅ Copywriting Approval', hint:'Approves the caption before client',           isWorker:false, defaultRole:'senior'},
+    {id:'client_approval',   label:'🤝 Client Approval',     hint:'Handles client sign-off',                      isWorker:false, defaultRole:'senior'},
+    {id:'posted',            label:'🚀 Posted',               hint:'Marks content as posted',                      isWorker:false, defaultRole:'senior'},
+  ],
+  carousel:[
+    {id:'ideation',          label:'💡 Ideation',             hint:'Writes the brief and concept',                 isWorker:true,  defaultRole:'content_creator'},
+    {id:'design',            label:'🎨 Design',               hint:'Designs the carousel',                         isWorker:true,  defaultRole:'designer'},
+    {id:'copywriting',       label:'✍️ Copywriting',          hint:'Writes the caption',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'ideation_review',   label:'✅ Ideation Approval',    hint:'Approves the concept before design',           isWorker:false, defaultRole:'senior'},
+    {id:'video_review',      label:'✅ Design Approval',      hint:'Approves the design before copywriting',       isWorker:false, defaultRole:'senior'},
+    {id:'copywriting_review',label:'✅ Copywriting Approval', hint:'Approves the caption before client',           isWorker:false, defaultRole:'senior'},
+    {id:'client_approval',   label:'🤝 Client Approval',     hint:'Handles client sign-off',                      isWorker:false, defaultRole:'senior'},
+    {id:'posted',            label:'🚀 Posted',               hint:'Marks content as posted',                      isWorker:false, defaultRole:'senior'},
+  ],
+  single:[
+    {id:'ideation',          label:'💡 Ideation',             hint:'Writes the brief and concept',                 isWorker:true,  defaultRole:'content_creator'},
+    {id:'design',            label:'🎨 Design',               hint:'Designs the image',                            isWorker:true,  defaultRole:'designer'},
+    {id:'copywriting',       label:'✍️ Copywriting',          hint:'Writes the caption',                           isWorker:true,  defaultRole:'content_creator'},
+    {id:'ideation_review',   label:'✅ Ideation Approval',    hint:'Approves the concept before design',           isWorker:false, defaultRole:'senior'},
+    {id:'video_review',      label:'✅ Design Approval',      hint:'Approves the design before copywriting',       isWorker:false, defaultRole:'senior'},
+    {id:'copywriting_review',label:'✅ Copywriting Approval', hint:'Approves the caption before client',           isWorker:false, defaultRole:'senior'},
+    {id:'client_approval',   label:'🤝 Client Approval',     hint:'Handles client sign-off',                      isWorker:false, defaultRole:'senior'},
+    {id:'posted',            label:'🚀 Posted',               hint:'Marks content as posted',                      isWorker:false, defaultRole:'senior'},
+  ],
+};
+
+// Keep REVIEWER_STAGES as a flat list for backward compat with saveWfReviewerSettings
 const REVIEWER_STAGES=[
-  // Worker stages
-  {id:'ideation',          label:'💡 Ideation / Script',         hint:'Writes the brief and script',                    isWorker:true,  defaultRole:'content_creator'},
-  {id:'shoot',             label:'🎬 Shooting',                   hint:'Shoots the footage',                             isWorker:true,  defaultRole:'content_creator'},
-  {id:'video_editing',     label:'✂️ Video Editing',              hint:'Edits the video',                                isWorker:true,  defaultRole:'designer'},
-  {id:'design',            label:'🎨 Design',                     hint:'Designs the carousel',                           isWorker:true,  defaultRole:'designer'},
-  {id:'copywriting',       label:'✍️ Copywriting',                hint:'Writes the caption',                             isWorker:true,  defaultRole:'content_creator'},
-  // Approval stages
-  {id:'ideation_review',   label:'✅ Ideation Approval',          hint:'Approves the script before shooting/design',     isWorker:false, defaultRole:'senior'},
-  {id:'video_review',      label:'✅ Video Approval',             hint:'Approves the edited video before copywriting',   isWorker:false, defaultRole:'senior'},
-  {id:'copywriting_review',label:'✅ Copywriting Approval',       hint:'Approves the caption before client approval',    isWorker:false, defaultRole:'senior'},
-  {id:'client_approval',   label:'🤝 Client Approval',           hint:'Handles client sign-off',                        isWorker:false, defaultRole:'senior'},
-  {id:'posted',            label:'🚀 Posted',                     hint:'Marks content as posted',                        isWorker:false, defaultRole:'senior'},
+  ...new Map([
+    ...REVIEWER_STAGES_BY_TYPE.video,
+    ...REVIEWER_STAGES_BY_TYPE.carousel,
+  ].map(s=>[s.id,s])).values()
 ];
 function renderWfReviewerSettings(data){
+  if(!S.respTab) S.respTab='video';
+  const activeType=CONTENT_TYPES.find(t=>t.id===S.respTab)||CONTENT_TYPES[0];
+  const stages=REVIEWER_STAGES_BY_TYPE[S.respTab]||REVIEWER_STAGES_BY_TYPE.video;
   const r=getWfReviewers();
   const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='developer');
   const brands=data.brands;
   if(!brands.length) return '';
 
   const opt=(brandId,stage)=>{
-    const saved=r[`${brandId}:${stage.id}`];
+    const key=`${brandId}:${S.respTab}:${stage.id}`;
+    const saved=r[key]||r[`${brandId}:${stage.id}`]||'';
     const defaultUser=staff.find(u=>u.role===stage.defaultRole)||staff[0];
     const effectiveId=saved||defaultUser?.id||'';
     return staff.map(u=>`<option value="${u.id}" ${u.id===effectiveId?'selected':''}>${u.name}</option>`).join('');
@@ -5521,8 +5572,8 @@ function renderWfReviewerSettings(data){
       </div>
     </th>`).join('');
 
-  const workerStages=REVIEWER_STAGES.filter(s=>s.isWorker);
-  const approvalStages=REVIEWER_STAGES.filter(s=>!s.isWorker);
+  const workerStages=stages.filter(s=>s.isWorker);
+  const approvalStages=stages.filter(s=>!s.isWorker);
   const makeRows=(stages)=>stages.map(s=>`
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid var(--b1);border-right:2px solid var(--b1)">
@@ -5545,8 +5596,11 @@ function renderWfReviewerSettings(data){
   return `<div class="panel" style="margin-bottom:18px">
     <div class="ph">
       <div style="width:28px;height:28px;background:var(--pur);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px">👥</div>
-      <div class="ph-title">Stage Assignments — Per Brand</div>
-      <div class="ph-sub">Set who is responsible for each stage of the workflow, per brand</div>
+      <div class="ph-title">${activeType.label} Content Stage Assignment — Per Brand</div>
+      <div class="ph-sub">Set who is responsible for each stage, per brand</div>
+    </div>
+    <div style="display:flex;gap:6px;padding:12px 15px;border-bottom:1px solid var(--b1);flex-wrap:wrap">
+      ${CONTENT_TYPES.map(t=>`<button onclick="S.respTab='${t.id}';renderPage()" style="padding:7px 16px;border-radius:var(--r);border:1px solid ${S.respTab===t.id?'var(--ac)':'var(--b2)'};background:${S.respTab===t.id?'var(--acd)':'transparent'};color:${S.respTab===t.id?'var(--ac)':'var(--t2)'};font-size:13px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;transition:all .15s">${t.label}</button>`).join('')}
     </div>
     <div class="pb" style="padding:0;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:500px">
@@ -8565,11 +8619,14 @@ function getPIC(data, statusId, contentObj){
     const uid=picMap[statusId];
     if(uid){const u=data.users.find(x=>x.id===uid);if(u)return u;}
   }
-  // 2. Per-brand assignment from Responsibilities table
+  // 2. Per-brand assignment from Responsibilities table (type-aware)
   const brandId=contentObj?.brandId;
   if(brandId){
     const r=getWfReviewers();
-    const uid=r[`${brandId}:${statusId}`];
+    const contentType=contentObj?.type||'';
+    const typeKey=contentType==='Video'?'video':contentType==='Reels'?'reels':contentType==='Carousel'?'carousel':'single';
+    // Try type-specific key first, then fall back to legacy key
+    const uid=r[`${brandId}:${typeKey}:${statusId}`]||r[`${brandId}:${statusId}`];
     if(uid){const u=data.users.find(x=>x.id===uid);if(u)return u;}
   }
   // 3. Global role fallback
