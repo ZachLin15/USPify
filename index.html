@@ -5508,10 +5508,10 @@ function renderWfReviewerSettings(data){
   if(!brands.length) return '';
 
   const opt=(brandId,stage)=>{
-    const saved=r[`${brandId}:${stage.id}`]||'';
+    const saved=r[`${brandId}:${stage.id}`];
     const defaultUser=staff.find(u=>u.role===stage.defaultRole)||staff[0];
-    return `<option value="">— Default (${defaultUser?.name||'—'}) —</option>`+
-      staff.map(u=>`<option value="${u.id}" ${saved===u.id?'selected':''}>${u.name}</option>`).join('');
+    const effectiveId=saved||defaultUser?.id||'';
+    return staff.map(u=>`<option value="${u.id}" ${u.id===effectiveId?'selected':''}>${u.name}</option>`).join('');
   };
 
   const brandCols=brands.map(b=>`
