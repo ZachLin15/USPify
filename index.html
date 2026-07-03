@@ -11152,7 +11152,26 @@ function openEditBlockModal(id){
     <div class="form-row"><label class="form-label">Label</label>
       <input class="form-input" id="be-label" type="text" value="${b.label.replace(/"/g,'&quot;')}">
     </div>
-    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">
+    <div class="form-row"><label class="form-label">Description <span style="font-weight:400;color:var(--t3)">(optional)</span></label>
+      <textarea class="form-textarea" id="be-desc" style="min-height:70px;font-size:14px">${(b.desc||'').replace(/</g,'&lt;')}</textarea>
+    </div>
+    <div class="form-row"><label class="form-label">Color</label>
+      <input type="color" id="be-color" value="${b.color||'#3acca0'}" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+    </div>
+    ${isTask?`
+    <div class="form-row-2">
+      <div><label class="form-label">Start Date</label><input class="form-input" id="be-task-start" type="date" value="${b.taskStart||b.deadline||''}"></div>
+      <div><label class="form-label">Deadline</label><input class="form-input" id="be-deadline" type="date" value="${b.deadline||''}"></div>
+    </div>`:`
+    <div class="form-row-2">
+      <div><label class="form-label">Start</label><select class="form-select" id="be-start">${hourOpts(b.startHour)}</select></div>
+      <div><label class="form-label">End</label><select class="form-select" id="be-end">${hourOpts(b.endHour)}</select></div>
+    </div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="saveBlockEdit('${id}')">Save</button>
+    </div>`);
+}
 function markBlockComplete(id){
   const data=D();
   const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
