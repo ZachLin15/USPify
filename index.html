@@ -8640,11 +8640,11 @@ function getDesigner(data,c){ return getPIC(data,'design',c); }
 function getContentCreator(data,c){ return getPIC(data,'ideation',c); }
 
 // Get the reviewer for a specific brand+stage from the per-brand config
-function getBrandReviewer(data, brandId, reviewStageId){
+function getBrandReviewer(data, brandId, reviewStageId, contentType){
   const r=getWfReviewers();
-  const uid=r[`${brandId}:${reviewStageId}`];
+  const typeKey=contentType==='Video'?'video':contentType==='Reels'?'reels':contentType==='Carousel'?'carousel':'single';
+  const uid=r[`${brandId}:${typeKey}:${reviewStageId}`]||r[`${brandId}:${reviewStageId}`];
   if(uid){const u=data.users.find(x=>x.id===uid);if(u)return u;}
-  // fallback: first senior or admin
   return data.users.find(u=>u.role==='senior')||data.users.find(u=>u.role==='admin')||{id:'jack',name:'Jack',init:'J',color:'#5a9fff'};
 }
 
