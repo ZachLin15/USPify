@@ -5469,7 +5469,11 @@ function renderSettings(){
 }
 
 function getWfReviewers(){
-  try{return JSON.parse(localStorage.getItem('uspify_wf_reviewers')||'{}');}catch(e){return {};}
+  try{
+    const local=JSON.parse(localStorage.getItem('uspify_wf_reviewers')||'{}');
+    const cloud=D().wfReviewers||{};
+    return {...cloud,...local};
+  }catch(e){return {};}
 }
 function saveWfReviewerSettings(){
   const data=D();
@@ -5483,10 +5487,11 @@ function saveWfReviewerSettings(){
     });
   });
   localStorage.setItem('uspify_wf_reviewers',JSON.stringify(r));
-  console.log('SAVED WF REVIEWERS:', JSON.stringify(r));
-  showAIToast('✅ Saved — check console');
+  const data2=D();
+  data2.wfReviewers=r;
+  save(data2);
+  showAIToast(`✅ ${activeTab.toUpperCase()} settings saved`);
   renderPage();
-  console.log('AFTER RENDER:', localStorage.getItem('uspify_wf_reviewers'));
 }
 
 // Which stages have a configurable reviewer
