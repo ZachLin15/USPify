@@ -11005,7 +11005,7 @@ Reply with ONLY valid JSON array, no explanation, no markdown. Example format:
 
       // 1. Save brand + settings
       const bP=data.brands.filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
-      const sP=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
+      const sP=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],wfReviewers:data.wfReviewers||{},rescheduleLog:data.rescheduleLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
       const [r1,r2]=await Promise.all([
         sbFetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bP)}),
         sbFetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sP)}),
