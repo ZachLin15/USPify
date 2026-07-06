@@ -2623,10 +2623,18 @@ function getActiveJobsForUser(data, userId){
   const u=data.users.find(x=>x.id===userId);
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
+  // Stage is relevant if it's in their role's stages OR they have a PIC override for it
   const stageOk=c=>activeStages.includes(c.statusId)||(c.pic&&c.pic[c.statusId]===userId);
+  // User is responsible if they are the assignee OR the PIC for the current stage
+  const isResponsible=c=>c.assignees.includes(userId)||(c.pic&&c.pic[c.statusId]===userId);
   return [...new Set([
-    // 1. Has an explicit open workflow task AND content is at one of their active stages
-    ...data.contents.filter(c=>c.jobKind!=='task'&&(c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&stageOk(c)),
+    // 1. Has an explicit open workflow task assigned to this user
+    ...data.contents.filter(c=>
+      c.jobKind!=='task'&&
+      (c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&
+      stageOk(c)&&
+      isResponsible(c)
+    ),
     // 2. Explicitly in assignees AND at one of their active stages
     ...data.contents.filter(c=>
       c.jobKind!=='task'&&
