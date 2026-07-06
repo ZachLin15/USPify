@@ -2859,8 +2859,10 @@ function renderDashboard(){
   const totalContent=contents.length;
   const inProgress=contents.filter(c=>c.statusId!=='posted').length;
   const posted=contents.filter(c=>c.statusId==='posted').length;
-  const overdue=contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length;
-
+  const _userJobs=getActiveJobsForUser(data,S.user.id);
+  const overdue=isAdmin
+    ? contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length
+    : _userJobs.filter(c=>{const due=c.dueDates?.[S.user.id]||c.postingDate||'';return due&&due<today;}).length;
   // Pending tasks = active jobs for this user right now
  let pendingJobs=getActiveJobsForUser(data,S.user.id);
   if(S.user.role==='content_creator'){
