@@ -1592,14 +1592,27 @@ function showTaskNotification(c, task, fromName){
         }
         // Protect in-progress edits: if user is typing in detail view,
         // preserve their open content piece from being overwritten
+        // Protect ANY content edited locally in the last few seconds — not
+        // just whatever's open in the detail view. Covers modals, inline
+        // brand-page date edits, comment boxes, etc. — anywhere save()/
+        // saveNow() passed a dirtyContentId. Also still protects the
+        // currently-open detail page even if it hasn't saved yet, since
+        // typing there sets S.detailId on open.
         const _actEl=document.activeElement;
-        const _typing=_actEl&&(_actEl.tagName==='TEXTAREA'||_actEl.tagName==='INPUT')&&_actEl.closest('#page-root,#detail-overlay');
-        const _recentlyEdited=S.detailId&&_lastLocalEditAt[S.detailId]&&(Date.now()-_lastLocalEditAt[S.detailId]<3000);
-        if((_typing||_recentlyEdited)&&S.detailId){
-          const _localData=D();
+        const _typing=_actEl&&(_actEl.tagName==='TEXTAREA'||_actEl.tagName==='INPUT')&&_actEl.closest('#page-root,#detail-overlay,#modal-overlay');
+        const _localData=D();
+        const _now=Date.now();
+        Object.keys(_lastLocalEditAt).forEach(cid=>{
+          if(_now-_lastLocalEditAt[cid] < 4000){
+            const _localC=_localData.contents.find(x=>x.id===cid);
+            const _freshIdx=fresh.contents.findIndex(x=>x.id===cid);
+            if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC;
+          }
+        });
+        if(_typing&&S.detailId){
           const _localC=_localData.contents.find(x=>x.id===S.detailId);
           const _freshIdx=fresh.contents.findIndex(x=>x.id===S.detailId);
-          if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC; // keep local edits
+          if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC;
         }
         // ALWAYS update localStorage with fresh Supabase data
         _dataCache=null;_dataCacheKey=null;
@@ -3386,7 +3399,7 @@ function saveBrandRowDate(contentId, field, value){
     if(!c.dueDates) c.dueDates={};
     c.dueDates.leonard=value;
   }
-  save(data);
+  save(data,contentId);
   showAIToast(`✓ Date updated`);
 }
 
@@ -7053,7 +7066,7 @@ function openReverseFlowConfirm(id){
     if(!c.comments)c.comments=[];
     c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`⬅ [DEV] Flow reversed: ${cur.name} → ${prev.name}`,type:'general',createdAt:today});
     if(picUser&&picUser.id){c.assignees=[picUser.id];if(!c.workflowTasks)c.workflowTasks=[];c.workflowTasks.push({id:'wt'+uid(),assigneeId:picUser.id,status:'open',statusId:prevStatusId,label:`${prev.name} (reversed)`,openedAt:today});}
-    save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+    save(data,id);renderDetailPage(id);renderSidebar();renderTopbar();
     showAIToast(`⬅ [DEV] Reversed to ${prev.name}`);
     return;
   }
@@ -7163,7 +7176,7 @@ function saveCopyVersion(id,verIdx){
   if(inp&&v[verIdx])v[verIdx].text=inp.value;
   if(notesInp&&v[verIdx])v[verIdx].notes=notesInp.value;
   c.copywriting=v[verIdx]?.text||'';c.copyVersions=v;
-  save(data);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
+  save(data,id);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
 
 function autosaveCopyVersion(id){
@@ -7655,7 +7668,7 @@ function autosaveVideoField(id, field, val){
   clearTimeout(_autoSaveTimers['vf_'+id+'_'+field]);
   _autoSaveTimers['vf_'+id+'_'+field]=setTimeout(()=>{
     const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-    c[field]=val;save(data);
+    c[field]=val;save(data,id);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
   },900);
@@ -7664,7 +7677,7 @@ function autosaveVideoField(id, field, val){
 function saveVideoNotes(id){
   const inp=document.getElementById('video-notes-'+id);if(!inp)return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  c.videoNotes=inp.value;save(data);
+  c.videoNotes=inp.value;save(data,id);
   setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
 
@@ -7674,7 +7687,7 @@ function autosaveVideoNotes(id){
   _autoSaveTimers['vnotes_'+id]=setTimeout(()=>{
     const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
     const inp=document.getElementById('video-notes-'+id);
-    if(inp)c.videoNotes=inp.value;save(data);
+    if(inp)c.videoNotes=inp.value;save(data,id);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
   },900);
@@ -7753,7 +7766,7 @@ function handleDesignFileSelect(event, id, verIdx){
   if(!versions[verIdx])return;
   versions[verIdx].fileName=file.name;
   versions[verIdx].fileSize=Math.round(file.size/1024/1024*10)/10+'MB';
-  c.designVersions=versions;save(data);
+  c.designVersions=versions;save(data,id);
   const statusEl=document.getElementById('design-file-status-'+id);
   if(statusEl) statusEl.innerHTML=`<span style="color:var(--ac)">✓ Selected: <strong>${file.name}</strong> (${versions[verIdx].fileSize})</span>
     <div style="margin-top:6px;padding:8px 12px;background:var(--ambd);border:1px solid var(--amb);border-radius:var(--r);font-size:12px;color:var(--amb);font-family:'DM Mono',monospace">
@@ -7769,7 +7782,7 @@ function autoSaveDesignLink(id, verIdx, value){
   _autoSaveTimers['dl_'+id]=setTimeout(()=>{
     const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
     const versions=getDesignVersions(c);if(!versions[verIdx])return;
-    versions[verIdx].link=value;c.designVersions=versions;save(data);
+    versions[verIdx].link=value;c.designVersions=versions;save(data,id);
   },800);
 }
 
@@ -7913,7 +7926,7 @@ function addDesignVersion(id){
   if(notesEl&&versions[curIdx]) versions[curIdx].notes=notesEl.value;
   versions.push({label:'V'+(versions.length+1),link:'',type:'drive',approvals:[],notes:'',uploadedAt:'',uploadedBy:''});
   c.designVersions=versions;
-  save(data);
+  save(data,id);
   window._designVer[id]=versions.length-1;
   const panel=document.getElementById('dp-design');
   if(panel) panel.innerHTML=renderDesignPanel(c,id);
@@ -7928,7 +7941,7 @@ function deleteDesignVersion(id, idx){
   versions.splice(idx,1);
   versions.forEach((v,i)=>v.label='V'+(i+1));
   c.designVersions=versions;
-  save(data);
+  save(data,id);
   window._designVer[id]=Math.max(0,idx-1);
   const panel=document.getElementById('dp-design');
   if(panel) panel.innerHTML=renderDesignPanel(c,id);
@@ -7978,7 +7991,7 @@ async function saveDesignLink(id, verIdx){
     versions[verIdx].uploadedBy=S.user.name;
     c.designVersions=versions;
     c.designLink=versions[verIdx].link;
-    save(data);
+    save(data,id);
     setAutosaveStatus('saved','✓ uploaded');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
     const panel=document.getElementById('dp-design');
@@ -7996,7 +8009,7 @@ function saveDesignNotes(id, verIdx){
   const versions=getDesignVersions(c);
   versions[verIdx].notes=inp.value;
   c.designVersions=versions;
-  save(data);
+  save(data,id);
   setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
 
@@ -8009,7 +8022,7 @@ function autosaveDesignNotes(id, verIdx){
     const versions=getDesignVersions(c);
     if(inp) versions[verIdx].notes=inp.value;
     c.designVersions=versions;
-    save(data);
+    save(data,id);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
   },900);
@@ -8344,7 +8357,7 @@ function saveIdeation(id, verIdx){
   const versions=getIdeationVersions(c);
   _saveIdeaTextFields(c,versions,verIdx);
   c.ideationVersions=versions;
-  save(data);
+  save(data,id);
   setAutosaveStatus('saved','✓ saved');
   setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
 }
@@ -8615,7 +8628,7 @@ function autosaveIdeation(id){
     const verIdx=getIdeaVerIndex(id);
     _saveIdeaTextFields(c,versions,verIdx);
     c.ideationVersions=versions;
-    save(data);
+    save(data,id);
     setAutosaveStatus('saved','✓ autosaved');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2500);
   },900);
@@ -9349,7 +9362,7 @@ function wfApproveScript(id){
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data,id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`✅ Copy approved → Client Approval`);
 }
 
@@ -9367,7 +9380,7 @@ function wfAmendScript(id){
   c.statusId='copywriting';
   c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
   c.assignees=[creator.id];
-  save(data);renderDetailPage(id);renderSidebar();renderTopbar();
+  save(data,id);renderDetailPage(id);renderSidebar();renderTopbar();
   showAIToast(`🔄 Script amendment — ${creator.name} notified`);
 }
 
@@ -9705,7 +9718,7 @@ function wfAlertDesigner(id){
     id:'wt'+uid(),assigneeId:designer.id,status:'open',
     statusId:'video_editing',label:'✂️ Edit footage — shooting done',openedAt:today
   });
-  save(data);renderDetailPage(id);renderTopbar();
+  save(data,id);renderDetailPage(id);renderTopbar();
   showAIToast(`🔔 ${designer.name} alerted & task added!`);
 }
 
@@ -9764,8 +9777,8 @@ function switchDetailTab(el,showId){
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
   ['dt-overview','dt-copy','dt-comments','dt-history'].forEach(id=>{const d=document.getElementById(id);if(d)d.style.display=id===showId?'block':'none';});
 }
-function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.driveLink=inp.value.trim();save(data);renderDetailPage(id);}}
-function saveCopywriting(id){const inp=document.getElementById('copy-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.copywriting=inp.value;save(data);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);}}
+function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.driveLink=inp.value.trim();save(data,id);renderDetailPage(id);}}
+function saveCopywriting(id){const inp=document.getElementById('copy-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c)if(c){c.copywriting=inp.value;save(data,id);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);}}
 function saveComment(id){
   const text=document.getElementById('comment-input-'+id).value.trim();if(!text)return;
   const typeEl=document.getElementById('comment-type-'+id);
@@ -9773,7 +9786,7 @@ function saveComment(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
-  save(data);renderDetailPage(id);
+  save(data,id);renderDetailPage(id);
 }
 function saveCopyComment(id){
   const text=document.getElementById('copy-comment-input-'+id)?.value.trim();if(!text)return;
@@ -9781,12 +9794,12 @@ function saveCopyComment(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
-  save(data);renderDetailPage(id);
+  save(data,id);renderDetailPage(id);
 }
 function changeStatus(id,statusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c||c.statusId===statusId)return;
   c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  save(data);renderDetailPage(id);renderSidebar();
+  save(data,id);renderDetailPage(id);renderSidebar();
 }
 function confirmDeleteContent(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
