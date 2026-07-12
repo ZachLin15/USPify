@@ -1289,13 +1289,17 @@ var _USPIFY_DEFAULT_CREDS = [
 ];
 function reapplyDefaultPasswords(users){
   if(!Array.isArray(users)) return users;
+  // Only seed a password/role if the user record is missing one entirely —
+  // never stomp a password someone has already set.
   _USPIFY_DEFAULT_CREDS.forEach(function(dc){
     var u = users.find(function(x){return x&&x.id===dc.id;});
-    if(u){u.pass=dc.pass;u.role=dc.role;}
+    if(u){
+      if(!u.pass) u.pass=dc.pass;
+      if(!u.role) u.role=dc.role;
+    }
   });
   return users;
 }
-
 async function cloudLoad(retries=3, delay=1000){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return null;
   for(let attempt=1; attempt<=retries; attempt++){
@@ -1363,7 +1367,8 @@ async function cloudLoad(retries=3, delay=1000){
 
 // Track dirty content IDs for broadcastPing
 let _dirtyContentIds=new Set();
-function markDirty(id){if(id)_dirtyContentIds.add(id);}
+let _lastLocalEditAt={}; // contentId -> timestamp of last local edit/save
+function markDirty(id){if(id){_dirtyContentIds.add(id);_lastLocalEditAt[id]=Date.now();}}
 
 async function cloudSave(data){
   if(!CLOUD_CONFIG.ENABLED||CLOUD_CONFIG.URL==='YOUR_SUPABASE_PROJECT_URL')return;
@@ -1589,7 +1594,8 @@ function showTaskNotification(c, task, fromName){
         // preserve their open content piece from being overwritten
         const _actEl=document.activeElement;
         const _typing=_actEl&&(_actEl.tagName==='TEXTAREA'||_actEl.tagName==='INPUT')&&_actEl.closest('#page-root,#detail-overlay');
-        if(_typing&&S.detailId){
+        const _recentlyEdited=S.detailId&&_lastLocalEditAt[S.detailId]&&(Date.now()-_lastLocalEditAt[S.detailId]<3000);
+        if((_typing||_recentlyEdited)&&S.detailId){
           const _localData=D();
           const _localC=_localData.contents.find(x=>x.id===S.detailId);
           const _freshIdx=fresh.contents.findIndex(x=>x.id===S.detailId);
@@ -2087,17 +2093,19 @@ function D(){
     data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   }
 
-  // Migration: ensure all default users exist with correct passwords/titles
+  // Migration: ensure all default users exist. Only SEED new users —
+  // never overwrite an existing user's password (that's what was
+  // resetting custom passwords back to defaults on every render).
   const defaultUsers=getDefault().users;
   defaultUsers.forEach(du=>{
     const existing=data.users.find(u=>u.id===du.id);
     if(!existing){
       data.users.push(du);
     } else {
-      existing.pass=du.pass;
-      existing.role=du.role;
-      existing.name=du.name;
-      if(du.title)existing.title=du.title;
+      if(!existing.role) existing.role=du.role;
+      if(!existing.name) existing.name=du.name;
+      if(du.title&&!existing.title) existing.title=du.title;
+      // existing.pass is intentionally left untouched
     }
   });
 
@@ -6980,6 +6988,7 @@ function saveContentTitle(id, newTitle){
 
 function openContentDetail(id, forceTab){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  S.detailId=id;
   const isClient=S.user.role==='client';
   if(isClient){openClientContentDetail(id);return;}
   // Auto-dismiss amendment notification for current user when they open the item
@@ -9747,6 +9756,7 @@ function wfVideoDone(id){
 }
 
 function closeDetail(){
+  S.detailId=null;
   document.getElementById('detail-overlay').classList.remove('open');
 }
 
