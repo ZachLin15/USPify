@@ -8038,7 +8038,7 @@ async function approveDesign(id, verIdx){
   versions[verIdx].approvals.push({userId:S.user.id,status:'approved',note,date:today});
   versions[verIdx].pendingReview=false;
   c.designVersions=versions;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   c.designPendingReview=false;
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   const creator=getContentCreator(data,c);
@@ -8066,7 +8066,7 @@ async function amendDesign(id, verIdx){
   versions[verIdx].approvals.push({userId:S.user.id,status:'amendment',note,date:today});
   versions[verIdx].pendingReview=false;
   c.designVersions=versions;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   c.designPendingReview=false;
   // Close Jack's open tasks before handing back to designer
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
@@ -8176,9 +8176,17 @@ function renderIdeationPanel(c, id){
         <button class="ref-img-del" onclick="event.stopPropagation();deleteRefImage('${id}',${verIdx},${i})" style="top:4px;right:4px">\u2715</button>
       </div>`;
     }
+    if(img.uploadFailed){
+      return `<div class="ref-img-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--redd);border:1px solid var(--red);padding:10px;min-height:80px">
+        <span style="font-size:22px">⚠</span>
+        <span style="font-size:11px;font-weight:700;color:var(--red);text-align:center;word-break:break-word;max-width:100px">${img.name||'Upload failed'}</span>
+        <span style="font-size:10px;color:var(--t3);font-family:'DM Mono',monospace">Failed — remove & retry</span>
+        <button class="ref-img-del" onclick="deleteRefImage('${id}',${verIdx},${i})" style="top:4px;right:4px;opacity:1">\u2715</button>
+      </div>`;
+    }
     return `<div class="ref-img-card">
       <img src="${img.url}" onerror="this.parentElement.style.background='var(--s3)';this.style.display='none'" alt="ref">
-      ${img.size?`<span style="position:absolute;bottom:4px;left:4px;font-size:10px;background:rgba(0,0,0,0.6);color:#fff;padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace">${img.size}</span>`:''}
+      ${img.size?`<span style="position:absolute;bottom:4px;left:4px;font-size:10px;background:rgba(0,0,0,.6);color:#fff;padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace">${img.size}</span>`:''}
       <button class="ref-img-del" onclick="deleteRefImage('${id}',${verIdx},${i})">\u2715</button>
     </div>`;
   }).join('');
@@ -8440,19 +8448,28 @@ async function _readRefImageFiles(id, verIdx, files){
       console.error('Drive upload failed:',file.name,err);
       tempEntry.uploadFailed=true;
       tempEntry.uploading=false;
+      showAIToast(`⚠ "${file.name}" failed to upload — try re-adding it`);
     }
   }
 
   c.ideationVersions=versions;
+  const failedNames=(versions[verIdx].refImages||[]).filter(img=>img.uploadFailed).map(img=>img.name);
   const dataToSave=JSON.parse(JSON.stringify(data));
   dataToSave.contents.forEach(ct=>{
     (ct.ideationVersions||[]).forEach(v=>{
-      v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl&&!img.uploadFailed);
+      // Only strip blob URLs (can't be saved) — keep failed entries visible
+      // with a failed flag so the user can see and retry, instead of them
+      // silently disappearing from the grid.
+      v.refImages=(v.refImages||[]).filter(img=>!img.isBlobUrl||img.uploadFailed);
+      v.refImages.forEach(img=>{ if(img.isBlobUrl&&img.uploadFailed) img.url=''; });
     });
   });
   save(dataToSave);
   const panel=document.getElementById('dp-ideation');
   if(panel) panel.innerHTML=renderIdeationPanel(c,id);
+  if(failedNames.length){
+    showAIToast(`⚠ ${failedNames.length} file${failedNames.length>1?'s':''} failed — check reference images`);
+  }
 }
 function _showDriveUploadPrompt(id, verIdx, fileNames){
   // Show a modal asking user to upload to Google Drive and paste the link
@@ -9265,7 +9282,7 @@ async function wfApproveIdeationForVideo(id){
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.ideationPendingApproval=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   (c.workflowTasks||[]).filter(t=>(t.statusId==='senior_approval'||t.statusId==='senior_approval_ideation')&&t.status==='open').forEach(t=>t.status='done');
   c.shootNotified=true;c.shootNotifiedAt=today;c.shootNotifiedBy=S.user.name;
   c.shootNotifDismissed={};
@@ -9319,7 +9336,7 @@ async function wfApproveVideo(id){
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;
   c.copyNotifDismissed={};
   notifyApproved(c,creator,'Video approved — write the copy! ✍️',S.user.name);
@@ -9340,7 +9357,7 @@ async function wfAmendVideo(id){
   const designer=getDesigner(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   // Close Jack's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,designer,'Video needs changes — back to editing',S.user.name,note);
@@ -9357,7 +9374,7 @@ function wfApproveScript(id){
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.scriptPendingApproval=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   notifyApproved(c,creator,'Copy approved → moving to Client Approval',S.user.name);
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
@@ -9374,7 +9391,7 @@ function wfAmendScript(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
   c.scriptPendingApproval=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   notifyRejected(c,creator,'Copy needs changes',S.user.name,note);
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
   c.statusId='copywriting';
@@ -9432,7 +9449,7 @@ function wfSeniorApprove(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   notifyApproved(c,creator,'Copy approved → Client Approval',S.user.name);
   c.statusId='client_approval';
   c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
@@ -9449,7 +9466,7 @@ async function wfSeniorAmend(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
   const today=new Date().toISOString().split('T')[0];
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   // Close Jack's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,creator,'Copy needs changes — revise and resubmit',S.user.name,note);
@@ -11776,7 +11793,7 @@ async function approveIdeation(id, verIdx){
   versions[verIdx].approval={status:'approved',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
   c.ideationVersions=versions;
   c.ideationPendingApproval=false;
-  c.seniorNotifDismissed={[S.user.id]:true};
+  c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   c.designNotified=true;c.designNotifDismissed={};
   const designer=getDesigner(data,c);
   notifyApproved(c,designer,'Ideation approved — start designing! 🎨',S.user.name);
