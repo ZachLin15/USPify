@@ -1543,8 +1543,9 @@ function showTaskNotification(c, task, fromName){
     if(_initSyncing)return;
     _pulling=true;
     try{
-      const fresh=await cloudLoad(1, 200); // fast pull — 1 retry, 200ms delay
+      const fresh=await cloudLoad(2, 500); // give it 2 attempts w/ 500ms gap before treating as a real failure
       if(fresh&&fresh.users?.length){
+        setSyncStatus('live','Live ✓'); // explicitly clear any stale "Offline" badge the moment a poll succeeds
         // Always check for new tasks regardless of hash
         if(S.user){
           const _uid=S.user.id;
