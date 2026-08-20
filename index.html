@@ -4500,7 +4500,8 @@ function renderBrandCalendar(){
         const items=(contentByDate[ds]||[]);
         const shown=items.slice(0,5);
         const more=items.length-5;
-        const isDrop=S.calEditMode;
+        const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
+        const isDrop=S.calEditMode||isSeniorOrManager;
         return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
           ${isDrop?`ondragover="event.preventDefault()" ondrop="calDrop(event,'${ds}')"`:''}>
           <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
@@ -4555,7 +4556,8 @@ function toggleCalEditMode(){
 }
 
 function calDragStart(event,contentId){
-  if(!S.calEditMode){event.preventDefault();return;}
+  const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
+  if(!S.calEditMode&&!isSeniorOrManager){event.preventDefault();return;}
   event.dataTransfer.setData('text/plain',contentId);
   event.dataTransfer.effectAllowed='move';
 }
@@ -4576,9 +4578,13 @@ function calDrop(event,newDate){
     if(!isManager&&reason){
       logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
     }
-    localStorage.setItem(KEY,JSON.stringify(data));
+    if(isManager||S.user.role==='senior'){
+      saveNow(data).then(()=>showAIToast('📅 Date updated'));
+    } else {
+      localStorage.setItem(KEY,JSON.stringify(data));
+      showAIToast('📅 Date moved — click Save to confirm');
+    }
     renderPageOnly();
-    showAIToast('📅 Date moved — click Save to confirm');
   };
   if(isManager){
     doMove('');
