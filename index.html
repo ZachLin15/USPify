@@ -10572,25 +10572,53 @@ function planReconcile(brandId){
     const [yr,mo]=month==='0000-00'?[0,1]:month.split('-').map(Number);
     const monthLabel=MN[(mo||1)-1]+' '+String(yr).slice(2);
     const inMonth=data.contents.filter(c=>c.brandId===brandId&&(((c.postingDate||'').slice(0,7)||'0000-00')===month));
-    CATS.forEach(([cat,prefix])=>{
+        CATS.forEach(([cat,prefix])=>{
       const target=inContract?(Number(qb[cat])||0):0;
       const items=inMonth.filter(c=>_quotaCatOf(c)===cat);
-      // Step 1: separate protected (keep always) from deletable drafts
-      // When target is 0, any no-progress item in this category is deletable
-      // (even if it has a custom/renamed title that doesn't match _DATED_RE)
-      const protectedItems=items.filter(c=>_hasProgress(c)||(target>0&&!_DATED_RE.test(c.title)));
-      const drafts=items.filter(c=>!_hasProgress(c)&&(target===0||_DATED_RE.test(c.title)));
-      // Step 2: delete excess drafts (keep up to target, delete the rest)
+
+      if(cat==='wallPost'){
+        const subDefs=[['Carousel','wpCarousel'],['Video','wpVideo'],['Reels','wpReels'],['Single Image','wpImage']];
+        let totalKept=0;
+        const shortfalls=[];
+        subDefs.forEach(([typeName,qKey])=>{
+          const subTarget=inContract?(Number(qb[qKey])||0):0;
+          const subItems=items.filter(c=>c.type===typeName);
+          const subProtected=subItems.filter(c=>_hasProgress(c)||!_DATED_RE.test(c.title));
+          const subDrafts=subItems.filter(c=>!_hasProgress(c)&&_DATED_RE.test(c.title));
+          let subKept=subProtected.length;
+          subDrafts.forEach(d=>{
+            if(subKept<subTarget){subKept++;}
+            else{toDelete.push({id:d.id,title:d.title,month});}
+          });
+          for(let i=subKept;i<subTarget;i++) shortfalls.push(typeName);
+          totalKept+=subKept;
+        });
+
+        if(!inContract||month==='0000-00')return;
+        if(inMonth.length===0)return;
+        const daysInMonth=new Date(yr,mo,0).getDate();
+        let seq=1;
+        shortfalls.forEach(typeName=>{
+          while(data.contents.some(c=>c.brandId===brandId&&c.title===`${prefix}${seq} — ${monthLabel}`)||toAdd.some(c=>c.title===`${prefix}${seq} — ${monthLabel}`))seq++;
+          const day=Math.min(daysInMonth,3+(totalKept*Math.max(1,Math.floor(daysInMonth/Math.max(1,target)))));
+          let postingDate=`${month}-${String(day).padStart(2,'0')}`;
+          toAdd.push({id:'ct'+uid(),brandId,title:`${prefix}${seq} — ${monthLabel}`,type:typeName,
+            assignees:[],statusId:'ideation',postingDate,driveLink:'',copywriting:'',comments:[],
+            statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
+            dueDates:{hualu:addBusinessDays(postingDate,-4),leonard:addBusinessDays(postingDate,-7),jack:''},pic:{}});
+          totalKept++;
+        });
+        return;
+      }
+
+      const protectedItems=items.filter(c=>_hasProgress(c)||!_DATED_RE.test(c.title));
+      const drafts=items.filter(c=>!_hasProgress(c)&&_DATED_RE.test(c.title));
       let kept=protectedItems.length;
       drafts.forEach(d=>{
         if(kept<target){kept++;}
         else{toDelete.push({id:d.id,title:d.title,month});}
       });
-      // Step 3: 'kept' now = items that will survive after deletions
-      // Add new items only if still under quota after planned deletions
       if(!inContract||month==='0000-00')return;
-      // Only auto-add in months that already have content for this brand
-      // (don't generate content for completely empty months)
       if(inMonth.length===0)return;
       const daysInMonth=new Date(yr,mo,0).getDate();
       let seq=1;
@@ -10598,7 +10626,7 @@ function planReconcile(brandId){
         while(data.contents.some(c=>c.brandId===brandId&&c.title===`${prefix}${seq} — ${monthLabel}`)||toAdd.some(c=>c.title===`${prefix}${seq} — ${monthLabel}`))seq++;
         const day=Math.min(daysInMonth,3+(kept*Math.max(1,Math.floor(daysInMonth/Math.max(1,target)))));
         let postingDate=`${month}-${String(day).padStart(2,'0')}`;
-                const type=cat==='wallPost'?(wpTypeSeq[kept]||'Carousel'):(cat==='tiktok'?'Video':cat==='videoAds'?'Video':cat==='carousel'?'Carousel':cat==='video'?'Video':'Carousel');
+        const type=cat==='tiktok'?'Video':cat==='videoAds'?'Video':'Carousel';
         toAdd.push({id:'ct'+uid(),brandId,title:`${prefix}${seq} — ${monthLabel}`,type,
           assignees:[],statusId:'ideation',postingDate,driveLink:'',copywriting:'',comments:[],
           statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
