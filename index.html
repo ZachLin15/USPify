@@ -10552,7 +10552,16 @@ function planReconcile(brandId){
   const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const today=new Date().toISOString().split('T')[0];
   const toDelete=[];const toAdd=[];
-  const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['other','Content#']];
+    const CATS=[['wallPost','WP#'],['videoAds','Ad#'],['tiktok','TikTok#'],['other','Content#']];
+  const wpTypeSeq=(()=>{
+    const wpc=Number(qb.wpCarousel)||0, wpv=Number(qb.wpVideo)||0, wpr=Number(qb.wpReels)||0, wpi=Number(qb.wpImage)||0;
+    const seq=[];
+    for(let i=0;i<wpc;i++)seq.push('Carousel');
+    for(let i=0;i<wpv;i++)seq.push('Video');
+    for(let i=0;i<wpr;i++)seq.push('Reels');
+    for(let i=0;i<wpi;i++)seq.push('Single Image');
+    return seq;
+  })();
   const contractSet=new Set(months);
   const dataMonths=[...new Set(data.contents.filter(c=>c.brandId===brandId)
     .map(c=>(c.postingDate||'').slice(0,7)||'0000-00'))];
@@ -10589,7 +10598,7 @@ function planReconcile(brandId){
         while(data.contents.some(c=>c.brandId===brandId&&c.title===`${prefix}${seq} — ${monthLabel}`)||toAdd.some(c=>c.title===`${prefix}${seq} — ${monthLabel}`))seq++;
         const day=Math.min(daysInMonth,3+(kept*Math.max(1,Math.floor(daysInMonth/Math.max(1,target)))));
         let postingDate=`${month}-${String(day).padStart(2,'0')}`;
-        const type=cat==='tiktok'?'Video':cat==='videoAds'?'Video':cat==='carousel'?'Carousel':cat==='video'?'Video':'Carousel';
+                const type=cat==='wallPost'?(wpTypeSeq[kept]||'Carousel'):(cat==='tiktok'?'Video':cat==='videoAds'?'Video':cat==='carousel'?'Carousel':cat==='video'?'Video':'Carousel');
         toAdd.push({id:'ct'+uid(),brandId,title:`${prefix}${seq} — ${monthLabel}`,type,
           assignees:[],statusId:'ideation',postingDate,driveLink:'',copywriting:'',comments:[],
           statusHistory:[{statusId:'ideation',changedBy:S.user.id,changedAt:today}],
