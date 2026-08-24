@@ -10458,7 +10458,8 @@ function openBrandInfoModal(brandId){
   const shootingStr=(b.shootingDates||[]).join(', ');
   const qb=b.quotaBreakdown||{};
   const ql=b.quotaLabels||{};
-  openModal(`<div class="modal-title">Brand info: ${b.name}<button class="modal-close" onclick="closeModal()">×</button></div>
+    openModal(`<div class="modal-title">Brand info: ${b.name}<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="form-row"><label class="form-label">Brand name</label><input class="form-input" id="bi-name" type="text" value="${b.name.replace(/"/g,'&quot;')}"></div>
     <div class="form-row-2">
       <div><label class="form-label">Brand color</label><input class="form-input" id="bi-color" type="color" value="${b.color}" style="padding:4px;height:38px;cursor:pointer"></div>
       <div><label class="form-label">Drive folder</label><input class="form-input" id="bi-drive" type="url" value="${b.driveLink||''}" placeholder="https://drive.google.com/..."></div>
@@ -10729,6 +10730,8 @@ async function runReconcile(){
 
 function saveBrandInfo(brandId, fillAllMonths){
   const data=D();const idx=data.brands.findIndex(b=>b.id===brandId);if(idx<0)return;
+  const newName=document.getElementById('bi-name')?.value.trim();
+  if(!newName){alert('Brand name cannot be empty.');return;}
   const templatesRaw=document.getElementById('bi-templates').value.trim().split('\n').filter(Boolean);
   const templates=templatesRaw.map(l=>{const p=l.split('|');return{title:(p[0]||'').trim(),type:(p[1]||'Carousel').trim()};});
   const shootingDates=document.getElementById('bi-shoot').value.split(',').map(d=>d.trim()).filter(Boolean);
@@ -10750,7 +10753,8 @@ function saveBrandInfo(brandId, fillAllMonths){
   if(ads>0&&!quotaLabels.videoAds)quotaLabels.videoAds='Video Ads';
   if(tiktoks>0&&!quotaLabels.tiktok)quotaLabels.tiktok='TikTok Videos';
   const quota=(quotaBreakdown.wallPost||0)+(quotaBreakdown.videoAds||0)+(quotaBreakdown.tiktok||0)+(quotaBreakdown.other||0)||data.brands[idx].quota;
-  data.brands[idx]={...data.brands[idx],
+    data.brands[idx]={...data.brands[idx],
+    name:newName,
     quota,quotaBreakdown,quotaLabels,
     driveLink:document.getElementById('bi-drive').value.trim(),
     brandGuide:document.getElementById('bi-guide').value.trim(),
