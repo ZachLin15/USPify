@@ -2421,16 +2421,20 @@ function doLogin(){
     {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
     {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
   ];
-  const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
-  if(!hc||hc.pass!==pass){if(errEl)errEl.textContent='Invalid name or password.';return;}
+    const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
+  // Also check dynamically added users (freelancers etc) stored in Supabase
   const data=D();
-  const stored=data.users.find(u=>u.id===hc.id);
-  const user=stored?{...stored,pass:hc.pass,role:hc.role}:hc;
-  S.user=user;
+  const dynamicUser=!hc?data.users.find(u=>(u.name.toLowerCase()===name||u.id===name)&&u.pass===pass):null;
+  if(!hc&&!dynamicUser){if(errEl)errEl.textContent='Invalid name or password.';return;}
+  if(hc&&hc.pass!==pass){if(errEl)errEl.textContent='Invalid name or password.';return;}
+  const stored=hc?data.users.find(u=>u.id===hc.id):null;
+  const user=dynamicUser||(stored?{...stored,pass:hc.pass,role:hc.role}:hc);
+    S.user=user;
   sessionStorage.setItem('uspify_uid',user.id);
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   if(user.role==='client'){S.page='client_approvals';S.brand=null;}
+  else if(user.role==='freelancer'){S.page='dashboard';S.brand=null;}
   render();
   try{initAI();}catch(x){}
   if(typeof initCloudSync==='function') initCloudSync();
@@ -2520,26 +2524,30 @@ function renderSidebar(){
   const apprCount=data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length;
   const remind=data.contents.filter(c=>needsReminder(c)).length;
   const clientPostCount=data.contents.filter(c=>c.statusId==='client_approval').length;
+    const isFreelancer=S.user.role==='freelancer';
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
     {id:'tracker',label:'Content Tracker',icon:'<rect x="1" y="2" width="14" height="12" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="6" x2="5" y2="14"/>',badge:remind>0?`⚠ ${remind}`:data.contents.filter(c=>c.statusId!=='posted').length,hidden:true},
-    ...(isAdmin||S.user.role==='senior'?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
-    ...(isAdmin||S.user.role==='senior'?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
-    ...(isAdmin||S.user.role==='senior'?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
+    ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
+    ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
+    ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
     {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
-    {id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'},
-    {id:'ads',label:'Ad Reports',icon:'<polyline points="1,12 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>'},
-    {id:'team',label:'Team',icon:'<circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5"/><circle cx="12" cy="5" r="2"/><path d="M14 13c0-2-1-3.5-2-4"/>'},
-    ...(isAdmin?[{id:'analytics',label:'Time Analytics',icon:'<polyline points="2 12 6 6 10 10 14 4"/><line x1="2" y1="14" x2="15" y2="14"/>'}]:[]),
-    ...(isAdmin?[{id:'settings',label:'Settings',icon:'<circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M9.54 9.54l1.41 1.41M3.05 12.95l1.41-1.41M9.54 6.46l1.41-1.41"/>'}]:[]),
-    {id:'set_password',label:'Set Password',icon:'<rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/>'},
+    ...(!isFreelancer?[{id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'}]:[]),
+    ...(!isFreelancer?[{id:'ads',label:'Ad Reports',icon:'<polyline points="1,12 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>'}]:[]),
+    ...(!isFreelancer?[{id:'team',label:'Team',icon:'<circle cx="6" cy="5" r="3"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5"/><circle cx="12" cy="5" r="2"/><path d="M14 13c0-2-1-3.5-2-4"/>'}]:[]),
+    ...(!isFreelancer&&isAdmin?[{id:'analytics',label:'Time Analytics',icon:'<polyline points="2 12 6 6 10 10 14 4"/><line x1="2" y1="14" x2="15" y2="14"/>'}]:[]),
+    ...(!isFreelancer&&isAdmin?[{id:'settings',label:'Settings',icon:'<circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M9.54 9.54l1.41 1.41M3.05 12.95l1.41-1.41M9.54 6.46l1.41-1.41"/>'}]:[]),
+    ...(!isFreelancer?[{id:'set_password',label:'Set Password',icon:'<rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/>'}]:[]),
   ];
   const navHTML=pages.filter(p=>!p.hidden).map(p=>{
     const active=S.page===p.id&&!S.brand;
     const badgeStyle=p.badgeColor?`style="background:${p.badgeColor}33;color:${p.badgeColor}"`:''
     return `<div class="sb-item${active?' active':''}" onclick="nav('${p.id}')"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>${p.label}${p.badge?`<span class="sb-badge" ${badgeStyle}>${p.badge}</span>`:''}</div>`;
   }).join('');
- const brandsHTML=data.brands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+   const sidebarBrands=isFreelancer
+    ?(S.user.brandAccess||[]).map(id=>data.brands.find(b=>b.id===id)).filter(Boolean)
+    :data.brands;
+  const brandsHTML=sidebarBrands.map(b=>`<div class="brand-item${S.brand===b.id?' active':''}" onclick="nav('brand','${b.id}')" style="display:flex;align-items:center;gap:8px;cursor:pointer">
     <div class="bdot" style="background:${b.color}"></div>
     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.name}</span>
   </div>`).join('');
@@ -2547,7 +2555,7 @@ function renderSidebar(){
   document.getElementById('sidebar').innerHTML=`
     <div class="logo"><div class="logo-wrap"><div class="logo-ic">U</div><div><div class="logo-n">USPify</div><div class="logo-s">Agency Portal v172</div></div></div></div>
     <div class="sb-nav"><div class="sb-lbl">Main</div>${navHTML}<div class="sb-lbl" style="margin-top:8px">Brands</div><div class="brand-list">${brandsHTML}</div>
-    <div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>
+        ${!isFreelancer?`<div class="add-brand-btn" onclick="openAddBrandModal()"><svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>Add brand</div>`:''}
     </div>
     <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888')}22;color:${u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888'}">${u.init||u.name?.slice(0,2)||'?'}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
@@ -2622,7 +2630,9 @@ function renderTopbar(){
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
   else if(S.page==='clientpost'){const cpCount=data.contents.filter(c=>c.statusId==='client_approval').length;title='Client Post';sub=cpCount>0?`${cpCount} item${cpCount>1?'s':''} ready to post to Facebook`:'No items awaiting posting';}
   else if(S.page==='responsibilities'){title='Responsibilities';sub='Assign PIC to each workflow stage per employee';}
-  else if(S.page==='team'){title='Team';sub='Workload, tasks & auto-progress';}
+    else if(S.page==='team'){title='Team';sub='Workload, tasks & auto-progress';
+    actions=isManagerUser(S.user)?`<button class="btn btn-ac btn-sm" onclick="openAddUserModal()">+ Add User</button>`:'';
+  }
   else if(S.page==='set_password'){title='Set Password';sub='Change your login password';}
   document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"><span id="sync-status" style="margin-right:6px"></span>${actions}${!isClient?(()=>{try{return renderNotifBell(data);}catch(e){return '';}})():''}<button onclick="toggleTheme()" title="Toggle light/dark mode" style="background:transparent;border:1px solid var(--b2);border-radius:var(--r);padding:5px 9px;cursor:pointer;font-size:16px;color:var(--t2);transition:all .12s;line-height:1" onmouseenter="this.style.borderColor='var(--b3)';this.style.color='var(--t1)'" onmouseleave="this.style.borderColor='var(--b2)';this.style.color='var(--t2)'">${document.body.classList.contains('light-mode')?'🌙':'☀️'}</button></div>`;
 }
@@ -3508,6 +3518,13 @@ function naturalCompare(a,b){
 function renderBrandPage(){
   const data=D();const b=getBrand(data,S.brand);
   let contents=data.contents.filter(c=>c.brandId===S.brand);
+  // Freelancers only see content assigned to them
+  if(S.user.role==='freelancer'){
+    contents=contents.filter(c=>
+      c.assignees.includes(S.user.id)||
+      (c.pic&&Object.values(c.pic).includes(S.user.id))
+    );
+  }
   const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:8px">
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
@@ -5812,11 +5829,105 @@ function renderAnalytics(){
     </div>
   </div>`;
 }
+function openAddUserModal(){
+  const data=D();
+  const brandOpts=data.brands.map(b=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" name="freelancer-brand" value="${b.id}" style="width:16px;height:16px;cursor:pointer">
+      <span style="width:8px;height:8px;border-radius:50%;background:${b.color};display:inline-block"></span>
+      <span style="font-size:14px">${b.name}</span>
+    </label>`).join('');
+  openModal(`<div class="modal-title">👤 Add New User<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="form-row"><label class="form-label">Full Name</label>
+      <input class="form-input" id="nu-name" type="text" placeholder="e.g. Ahmad">
+    </div>
+    <div class="form-row"><label class="form-label">Username (for login)</label>
+      <input class="form-input" id="nu-id" type="text" placeholder="e.g. ahmad (lowercase, no spaces)">
+    </div>
+    <div class="form-row"><label class="form-label">Password</label>
+      <input class="form-input" id="nu-pass" type="text" placeholder="Set a password">
+    </div>
+    <div class="form-row"><label class="form-label">Initials</label>
+      <input class="form-input" id="nu-init" type="text" placeholder="e.g. A" style="max-width:80px">
+    </div>
+    <div class="form-row"><label class="form-label">Color</label>
+      <input type="color" id="nu-color" value="#5a9fff" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+    </div>
+    <div class="form-row"><label class="form-label">Employment Type</label>
+      <div style="display:flex;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
+          <input type="radio" name="nu-emptype" value="fulltime" checked> Full-time Employee
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
+          <input type="radio" name="nu-emptype" value="freelancer"> Freelancer
+        </label>
+      </div>
+    </div>
+    <div class="form-row" id="nu-role-row"><label class="form-label">Role</label>
+      <select class="form-select" id="nu-role">
+        <option value="content_creator">Content Creator</option>
+        <option value="designer">Designer</option>
+        <option value="senior">Senior</option>
+      </select>
+    </div>
+    <div class="form-row" id="nu-brands-row" style="display:none">
+      <label class="form-label">Brand Access <span style="font-weight:400;color:var(--t3)">(select all brands this freelancer works on)</span></label>
+      <div style="display:flex;flex-direction:column;gap:2px;padding:6px 0">${brandOpts}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ac" onclick="saveNewUser()">Add User</button>
+    </div>`);
 
+  // Toggle brand access section based on employment type
+  document.querySelectorAll('input[name="nu-emptype"]').forEach(r=>{
+    r.addEventListener('change',()=>{
+      const isFreelancer=document.querySelector('input[name="nu-emptype"]:checked')?.value==='freelancer';
+      document.getElementById('nu-brands-row').style.display=isFreelancer?'block':'none';
+    });
+  });
+}
+
+function saveNewUser(){
+  const name=document.getElementById('nu-name')?.value.trim();
+  const id=document.getElementById('nu-id')?.value.trim().toLowerCase().replace(/\s+/g,'');
+  const pass=document.getElementById('nu-pass')?.value.trim();
+  const init=document.getElementById('nu-init')?.value.trim();
+  const color=document.getElementById('nu-color')?.value||'#5a9fff';
+  const role=document.getElementById('nu-role')?.value||'content_creator';
+  const empType=document.querySelector('input[name="nu-emptype"]:checked')?.value||'fulltime';
+  const isFreelancer=empType==='freelancer';
+
+  if(!name){alert('Please enter a name.');return;}
+  if(!id){alert('Please enter a username.');return;}
+  if(!pass){alert('Please enter a password.');return;}
+  if(!init){alert('Please enter initials.');return;}
+
+  const data=D();
+  if(data.users.find(u=>u.id===id)){alert(`Username "${id}" is already taken. Please choose a different one.`);return;}
+
+  const brandAccess=isFreelancer
+    ?[...document.querySelectorAll('input[name="freelancer-brand"]:checked')].map(cb=>cb.value)
+    :[];
+
+  const newUser={
+    id,name,pass,init,color,
+    role:isFreelancer?'freelancer':role,
+    title:isFreelancer?'Freelancer':role==='content_creator'?'Content Creator':role==='designer'?'Designer':'Senior',
+    isFreelancer,
+    ...(isFreelancer?{brandAccess}:{})
+  };
+
+  data.users.push(newUser);
+  saveNow(data);
+  closeModal();
+  showAIToast(`✓ ${name} added as ${isFreelancer?'freelancer':'team member'}`);
+  renderPage();
+}
 function renderTeam(){
   const data=D();
   const isAdmin=isAdminUser(S.user);
-  const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
+      const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
 
   const STAGE_LABELS={
     ideation:'💡 Ideation',senior_approval_ideation:'✅ Script Review',design:'🎨 Design',
