@@ -4541,8 +4541,8 @@ function renderBrandCalendar(){
         const ds=d.toISOString().split('T')[0];
         const isT=ds===todayStr;
         const items=(contentByDate[ds]||[]);
-        const shown=items.slice(0,5);
-        const more=items.length-5;
+        const shown=items;
+        const more=0;
         const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
         const isDrop=S.calEditMode||isSeniorOrManager;
         return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
