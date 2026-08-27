@@ -4556,8 +4556,8 @@ function toggleCalEditMode(){
 }
 
 function calDragStart(event,contentId){
-  const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
-  if(!S.calEditMode&&!isSeniorOrManager){event.preventDefault();return;}
+  const canDrag=isManagerUser(S.user)||S.user.role==='senior'||S.user.role==='content_creator';
+  if(!S.calEditMode&&!canDrag){event.preventDefault();return;}
   event.dataTransfer.setData('text/plain',contentId);
   event.dataTransfer.effectAllowed='move';
 }
