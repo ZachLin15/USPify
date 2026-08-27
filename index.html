@@ -5863,16 +5863,9 @@ function openAddUserModal(){
         </label>
       </div>
     </div>
-    <div class="form-row" id="nu-role-row"><label class="form-label">Role</label>
-      <select class="form-select" id="nu-role">
-        <option value="content_creator">Content Creator</option>
-        <option value="designer">Designer</option>
-        <option value="senior">Senior</option>
-      </select>
-    </div>
-    <div class="form-row" id="nu-brands-row" style="display:none">
-      <label class="form-label">Brand Access <span style="font-weight:400;color:var(--t3)">(select all brands this freelancer works on)</span></label>
-      <div style="display:flex;flex-direction:column;gap:2px;padding:6px 0">${brandOpts}</div>
+        <div class="form-row" id="nu-role-row">
+      <label class="form-label">Employment Type</label>
+      <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Brand access will be granted automatically when tasks are assigned to this user.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -5894,9 +5887,9 @@ function saveNewUser(){
   const pass=document.getElementById('nu-pass')?.value.trim();
   const init=document.getElementById('nu-init')?.value.trim();
   const color=document.getElementById('nu-color')?.value||'#5a9fff';
-  const role=document.getElementById('nu-role')?.value||'content_creator';
   const empType=document.querySelector('input[name="nu-emptype"]:checked')?.value||'fulltime';
   const isFreelancer=empType==='freelancer';
+  const role=isFreelancer?'freelancer':'content_creator';
 
   if(!name){alert('Please enter a name.');return;}
   if(!id){alert('Please enter a username.');return;}
@@ -5906,18 +5899,13 @@ function saveNewUser(){
   const data=D();
   if(data.users.find(u=>u.id===id)){alert(`Username "${id}" is already taken. Please choose a different one.`);return;}
 
-  const brandAccess=isFreelancer
-    ?[...document.querySelectorAll('input[name="freelancer-brand"]:checked')].map(cb=>cb.value)
-    :[];
-
-  const newUser={
+    const newUser={
     id,name,pass,init,color,
-    role:isFreelancer?'freelancer':role,
-    title:isFreelancer?'Freelancer':role==='content_creator'?'Content Creator':role==='designer'?'Designer':'Senior',
+    role:isFreelancer?'freelancer':'content_creator',
+    title:isFreelancer?'Freelancer':'Content Creator',
     isFreelancer,
-    ...(isFreelancer?{brandAccess}:{})
+    brandAccess:[]
   };
-
   data.users.push(newUser);
   saveNow(data);
   closeModal();
@@ -6162,9 +6150,18 @@ function renderResponsibilities(){
 
 function saveContentPIC(contentId, statusId, userId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
-  if(!c.pic)c.pic={};
-  if(userId){c.pic[statusId]=userId;}else{delete c.pic[statusId];}
-
+    if(!c.pic)c.pic={};
+  if(userId){
+    c.pic[statusId]=userId;
+    // Auto-grant brand access to freelancers when assigned
+    const assignedUser=data.users.find(x=>x.id===userId);
+    if(assignedUser?.role==='freelancer'){
+      if(!Array.isArray(assignedUser.brandAccess)) assignedUser.brandAccess=[];
+      if(!assignedUser.brandAccess.includes(c.brandId)){
+        assignedUser.brandAccess.push(c.brandId);
+      }
+    }
+  }else{delete c.pic[statusId];}
   // Keep assignees/workflowTasks in sync when reassigning the CURRENT active
   // stage, so the dashboard (My Active Jobs / Pending Tasks) reflects it immediately.
   if(statusId===c.statusId){
