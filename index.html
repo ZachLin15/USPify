@@ -5872,13 +5872,7 @@ function openAddUserModal(){
       <button class="btn btn-ac" onclick="saveNewUser()">Add User</button>
     </div>`);
 
-  // Toggle brand access section based on employment type
-  document.querySelectorAll('input[name="nu-emptype"]').forEach(r=>{
-    r.addEventListener('change',()=>{
-      const isFreelancer=document.querySelector('input[name="nu-emptype"]:checked')?.value==='freelancer';
-      document.getElementById('nu-brands-row').style.display=isFreelancer?'block':'none';
-    });
-  });
+    // No toggle needed — brand access is granted automatically on task assignment
 }
 
 function saveNewUser(){
