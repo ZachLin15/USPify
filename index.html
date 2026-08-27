@@ -2551,7 +2551,49 @@ function renderSidebar(){
     </div>
     <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888')}22;color:${u.color||({developer:'#9a7aff',jack:'#5a9fff',hualu:'#e06aaa',leonard:'#3acca0',lunox_client:'#ff5a5a'})[u.id]||'#888'}">${u.init||u.name?.slice(0,2)||'?'}</div><div class="u-info"><div class="u-name">${u.name}</div><div class="u-role">${u.title||u.role}</div></div><button class="logout-btn" onclick="nav('set_password')" title="Change password" style="margin-right:4px">🔑</button><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
 }
+function confirmDeleteBrand(brandId){
+  const data=D();
+  const b=getBrand(data,brandId);
+  if(!b) return;
+  const contentCount=data.contents.filter(c=>c.brandId===brandId).length;
+  openModal(`<div class="modal-title" style="color:var(--red)">🗑 Delete Brand<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="padding:12px 14px;background:var(--redd);border:1px solid var(--red)44;border-radius:var(--r);margin-bottom:16px">
+      <div style="font-size:15px;font-weight:700;color:var(--red)">⚠ This action is permanent and cannot be undone.</div>
+      <div style="font-size:13px;color:var(--t2);margin-top:6px">Deleting <strong>${b.name}</strong> will permanently remove:</div>
+      <ul style="font-size:13px;color:var(--t2);margin:6px 0 0 16px;line-height:2">
+        <li>The brand itself</li>
+        <li>${contentCount} content piece${contentCount!==1?'s':''}</li>
+        <li>All associated schedule blocks</li>
+      </ul>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Type <strong>${b.name}</strong> to confirm deletion</label>
+      <input class="form-input" id="delete-brand-confirm" type="text" placeholder="${b.name}" style="font-size:15px">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteBrand('${brandId}','${b.name}')">🗑 Permanently Delete</button>
+    </div>`);
+}
 
+async function deleteBrand(brandId, brandName){
+  const input=document.getElementById('delete-brand-confirm')?.value.trim();
+  if(input!==brandName){
+    alert(`Please type "${brandName}" exactly to confirm.`);
+    return;
+  }
+  const data=D();
+  const contentCount=data.contents.filter(c=>c.brandId===brandId).length;
+  data.brands=data.brands.filter(b=>b.id!==brandId);
+  data.contents=data.contents.filter(c=>c.brandId!==brandId);
+  data.scheduleBlocks=(data.scheduleBlocks||[]).filter(b=>b.brandId!==brandId);
+  closeModal();
+  S.brand=null;
+  S.page='dashboard';
+  await saveNow(data);
+  showAIToast(`🗑 ${brandName} and ${contentCount} content pieces deleted`);
+  renderPage();
+}
 function renderTopbar(){
   const data=D();const isAdmin=isAdminUser(S.user);const isClient=S.user.role==='client';
   let title='',sub='',actions='';
@@ -2565,8 +2607,9 @@ function renderTopbar(){
     document.getElementById('topbar').innerHTML=`<button id="menu-btn" onclick="toggleSidebar()">☰</button><div><div class="tb-title">${title}</div><div class="tb-sub">${sub}</div></div><div class="tb-actions"></div>`;return;
   }
   if(S.brand){const b=getBrand(data,S.brand);title=b.name;sub='Brand content';
-    actions=`<button class="btn btn-ghost btn-sm" onclick="openBrandGuideModal('${b.id}')">📖 Brand Guide</button>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openBrandInfoModal('${b.id}')">⚙ Brand Settings</button><button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:''}
-    <button class="btn btn-ac btn-sm" onclick="openAddContentModal('${b.id}')">+ Add content</button>`;
+        actions=`<button class="btn btn-ghost btn-sm" onclick="openBrandGuideModal('${b.id}')">📖 Brand Guide</button>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openBrandInfoModal('${b.id}')">⚙ Brand Settings</button><button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:''}
+    <button class="btn btn-ac btn-sm" onclick="openAddContentModal('${b.id}')">+ Add content</button>
+    ${S.user.id==='caleb'?`<button class="btn btn-danger btn-sm" onclick="confirmDeleteBrand('${b.id}')">🗑 Delete Brand</button>`:''}`;
   }else if(S.page==='dashboard'){
     const h=new Date().getHours();title=`${h<12?'Good morning':'Good afternoon'}, ${S.user.name}`;sub=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
