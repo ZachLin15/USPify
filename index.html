@@ -9551,7 +9551,11 @@ async function wfAmendVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const designer=getDesigner(data,c);
   const today=new Date().toISOString().split('T')[0];
-  c.videoReviewPending=false;
+    c.videoReviewPending=false;
+  c.videoAmendmentRequested=true;
+  if(Array.isArray(c.videoVersions)&&c.videoVersions.length){
+    c.videoVersions[c.videoVersions.length-1].amendNote=note;
+  }
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   // Close Jack's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
