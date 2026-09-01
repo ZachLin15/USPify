@@ -7653,8 +7653,8 @@ async function saveVideoEditLink(id){
   const rawLink=inp.value.trim();
   if(!rawLink) return;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  if(c.videoEditLink){
-    alert('An edited video is already uploaded and locked. This cannot be replaced once submitted.');
+  if(c.videoReviewPending){
+    alert('Video is currently under review. Wait for feedback before uploading a new version.');
     return;
   }
   setAutosaveStatus('saving','copying to Drive…');
@@ -7670,12 +7670,22 @@ async function saveVideoEditLink(id){
     });
     const result=await res.json();
     if(result.error){alert(result.error);setAutosaveStatus('idle','auto-save on');return;}
+        if(!Array.isArray(c.videoVersions)) c.videoVersions=[];
+    c.videoVersions.push({
+      url:result.url,
+      driveFileId:result.fileId,
+      type:result.detectedType||'video',
+      name:result.name||'Edited video',
+      uploadedAt:new Date().toISOString().split('T')[0],
+      uploadedBy:S.user.name,
+    });
     c.videoEditLink=result.url;
     c.videoEditDriveFileId=result.fileId;
     c.videoEditType=result.detectedType||'video';
     c.editedFileName=result.name||'Edited video';
     c.editedUploadedAt=new Date().toISOString().split('T')[0];
     c.editedUploadedBy=S.user.name;
+    c.videoAmendmentRequested=false;
     save(data);
     setAutosaveStatus('saved','✓ uploaded');
     setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);
@@ -7745,24 +7755,56 @@ function renderVideoEditingPanel(c, id){
           </div>`}
     </div>
 
-    <!-- EDITED VIDEO -->
+        <!-- EDITED VIDEO -->
     <div class="idea-section">
       <div class="idea-section-header">
         <div class="idea-section-title"><span class="idea-section-icon">✂️</span> Edited Video</div>
-        <span class="idea-section-hint">${c.videoEditLink?'Locked once uploaded — preview shown above':'Paste a Drive link to your edited video'}</span>
+        <span class="idea-section-hint">${c.videoReviewPending?'Awaiting review':'Paste a Drive link to your edited video'}</span>
       </div>
 
-      ${renderVideoEditPreview(c)}
+      ${(()=>{
+        const versions=c.videoVersions||[];
+        const activeIdx=versions.length-1;
+        const activeVer=versions[activeIdx];
+        const hasAmendment=c.videoAmendmentRequested;
+        const canUploadNew=isDesigner&&hasAmendment&&!isVideoLocked;
+        const canUploadFirst=isDesigner&&!versions.length&&!isVideoLocked;
 
-      ${(isDesigner&&!c.videoEditLink&&!isVideoLocked)?`
-      <div style="margin-top:14px">
-        <div style="font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Paste Google Drive link</div>
-        <div class="design-link-row">
-          <input class="form-input" id="video-edit-link-input-${id}" type="url" placeholder="https://drive.google.com/...">
-          <button class="btn btn-ac btn-sm" onclick="saveVideoEditLink('${id}')">Save</button>
-        </div>
-        <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Drive tip: share link → "Anyone with link" → copy link → paste above</div>
-      </div>`:(isDesigner&&isVideoLocked)?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Edited video is locked while awaiting senior review.</div>`:''}
+        // Show version tabs if more than 1 version
+        const verTabs=versions.length>1?`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          ${versions.map((v,i)=>`<div style="padding:4px 10px;border-radius:var(--r);font-size:12px;font-weight:700;font-family:'DM Mono',monospace;cursor:pointer;background:${i===activeIdx?'var(--ora)':'var(--s2)'};color:${i===activeIdx?'#0f0f11':'var(--t2)'}">V${i+1}</div>`).join('')}
+        </div>`:'';
+
+        // Active version preview
+        const verPreview=activeVer?`
+          <div style="margin-bottom:10px;padding:10px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span style="font-size:13px;font-weight:700;color:var(--t1)">V${activeIdx+1} — ${activeVer.uploadedBy||'Hualu'}</span>
+              <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${activeVer.uploadedAt||''}</span>
+              <a href="${activeVer.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:auto">Open in Drive ↗</a>
+            </div>
+            ${activeVer.driveFileId?`<div style="border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:16/9">
+              <iframe src="https://drive.google.com/file/d/${activeVer.driveFileId}/preview" style="width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>
+            </div>`:''}
+            ${activeVer.amendNote?`<div style="margin-top:8px;padding:8px 10px;background:var(--redd);border-radius:var(--r);font-size:13px;color:var(--red)">🔄 Amendment: ${activeVer.amendNote}</div>`:''}
+          </div>`:'';
+
+        // Upload new version UI
+        const uploadUI=(canUploadFirst||canUploadNew)?`
+          <div style="margin-top:10px">
+            ${canUploadNew?`<div style="padding:8px 12px;background:var(--redd);border:1px solid var(--red)44;border-radius:var(--r);font-size:13px;color:var(--red);margin-bottom:10px">🔄 Amendment requested — upload a new version below</div>`:''}
+            <div style="font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${canUploadNew?'Upload V'+(versions.length+1):'Upload Edited Video'}</div>
+            <div class="design-link-row">
+              <input class="form-input" id="video-edit-link-input-${id}" type="url" placeholder="https://drive.google.com/...">
+              <button class="btn btn-ac btn-sm" onclick="saveVideoEditLink('${id}')">Save</button>
+            </div>
+            <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Share as "Anyone with link" → copy link → paste above</div>
+          </div>`:'';
+
+        const lockedMsg=isDesigner&&isVideoLocked?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Awaiting senior review — you'll be notified when feedback arrives.</div>`:'';
+
+        return verTabs+verPreview+uploadUI+lockedMsg;
+      })()}
     </div>
 
     <div class="idea-section">
