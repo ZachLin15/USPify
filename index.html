@@ -7696,7 +7696,30 @@ async function saveVideoEditLink(id){
     setAutosaveStatus('idle','auto-save on');
   }
 }
-
+function removeVideoVersion(id){
+  if(!confirm('Remove this uploaded video? You can upload a new one after.')) return;
+  const data=D();
+  const c=data.contents.find(x=>x.id===id);if(!c)return;
+  if(Array.isArray(c.videoVersions)&&c.videoVersions.length){
+    c.videoVersions.pop();
+    const prev=c.videoVersions[c.videoVersions.length-1];
+    c.videoEditLink=prev?.url||'';
+    c.videoEditDriveFileId=prev?.driveFileId||'';
+    c.videoEditType=prev?.type||'video';
+    c.editedFileName=prev?.name||'';
+    c.editedUploadedAt=prev?.uploadedAt||'';
+    c.editedUploadedBy=prev?.uploadedBy||'';
+  } else {
+    c.videoEditLink='';
+    c.videoEditDriveFileId='';
+    c.videoEditType='';
+    c.editedFileName='';
+  }
+  c.videoAmendmentRequested=false;
+  save(data);
+  renderDetailPage(id,'dp-video');
+  showAIToast('✓ Video removed — upload a new one');
+}
 function renderVideoEditingPanel(c, id){
   const data=D();
   const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
@@ -7781,7 +7804,8 @@ function renderVideoEditingPanel(c, id){
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
               <span style="font-size:13px;font-weight:700;color:var(--t1)">V${activeIdx+1} — ${activeVer.uploadedBy||'Hualu'}</span>
               <span style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace">${activeVer.uploadedAt||''}</span>
-              <a href="${activeVer.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:auto">Open in Drive ↗</a>
+                            <a href="${activeVer.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:auto">Open in Drive ↗</a>
+              ${isDesigner&&!isVideoLocked?`<button class="btn btn-danger btn-sm" onclick="removeVideoVersion('${id}')">🗑 Remove</button>`:''}
             </div>
             ${activeVer.driveFileId?`<div style="border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:16/9">
               <iframe src="https://drive.google.com/file/d/${activeVer.driveFileId}/preview" style="width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>
