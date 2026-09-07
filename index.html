@@ -6118,9 +6118,10 @@ function renderResponsibilities(){
     const brandContents=data.contents.filter(c=>c.brandId===b.id&&c.statusId!=='posted');
     if(!brandContents.length) return '';
 
-    const videos=brandContents.filter(c=>c.type==='Video');
+       const videos=brandContents.filter(c=>c.type==='Video');
+    const reels=brandContents.filter(c=>c.type==='Reels');
     const carousels=brandContents.filter(c=>c.type==='Carousel');
-
+    const singles=brandContents.filter(c=>c.type==='Single Image');
     return `<div class="panel" style="margin-bottom:16px;overflow:hidden">
       <div class="ph">
         <div class="bdot" style="background:${b.color}"></div>
@@ -6128,13 +6129,16 @@ function renderResponsibilities(){
         <div class="ph-sub">${brandContents.length} active piece${brandContents.length!==1?'s':''}</div>
       </div>
       ${makeTable(videos,'Video','var(--amb)','🎬')}
-      ${carousels.length&&videos.length?`<div style="height:1px;background:var(--b1);margin:0"></div>`:''}
+      ${makeTable(reels,'Reels','var(--pnk)','📱')}
       ${makeTable(carousels,'Carousel','var(--pur)','🃏')}
+      ${makeTable(singles,'Single Image','var(--blu)','🖼')}
     </div>`;
   }).join('');
 
+    let wfSettingsHTML='';
+  try{wfSettingsHTML=renderWfReviewerSettings(data);}catch(e){console.error('renderWfReviewerSettings error:',e);wfSettingsHTML='';}
   return `<div style="max-width:1200px">
-    ${renderWfReviewerSettings(data)}
+    ${wfSettingsHTML}
     <div style="margin-bottom:14px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac);border-radius:var(--r);font-size:14px;color:var(--ac);font-family:'DM Mono',monospace">
       🎯 Assign a PIC (Person In Charge) per stage per content piece. Leave as "Default" to use the role-based fallback.
     </div>
