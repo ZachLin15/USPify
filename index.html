@@ -6181,6 +6181,32 @@ function saveContentPIC(contentId, statusId, userId){
   showAIToast(u?`✓ ${u.name} set as PIC for ${statusId} on this piece`:`✓ Reset to default`);
 }
 
+function changeProductionMethod(id, newMethod){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  if(c.productionMethod===newMethod)return;
+  const oldMethod=c.productionMethod;
+  const today=new Date().toISOString().split('T')[0];
+  const map = newMethod==='design' ? SHOOT_TO_DESIGN_STAGE : DESIGN_TO_SHOOT_STAGE;
+  if(!c.comments)c.comments=[];
+  if(map[c.statusId]){
+    const oldStatus=c.statusId;
+    c.statusId=map[c.statusId];
+    c.statusHistory.push({statusId:c.statusId,changedBy:S.user.id,changedAt:today});
+    c.comments.push({id:'cm'+uid(),userId:S.user.id,
+      text:`🔀 Production method changed ${oldMethod||'(unset)'} → ${newMethod} by ${S.user.name}. Stage remapped: ${oldStatus} → ${c.statusId}.`,
+      type:'general',createdAt:today,ts:Date.now()});
+    const newPic=getPIC(data,c.statusId,c);
+    if(newPic) c.assignees=[newPic.id];
+  } else {
+    c.comments.push({id:'cm'+uid(),userId:S.user.id,
+      text:`🔀 Production method changed ${oldMethod||'(unset)'} → ${newMethod} by ${S.user.name}.`,
+      type:'general',createdAt:today,ts:Date.now()});
+  }
+  c.productionMethod=newMethod;
+  save(data,id);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast(`🔀 Switched to ${newMethod==='shoot'?'🎬 Shoot':'🎨 Design'}`);
+}
+
 function clearContentPIC(contentId){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
   c.pic={};
@@ -6357,10 +6383,7 @@ function renderClientApprovalPanel(c, id, data, b, st){
     `<div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:10px">Social posting available to admin only.</div>`;
 
   // Client comment thread
-  const commentThread=(c.comments||[]).map(cm=>{
-    const cu=getUser(data,cm.userId);
-    return `<div class="comment-item"><div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div><div class="comment-body"><div class="comment-header"><span class="comment-name">${cu.name}</span><span class="comment-time">${fmt(cm.createdAt)}</span><span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span></div><div class="comment-text">${cm.text}</div></div></div>`;
-  }).join('');
+    const commentThread=(c.comments||[]).map(cm=>renderCommentItem(cm,id)).join('');
 
   return `
     <!-- Approval banner -->
@@ -6733,7 +6756,7 @@ function saveClientComment(id){
   const type=document.getElementById('cr-type').value;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0],ts:Date.now()});
   save(data);closeModal();renderPage();alert('Comment sent!');
 }
 function openClientContentDetail(id){
@@ -6769,7 +6792,15 @@ const VIDEO_FLOW=[
   {id:'posted',                  label:'Posted',              color:'#c8f04a', icon:'🚀',  step:100},
 ];
 VIDEO_FLOW.forEach((s,i)=>s.flowKey='vf'+i);
+function usesShootFlow(c){
+  if(c.type==='Video') return true;
+  if(c.type==='Reels') return c.productionMethod==='shoot';
+  return false;
+}
+const SHOOT_TO_DESIGN_STAGE={shoot:'design',video_editing:'design'};
+const DESIGN_TO_SHOOT_STAGE={design:'shoot'};
 
+const CAROUSEL_FLOW=[
 const CAROUSEL_FLOW=[
   {id:'ideation',               label:'Ideation',            color:'#888780', icon:'💡',  step:0},
   {id:'ideation_amendment',     label:'Amendment',           color:'#ff5a5a', icon:'↩',   step:0,  isAmend:true},
@@ -6789,7 +6820,7 @@ CAROUSEL_FLOW.forEach((s,i)=>s.flowKey='cf'+i);
 // getProgressForFlowPipeline — used only for the flow pipeline visual (uses VIDEO_FLOW steps)
 function getProgressForFlowPipeline(c){
   if(!c)return 0;
-  const flow=(c.type==='Video'||c.type==='Reels')?VIDEO_FLOW:CAROUSEL_FLOW;
+  const flow=usesShootFlow(c)?VIDEO_FLOW:CAROUSEL_FLOW;
   const idx=getFlowCurrentIndex(flow,c.statusHistory,c.statusId);
   return flow[idx]?flow[idx].step:0;
 }
@@ -6900,8 +6931,8 @@ function renderDetailPage(id, forceTab){
   const prog=getProgressForContent(c);
   const days=daysUntil(c.postingDate);
 
-  // Choose flow
-  const flow = c.type==='Video' ? VIDEO_FLOW : CAROUSEL_FLOW;
+    // Choose flow
+  const flow = usesShootFlow(c) ? VIDEO_FLOW : CAROUSEL_FLOW;
 
   // --- TOPBAR ---
   document.getElementById('detail-title').innerHTML='';
@@ -6934,14 +6965,14 @@ function renderDetailPage(id, forceTab){
   `;
 
   // --- MAIN (left panel) ---
-  const commentsHTML=(c.comments||[]).map(cm=>{const cu=getUser(data,cm.userId);return`<div class="comment-item"><div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div><div class="comment-body"><div class="comment-header"><span class="comment-name">${cu.name}</span><span class="comment-time">${fmt(cm.createdAt)}</span><span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span></div><div class="comment-text">${cm.text}</div></div></div>`;}).join('');
+    const commentsHTML=(c.comments||[]).map(cm=>renderCommentItem(cm,id)).join('');
   const historyHTML=(c.statusHistory||[]).map(h=>{const hst=getStatus(data,h.statusId);const hu=getUser(data,h.changedBy);return`<div class="history-item"><div class="history-dot" style="background:${hst.color}"></div><span class="history-status" style="color:${hst.color}">${hst.name}</span><div class="history-line"></div><span class="history-by">${hu.name}</span><span class="history-time">${fmt(h.changedAt)}</span></div>`;}).join('');
   const canChangeStatus=isAdmin||(S.user.id==='leonard'||S.user.role==='content_creator');
   const statusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
 
   // Smart default tab — type-aware, supports forceTab override
   const defaultTab = forceTab || getDefaultTabForContent(c);
-  const isVideoType = c.type==='Video';
+  const isVideoType = usesShootFlow(c);
 
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
   if(c.jobKind==='task'){
@@ -7071,7 +7102,7 @@ function renderDetailPage(id, forceTab){
       </div>
     </div>
 
-    <div class="side-section">
+        <div class="side-section">
       <div class="side-label">Meta</div>
       <div class="meta-grid">
         <div class="meta-item"><div class="meta-item-label">Brand</div><div class="meta-item-val" style="color:${b.color}">${b.name}</div></div>
@@ -7080,6 +7111,18 @@ function renderDetailPage(id, forceTab){
         <div class="meta-item"><div class="meta-item-label">History</div><div class="meta-item-val">${(c.statusHistory||[]).length} steps</div></div>
       </div>
     </div>
+
+    ${c.type==='Reels'&&(isAdmin||S.user.role==='senior')?`
+    <div class="side-section">
+      <div class="side-label">🎬/🎨 Production Method</div>
+      <select class="form-select" onchange="changeProductionMethod('${id}',this.value)">
+        <option value="shoot" ${c.productionMethod==='shoot'?'selected':''}>🎬 Shoot</option>
+        <option value="design" ${c.productionMethod==='design'?'selected':''}>🎨 Design</option>
+      </select>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">
+        Changing this mid-flow will remap the current stage.
+      </div>
+    </div>`:''}
 
     ${(S.user.id==='developer')?`
     <div class="side-section" style="border-top:2px solid var(--redd)">
@@ -7181,7 +7224,7 @@ function openContentDetail(id, forceTab){
 
 function getDefaultTabForContent(c){
   // Type-aware tab mapping — carousel has dp-design, video has dp-video/dp-shoot
-  const isVideo=c.type==='Video';
+  const isVideo=usesShootFlow(c);
   const map={
     'ideation':'dp-ideation',
     'script':'dp-copy',
@@ -7445,8 +7488,8 @@ function renderCopywritingPanel(c,id){
     <div style="padding:10px 12px;background:var(--s2);border-radius:var(--r);font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">Waiting for creator to submit ${ver.label} for review.</div>`:'';
 
   const submitBtnHTML='';
-  const copyComments=(c.comments||[]).filter(cm=>cm.type==='copy'||cm.type==='general');
-  const commentsHTML=copyComments.map(cm=>{const cu=getUser(data,cm.userId);return`<div class="comment-item"><div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div><div class="comment-body"><div class="comment-header"><span class="comment-name">${cu.name}</span><span class="comment-time">${fmt(cm.createdAt)}</span><span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span></div><div class="comment-text">${cm.text}</div></div></div>`;}).join('');
+    const copyComments=(c.comments||[]).filter(cm=>cm.type==='copy'||cm.type==='general');
+  const commentsHTML=copyComments.map(cm=>renderCommentItem(cm,id)).join('');
 
   return `
     <div class="design-ver-bar">
@@ -9107,7 +9150,7 @@ function renderWorkflowActionBox(data, c){
   const designer=getDesigner(data,c);
   const creator=getContentCreator(data,c);
   const senior=getSenior(data,c);
-  const isVideo=c.type==='Video'||c.type==='Reels';
+  const isVideo=usesShootFlow(c);
   const isCarousel=!isVideo;
 
   // ── CAROUSEL: Ideation — creator submits ──────────────────────────────────
@@ -10029,13 +10072,70 @@ function switchDetailTab(el,showId){
 }
 function saveDriveLink(id){const inp=document.getElementById('drive-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c){c.driveLink=inp.value.trim();save(data,id);renderDetailPage(id);}}
 function saveCopywriting(id){const inp=document.getElementById('copy-input-'+id);if(!inp)return;const data=D();const c=data.contents.find(x=>x.id===id);if(c)if(c){c.copywriting=inp.value;save(data,id);setAutosaveStatus('saved','✓ saved');setTimeout(()=>setAutosaveStatus('idle','auto-save on'),2000);}}
+const COMMENT_EDIT_WINDOW_MS = 60*60*1000;
+function canEditComment(cm){
+  if(!cm||!cm.ts) return false; // legacy comments with no timestamp stay locked
+  if(cm.userId!==S.user.id) return false;
+  return (Date.now()-cm.ts) < COMMENT_EDIT_WINDOW_MS;
+}
+function renderCommentItem(cm, contentId){
+  const data=D();const cu=getUser(data,cm.userId);
+  const editable=canEditComment(cm);
+  return `<div class="comment-item" id="cm-row-${cm.id}">
+    <div class="comment-av" style="background:${cu.color}22;color:${cu.color}">${cu.init}</div>
+    <div class="comment-body">
+      <div class="comment-header">
+        <span class="comment-name">${cu.name}</span>
+        <span class="comment-time">${fmt(cm.createdAt)}${cm.edited?' (edited)':''}</span>
+        <span class="comment-type ct-${cm.type||'general'}">${cm.type||'general'}</span>
+        ${editable?`
+          <button onclick="startEditComment('${contentId}','${cm.id}')" style="background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:12px;margin-left:auto" title="Edit">✏️</button>
+          <button onclick="deleteCommentConfirm('${contentId}','${cm.id}')" style="background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:12px" title="Delete">🗑</button>
+        `:''}
+      </div>
+      <div class="comment-text" id="cm-text-${cm.id}">${cm.text}</div>
+    </div>
+  </div>`;
+}
+function startEditComment(contentId, commentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);
+  const cm=c?.comments.find(x=>x.id===commentId);
+  if(!cm||!canEditComment(cm)){showAIToast('⏰ Edit window has expired');renderDetailPage(contentId);return;}
+  const el=document.getElementById('cm-text-'+commentId);
+  if(!el)return;
+  el.innerHTML=`<textarea class="form-textarea" id="cm-edit-input-${commentId}" style="min-height:60px;font-size:14px">${cm.text}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-ac btn-sm" onclick="saveEditComment('${contentId}','${commentId}')">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderDetailPage('${contentId}')">Cancel</button>
+    </div>`;
+}
+function saveEditComment(contentId, commentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  const cm=c.comments.find(x=>x.id===commentId);if(!cm)return;
+  if(!canEditComment(cm)){showAIToast('⏰ Edit window has expired');renderDetailPage(contentId);return;}
+  const inp=document.getElementById('cm-edit-input-'+commentId);if(!inp)return;
+  const newText=inp.value.trim();if(!newText)return;
+  cm.text=newText;cm.edited=true;cm.editedAt=Date.now();
+  save(data,contentId);renderDetailPage(contentId);
+  showAIToast('✓ Comment updated');
+}
+function deleteCommentConfirm(contentId, commentId){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c)return;
+  const cm=c.comments.find(x=>x.id===commentId);if(!cm)return;
+  if(!canEditComment(cm)){showAIToast('⏰ Edit window has expired');renderDetailPage(contentId);return;}
+  if(!confirm('Delete this comment?'))return;
+  c.comments=c.comments.filter(x=>x.id!==commentId);
+  save(data,contentId);renderDetailPage(contentId);
+  showAIToast('🗑 Comment deleted');
+}
+
 function saveComment(id){
   const text=document.getElementById('comment-input-'+id).value.trim();if(!text)return;
   const typeEl=document.getElementById('comment-type-'+id);
   const type=typeEl?typeEl.value:'general';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0],ts:Date.now()});
   save(data,id);renderDetailPage(id);
 }
 function saveCopyComment(id){
@@ -10043,7 +10143,7 @@ function saveCopyComment(id){
   const type=document.getElementById('copy-comment-type-'+id)?.value||'copy';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0]});
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:new Date().toISOString().split('T')[0],ts:Date.now()});
   save(data,id);renderDetailPage(id);
 }
 function changeStatus(id,statusId){
@@ -12060,7 +12160,7 @@ async function submitIdeaForApproval(id, verIdx){
 async function approveIdeation(id, verIdx){
   saveWfReviewComment(id,'Senior Approved — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  if(c.type==='Video'){wfApproveIdeationForVideo(id);return;}
+  if(usesShootFlow(c)){wfApproveIdeationForVideo(id);return;}
   const versions=getIdeationVersions(c);
   const note=document.getElementById('wf-review-note-'+id)?.value||'';
   const today=new Date().toISOString().split('T')[0];
