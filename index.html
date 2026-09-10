@@ -3974,12 +3974,12 @@ async function approveContent(id,nextStatusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
-  const _cr=getContentCreator(data,c);const _dz=getDesigner(data,c);
-  if(nextStatusId==='design'){c.assignees=[_dz.id];notifyApproved(c,_dz,'Ideation approved — start designing 🎨',S.user.name);}
-  else if(nextStatusId==='copywriting'){c.assignees=[_cr.id];notifyApproved(c,_cr,'Approved → start copywriting ✍️',S.user.name);}
-  else if(nextStatusId==='shoot'){c.assignees=[_cr.id];notifyApproved(c,_cr,'Script approved — start shooting 🎬',S.user.name);}
-  else if(nextStatusId==='video_editing'){c.assignees=[_dz.id];notifyApproved(c,_dz,'Start editing ✂️',S.user.name);}
-  else if(nextStatusId==='client_approval'){notifyApproved(c,_cr,'Approved → Client Approval 🤝',S.user.name);}
+  const nextPic=getPIC(data,nextStatusId,c);
+  if(nextStatusId==='design'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Ideation approved — start designing 🎨',S.user.name);}
+  else if(nextStatusId==='copywriting'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Approved → start copywriting ✍️',S.user.name);}
+  else if(nextStatusId==='shoot'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Script approved — start shooting 🎬',S.user.name);}
+  else if(nextStatusId==='video_editing'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Start editing ✂️',S.user.name);}
+  else if(nextStatusId==='client_approval'){notifyApproved(c,nextPic,'Approved → Client Approval 🤝',S.user.name);}
   await saveNow(data,c.id);render();
 }
 function openReviseModal(id, prefillNote){
@@ -8312,9 +8312,9 @@ async function approveDesign(id, verIdx){
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   c.designPendingReview=false;
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'copywriting',c);
   // Close all of designer's open tasks before handing off
-  const designer=getDesigner(data,c);
+  const designer=getPIC(data,'design',c);
   (c.workflowTasks||[]).filter(t=>t.assigneeId===designer.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
   notifyApproved(c,creator,'Design approved — write the copy! ✍️',S.user.name);
@@ -9429,7 +9429,7 @@ async function wfClientAmend(id){
   saveWfReviewComment(id,'Client Requested Changes');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const today=new Date().toISOString().split('T')[0];
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'copywriting',c);
   const note=document.getElementById('wf-review-note-'+id)?.value||'Client has requested amendments.';
   // Close reviewer's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
@@ -9550,7 +9550,7 @@ function notifyRejected(c, toUser, label, rejectedBy, note){
 async function wfApproveIdeationForVideo(id){
   saveWfReviewComment(id,'Senior Approved — Ideation/Script');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'shoot',c);
   const today=new Date().toISOString().split('T')[0];
   c.ideationPendingApproval=false;
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
@@ -9604,7 +9604,7 @@ function markTaskDone(id){
 async function wfApproveVideo(id){
   saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'copywriting',c);
   const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
@@ -9625,7 +9625,7 @@ async function wfAmendVideo(id){
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
   saveWfReviewComment(id,'Senior Amendment — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const designer=getDesigner(data,c);
+  const designer=getPIC(data,'video_editing',c);
   const today=new Date().toISOString().split('T')[0];
     c.videoReviewPending=false;
   c.videoAmendmentRequested=true;
@@ -9722,7 +9722,7 @@ async function wfSubmitCopy(id){
 function wfSeniorApprove(id){
   saveWfReviewComment(id,'Senior Approved Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'client_approval',c);
   const today=new Date().toISOString().split('T')[0];
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   notifyApproved(c,creator,'Copy approved → Client Approval',S.user.name);
@@ -9739,7 +9739,7 @@ async function wfSeniorAmend(id){
   if(!note){alert('Please add a comment explaining the amendment needed.');return;}
   saveWfReviewComment(id,'Senior Amendment — Copy');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const creator=getContentCreator(data,c);
+  const creator=getPIC(data,'copywriting',c);
   const today=new Date().toISOString().split('T')[0];
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   // Close Jack's open tasks
@@ -10025,7 +10025,7 @@ function wfShootDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-footage-link-'+id);
   if(linkInp&&linkInp.value.trim()) c.footageLink=linkInp.value.trim();
-  const designer=getDesigner(data,c);
+  const designer=getPIC(data,'video_editing',c);
   const prev=[...c.assignees];
   wfTransition(data,c,'video_editing',[designer.id],
     `\uD83C\uDFAC Shooting done by ${S.user.name}.${c.footageLink?' Footage link added.':''} Assigned to ${designer.name} for video editing.`,prev);
