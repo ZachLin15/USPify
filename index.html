@@ -2406,7 +2406,7 @@ function resetAppData(){
     if(errEl){errEl.style.color='var(--ac)';errEl.textContent='✓ Data reset. Please sign in again.';}
   }
 }
-function doLogin(){
+async function doLogin(){
   const nameEl=document.getElementById('li-name');
   const passEl=document.getElementById('li-pass');
   const errEl=document.getElementById('li-err');
@@ -2422,15 +2422,31 @@ function doLogin(){
     {id:'caleb',name:'Caleb',role:'admin',title:'Partner',init:'C',color:'#c8f04a',pass:'caleb'},
     {id:'carmen',name:'Carmen',role:'admin',title:'Partner',init:'Ca',color:'#5a9fff',pass:'carmen'},
   ];
-    const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
-  // Also check dynamically added users (freelancers etc) stored in Supabase
-  const data=D();
-  const dynamicUser=!hc?data.users.find(u=>(u.name.toLowerCase()===name||u.id===name)&&u.pass===pass):null;
-  if(!hc&&!dynamicUser){if(errEl)errEl.textContent='Invalid name or password.';return;}
-  if(hc&&hc.pass!==pass){if(errEl)errEl.textContent='Invalid name or password.';return;}
+  const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
+  let data=D();
+  let dynamicUser=!hc?data.users.find(u=>(u.name.toLowerCase()===name||u.id===name)&&u.pass===pass):null;
+
+  // Fresh device with no local cache yet (e.g. a freelancer logging in for the first time) —
+  // pull the latest data from the cloud once before giving up.
+  if(!hc&&!dynamicUser&&typeof CLOUD_CONFIG!=='undefined'&&CLOUD_CONFIG.ENABLED){
+    if(errEl){errEl.style.color='var(--t3)';errEl.textContent='Checking…';}
+    try{
+      const fresh=await cloudLoad(2,500);
+      if(fresh&&fresh.users&&fresh.users.length){
+        reapplyDefaultPasswords(fresh.users);
+        _dataCache=null;_dataCacheKey=null;
+        localStorage.setItem(KEY,JSON.stringify(fresh));
+        data=fresh;
+        dynamicUser=data.users.find(u=>(u.name.toLowerCase()===name||u.id===name)&&u.pass===pass);
+      }
+    }catch(e){ console.warn('Login cloud sync failed:',e); }
+  }
+
+  if(!hc&&!dynamicUser){if(errEl){errEl.style.color='var(--red)';errEl.textContent='Invalid name or password.';}return;}
+  if(hc&&hc.pass!==pass){if(errEl){errEl.style.color='var(--red)';errEl.textContent='Invalid name or password.';}return;}
   const stored=hc?data.users.find(u=>u.id===hc.id):null;
   const user=dynamicUser||(stored?{...stored,pass:hc.pass,role:hc.role}:hc);
-    S.user=user;
+  S.user=user;
   sessionStorage.setItem('uspify_uid',user.id);
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
