@@ -9,8 +9,8 @@
   ============================================================ -->
 <script>
   window.USPIFY_CONFIG = {
-    SUPABASE_URL:      'https://iwdvcpyqfbmssvdomvgk.supabase.co',
-    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3ZHZjcHlxZmJtc3N2ZG9tdmdrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwODAxNTEsImV4cCI6MjA5MzY1NjE1MX0.MfPGIqDAvxCUhIpgePKpskd-ZgZ12CqYHUlH2P1ceuw',
+    SUPABASE_URL:      'https://ncfsyqsgrgldsqqshvjz.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jZnN5cXNncmdsZHNxcXNodmp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxMDM2ODAsImV4cCI6MjEwNDY3OTY4MH0.uEQwVGb90QuG130SMp44y7rIYhECxPcAX-7coftlHE0',
     SYNC_ENABLED:      true,
   };
 </script>
@@ -1642,7 +1642,7 @@ function showTaskNotification(c, task, fromName){
   function startPolling(){
     if(pollTimer) return;
     setSyncStatus('idle','Polling...');
-    pollTimer=setInterval(pullIfChanged, 1500);
+    pollTimer=setInterval(pullIfChanged, 20000);
   }
 
   function stopPolling(){
@@ -1750,8 +1750,16 @@ function showTaskNotification(c, task, fromName){
     }
   }catch(_){}
   try{ lastHash=dataHash(D()); }catch(e){}
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullIfChanged();});
-  window.addEventListener('focus',pullIfChanged);
+  let _lastPullAt=0;
+  const _origPullIfChanged=pullIfChanged;
+  function pullIfChangedDebounced(){
+    const now=Date.now();
+    if(now-_lastPullAt<10000) return; // skip if we pulled in the last 10s
+    _lastPullAt=now;
+    _origPullIfChanged();
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullIfChangedDebounced();});
+  window.addEventListener('focus',pullIfChangedDebounced);
 
   connectWS();
 }
