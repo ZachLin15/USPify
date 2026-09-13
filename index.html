@@ -3480,8 +3480,8 @@ function saveBrandRowDate(contentId, field, value){
   }
   save(data,contentId);
   showAIToast(`✓ Date updated`);
+  if(field==='postingDate') renderPageOnly();
 }
-
 // ===================== BRAND PAGE =====================
 
 // ── Multi-select + bulk delete ───────────────────────────────────────
