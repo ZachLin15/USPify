@@ -4712,7 +4712,6 @@ function toggleBrandCalBrand(brandId){
 }
 
 function brandCalNav(dir){
-function brandCalNav(dir){
   const d=new Date((S.brandCalDate||new Date().toISOString().split('T')[0])+'T12:00:00');
   d.setMonth(d.getMonth()+dir);
   S.brandCalDate=d.toISOString().split('T')[0];
