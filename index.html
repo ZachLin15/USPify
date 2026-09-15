@@ -5976,14 +5976,7 @@ function renderTeam(){
       allRelevant=[...allRelevant,...unstarted];
     }
 
-    // Show overdue items + anything due within the next 30 days
-    const _cutoff=new Date();_cutoff.setDate(_cutoff.getDate()+30);
-    const _cutoffStr=localISO(_cutoff);
-    allRelevant=allRelevant.filter(c=>{
-      const due=c.dueDates?.[u.id]||c.postingDate||'';
-      if(!due) return true; // no date = always show
-      return due<=_cutoffStr; // overdue OR due within 30 days
-    });
+    // Mirror the Dashboard's "My Active Jobs" panel exactly — no date filtering.
 
     const byBrand={};
     allRelevant.forEach(c=>{
