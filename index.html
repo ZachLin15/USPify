@@ -9022,7 +9022,7 @@ function getSenior(data,c){
     else if(st==='design'||st==='senior_approval_design') reviewStage='design_review';
     else if(st==='client_approval') reviewStage='client_approval';
     else if(st==='posted') reviewStage='posted';
-    return getBrandReviewer(data, brandId, reviewStage);
+    return getBrandReviewer(data, brandId, reviewStage, c.type);
   }
   return data.users.find(u=>u.role==='senior')||data.users.find(u=>u.role==='admin')||{id:'jack',name:'Jack',init:'J',color:'#5a9fff'};
 }
@@ -9513,9 +9513,9 @@ function wfSubmitScript(id){
 // VIDEO: Leonard submits ideation/script for senior review
 async function wfSubmitIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const senior=getSenior(data,c);
   const today=new Date().toISOString().split('T')[0];
   c.ideationPendingApproval=true;
+  const senior=getSenior(data,c);
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,
     text:`💡 Ideation/script submitted for senior review by ${S.user.name}`,
