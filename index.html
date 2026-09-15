@@ -1899,8 +1899,7 @@ function updateDueDatesFromPosting(c){
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
 const AMENDMENT_IDS=['copy_amendment','design_amendment','ideation_amendment'];
 
-const S={user:null,page:'dashboard',brand:null,calWeek:0,calView:'week',calDate:new Date().toISOString().split('T')[0],calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date',collapsedBrands:{},todoFilter:'active',todoPrio:'all',brandCalBrand:'all'};
-
+const S={user:null,page:'dashboard',brand:null,calWeek:0,calView:'week',calDate:new Date().toISOString().split('T')[0],calUser:'all',trackerTab:'all',trackerFilterType:'all',trackerFilterStatus:'all',trackerMonth:new Date().toISOString().slice(0,7),trackerSort:'brand',adMonth:new Date().toISOString().slice(0,7),dashMonthFilter:new Date().toISOString().slice(0,7),dashSort:'name',brandMonthFilter:'all',brandSort:'date',collapsedBrands:{},todoFilter:'active',todoPrio:'all',brandCalBrands:['all']};
 // ===================== AI STATE =====================
 const AI = {
   open: false,
@@ -4512,7 +4511,7 @@ function renderBrandCalendar(){
   const data=D();
   const todayStr=new Date().toISOString().split('T')[0];
   if(!S.brandCalDate) S.brandCalDate=todayStr;
-  if(S.brandCalBrand===undefined) S.brandCalBrand='all';
+  if(!Array.isArray(S.brandCalBrands)) S.brandCalBrands=['all'];
   const [y,m]=S.brandCalDate.split('-').map(Number);
   const monthLabel=new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
 
@@ -4524,11 +4523,13 @@ function renderBrandCalendar(){
   monthDates.forEach(d=>cells.push(d));
   while(cells.length%7!==0) cells.push(null);
 
-  // ── BRAND SELECTOR BUTTONS ────────────────────────────────────────────────
-  const activeBrand=S.brandCalBrand==='all'?null:getBrand(data,S.brandCalBrand);
+    // ── BRAND SELECTOR BUTTONS (multi-select) ──────────────────────────────────
+  const isAllSelected=S.brandCalBrands.includes('all');
+  const selectedBrands=isAllSelected?data.brands:data.brands.filter(b=>S.brandCalBrands.includes(b.id));
+  const activeBrand=(!isAllSelected&&selectedBrands.length===1)?selectedBrands[0]:null;
   const brandBtns=data.brands.map(b=>{
-    const isActive=S.brandCalBrand===b.id;
-    return `<button onclick="S.brandCalBrand='${b.id}';renderPage()" style="
+    const isActive=!isAllSelected&&S.brandCalBrands.includes(b.id);
+    return `<button onclick="toggleBrandCalBrand('${b.id}')" style="
       display:inline-flex;align-items:center;gap:7px;padding:6px 13px;
       border-radius:20px;border:2px solid ${b.color};
       background:${isActive?b.color:'transparent'};
@@ -4540,11 +4541,11 @@ function renderBrandCalendar(){
     </button>`;
   }).join('');
 
-  const allBtn=`<button onclick="S.brandCalBrand='all';renderPage()" style="
+  const allBtn=`<button onclick="toggleBrandCalBrand('all')" style="
     display:inline-flex;align-items:center;gap:7px;padding:6px 13px;
     border-radius:20px;border:2px solid var(--b2);
-    background:${S.brandCalBrand==='all'?'var(--t1)':'transparent'};
-    color:${S.brandCalBrand==='all'?'var(--bg)':'var(--t2)'};
+    background:${isAllSelected?'var(--t1)':'transparent'};
+    color:${isAllSelected?'var(--bg)':'var(--t2)'};
     font-size:13px;font-weight:700;cursor:pointer;
     font-family:'Syne',sans-serif;transition:all .15s">
     All Brands
@@ -4553,7 +4554,6 @@ function renderBrandCalendar(){
   const brandSelector=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
     ${allBtn}${brandBtns}
   </div>`;
-
   // ── NAV HEADER ─────────────────────────────────────────────────────────────
   const selectedColor=activeBrand?activeBrand.color:'var(--ac)';
   const calHeader=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
@@ -4561,7 +4561,7 @@ function renderBrandCalendar(){
     <span style="font-size:16px;font-weight:700;min-width:180px;text-align:center;color:${selectedColor}">${monthLabel}</span>
     <button class="cal-nav-btn" onclick="brandCalNav(1)">▶</button>
     <button class="cal-today-btn" onclick="S.brandCalDate='${todayStr}';renderPage()">Today</button>
-    ${activeBrand?`<span style="margin-left:4px;font-size:13px;font-weight:700;color:${activeBrand.color};background:${activeBrand.color}18;padding:4px 12px;border-radius:20px;border:1px solid ${activeBrand.color}40">${activeBrand.name}</span>`:''}
+    ${(!isAllSelected&&selectedBrands.length>0)?selectedBrands.map(b=>`<span style="margin-left:4px;font-size:13px;font-weight:700;color:${b.color};background:${b.color}18;padding:4px 12px;border-radius:20px;border:1px solid ${b.color}40">${b.name}</span>`).join(''):''}
     <button onclick="toggleCalEditMode()" style="margin-left:auto;padding:5px 14px;border-radius:var(--r);border:1px solid ${S.calEditMode?'var(--ac)':'var(--b2)'};background:${S.calEditMode?'var(--ac)':'transparent'};color:${S.calEditMode?'#000':'var(--t2)'};font-size:12px;font-weight:700;font-family:'DM Mono',monospace;cursor:pointer">${S.calEditMode?'✏️ Editing — Save':'✏️ Edit dates'}</button>
   </div>`;
 
@@ -4570,7 +4570,7 @@ function renderBrandCalendar(){
   const contentByDate={};
   data.contents.forEach(c=>{
     if(!c.postingDate||!c.postingDate.startsWith(monthPrefix)) return;
-    if(S.brandCalBrand!=='all'&&c.brandId!==S.brandCalBrand) return;
+    if(!isAllSelected&&!S.brandCalBrands.includes(c.brandId)) return;
     if(!contentByDate[c.postingDate]) contentByDate[c.postingDate]=[];
     contentByDate[c.postingDate].push(c);
   });
@@ -4606,9 +4606,10 @@ function renderBrandCalendar(){
 
   // ── SUMMARY STRIP ──────────────────────────────────────────────────────────
   const totalItems=Object.values(contentByDate).flat().length;
+    const brandLabelSuffix=isAllSelected?'':(' for '+selectedBrands.map(b=>b.name).join(', '));
   const summary=totalItems>0
-    ?`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${totalItems} piece${totalItems!==1?'s':''} scheduled in ${monthLabel}${activeBrand?' for '+activeBrand.name:''}</div>`
-    :`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">No content scheduled this month${activeBrand?' for '+activeBrand.name:''}.</div>`;
+    ?`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${totalItems} piece${totalItems!==1?'s':''} scheduled in ${monthLabel}${brandLabelSuffix}</div>`
+    :`<div style="margin-top:10px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">No content scheduled this month${brandLabelSuffix}.</div>`;
 
   return brandSelector+calHeader+grid+summary;
 }
@@ -4694,7 +4695,23 @@ function calDrop(event,newDate){
       </div>`);
   }
 }
+function toggleBrandCalBrand(brandId){
+  if(!Array.isArray(S.brandCalBrands)) S.brandCalBrands=['all'];
+  if(brandId==='all'){
+    S.brandCalBrands=['all'];
+  } else {
+    S.brandCalBrands=S.brandCalBrands.filter(id=>id!=='all');
+    if(S.brandCalBrands.includes(brandId)){
+      S.brandCalBrands=S.brandCalBrands.filter(id=>id!==brandId);
+    } else {
+      S.brandCalBrands.push(brandId);
+    }
+    if(!S.brandCalBrands.length) S.brandCalBrands=['all'];
+  }
+  renderPageOnly();
+}
 
+function brandCalNav(dir){
 function brandCalNav(dir){
   const d=new Date((S.brandCalDate||new Date().toISOString().split('T')[0])+'T12:00:00');
   d.setMonth(d.getMonth()+dir);
