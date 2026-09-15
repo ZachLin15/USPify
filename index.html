@@ -5964,7 +5964,7 @@ function renderTeam(){
     client_approval:'🤝 Client Approval',posted:'🚀 Posted',
   };
 
-  const cards=staff.map(u=>{
+    const cards=staff.map(u=>{
     // Find all active content for this user:
     let allRelevant=getActiveJobsForUser(data,u.id);
 
@@ -5977,14 +5977,13 @@ function renderTeam(){
       allRelevant=[...allRelevant,...unstarted];
     }
 
-    // Only show items due within 2 weeks from today
-    const _twoWeeks=new Date();_twoWeeks.setDate(_twoWeeks.getDate()+14);
-    const _twStr=_twoWeeks.toISOString().split('T')[0];
-    const _todayStr=new Date().toISOString().split('T')[0];
+    // Show overdue items + anything due within the next 30 days
+    const _cutoff=new Date();_cutoff.setDate(_cutoff.getDate()+30);
+    const _cutoffStr=localISO(_cutoff);
     allRelevant=allRelevant.filter(c=>{
       const due=c.dueDates?.[u.id]||c.postingDate||'';
       if(!due) return true; // no date = always show
-      return due<=_twStr; // show if due within 2 weeks
+      return due<=_cutoffStr; // overdue OR due within 30 days
     });
 
     const byBrand={};
