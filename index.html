@@ -4132,7 +4132,7 @@ function renderCalendar(){
     return `<div class="cal-time-slot" style="height:${SLOT_H}px"><span class="cal-time-label">${h<12?h+' AM':h===12?'12 PM':(h-12)+' PM'}</span></div>`;
   }).join('');
 
-  const renderBlockEl=(b,colIdx,numCols)=>{
+    const renderBlockEl=(b,colIdx,numCols)=>{
     const top=(b.startHour-HOURS_START)*SLOT_H;
     const h=Math.max(30,(b.endHour-b.startHour)*SLOT_H);
     const tLabel=`${b.startHour<12?b.startHour+'am':b.startHour===12?'12pm':(b.startHour-12)+'pm'}–${b.endHour<12?b.endHour+'am':b.endHour===12?'12pm':(b.endHour-12)+'pm'}`;
@@ -4140,12 +4140,15 @@ function renderCalendar(){
     const isCompleted=!!b.completed;
     const blockColor=isCompleted?'#c8f04a':b.color;
     const completedTag=isCompleted?`<div style="font-size:10px;color:#c8f04a99;font-family:'DM Mono',monospace;font-weight:700;text-transform:uppercase;letter-spacing:.04em">✓ Done</div>`:'';
+    const isPastDue=b.dueDate&&b.date>b.dueDate;
+    const dueBadge=b.dueDate?`<div style="font-size:10px;font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;color:${isPastDue?'#ff5a5a':blockColor+'cc'}">Due ${fmt(b.dueDate)}${isPastDue?' ⚠':''}</div>`:'';
     return `<div class="cal-block" draggable="true"
       ondragstart="calBlockDragStart(event,'${b.id}')"
       style="top:${top}px;height:${h}px;left:calc(${left}% + ${colIdx===0?3:gutter}px);right:calc(${100-(left+pct)}% + ${colIdx===numCols-1?3:gutter}px);background:${blockColor}22;border-left:3px solid ${blockColor};border-radius:4px;${isCompleted?'opacity:0.75;':''}"
-      onclick="openBlockDetail('${b.id}')" title="${b.label} (${tLabel})">
+      onclick="openBlockDetail('${b.id}')" title="${b.label} (${tLabel})${b.dueDate?' — Due '+b.dueDate:''}">
       <div style="color:${blockColor};font-size:12px;font-weight:600;overflow:hidden;${h>=54?'white-space:normal;word-break:break-word;':'white-space:nowrap;text-overflow:ellipsis;'}">${b.label}</div>
       <div style="color:${blockColor}99;font-size:11px">${tLabel}</div>
+      ${dueBadge}
       ${completedTag}
     </div>`;
   };
@@ -4234,26 +4237,27 @@ function renderCalendar(){
       ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr)">
-      ${cells.map((d,i)=>{
+            ${cells.map((d,i)=>{
         if(!d) return`<div style="min-height:120px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);background:var(--s3)"></div>`;
         const ds=localISO(d);
         const isT=ds===todayStr;
         const dayBlocks=userBlocks.filter(b=>b.date===ds).slice(0,3);
         const more=userBlocks.filter(b=>b.date===ds).length-3;
-        // Content jobs for this user due on this day
-        const myJobs=data.contents.filter(c=>{
-          const uid=S.user.id;
-          const isAssigned=(c.assignees||[]).includes(uid)||(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open');
-          const isScheduled=c.calScheduled?.[uid]===true;
-          const dueDate=c.dueDates?.[uid]||c.postingDate||'';
-          return (isAssigned||isScheduled) && dueDate===ds && c.statusId!=='posted';
-        });
         return `<div style="min-height:100px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:4px;${isT?'background:rgba(200,240,74,0.04)':''}"
           ondragover="event.preventDefault();this.style.outline='2px dashed var(--ac)'"
           ondragleave="this.style.outline=''"
           ondrop="this.style.outline='';calDropTodoMonth(event,'${ds}')">
           <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
-          ${dayBlocks.map(b=>`<div style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}22;color:${b.color};margin-bottom:2px;font-weight:600;word-break:break-word;line-height:1.4;display:flex;align-items:flex-start;gap:3px"><span onclick="openBlockDetail('${b.id}')" style="flex:1;cursor:pointer">${b.label}</span>${b.contentId?`<span onclick="event.stopPropagation();deleteBlock('${b.id}')" style="cursor:pointer;opacity:.5;font-size:13px;flex-shrink:0" title="Remove from calendar">×</span>`:''}</div>`).join('')}
+          ${dayBlocks.map(b=>{
+            const isPastDue=b.dueDate&&b.date>b.dueDate;
+            return `<div draggable="true" ondragstart="calBlockDragStart(event,'${b.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}22;color:${b.color};margin-bottom:2px;font-weight:600;word-break:break-word;line-height:1.4;cursor:grab">
+              <div style="display:flex;align-items:flex-start;gap:3px">
+                <span onclick="openBlockDetail('${b.id}')" style="flex:1;cursor:pointer">${b.label}</span>
+                ${b.contentId?`<span onclick="event.stopPropagation();deleteBlock('${b.id}')" style="cursor:pointer;opacity:.5;font-size:13px;flex-shrink:0" title="Remove from calendar">×</span>`:''}
+              </div>
+              ${b.dueDate?`<div style="font-size:9px;font-family:'DM Mono',monospace;font-weight:700;color:${isPastDue?'var(--red)':b.color+'cc'}">Due ${fmt(b.dueDate)}${isPastDue?' ⚠':''}</div>`:''}
+            </div>`;
+          }).join('')}
           ${(()=>{
             const dayTasks=userBlocks.filter(b=>b.blockType==='task'&&!b.completed&&ds<=(b.deadline||'')&&ds>=(b.taskStart||b.deadline||''));
             return dayTasks.map(b=>{
@@ -4261,12 +4265,9 @@ function renderCalendar(){
               return `<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${isLate?'var(--redd)':b.color+'22'};color:${isLate?'var(--red)':b.color};border-left:2px solid ${isLate?'var(--red)':b.color};margin-bottom:2px;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.label}">✅ ${b.label}</div>`;
             }).join('');
           })()}
-          ${myJobs.slice(0,3).map(c=>{const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);return`<div style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}18;color:${b.color};border-left:2px solid ${st.color};margin-bottom:2px;font-weight:600;display:flex;align-items:flex-start;gap:3px;word-break:break-word;position:relative"><span style="width:6px;height:6px;border-radius:50%;background:${st.color};flex-shrink:0;margin-top:3px"></span><span onclick="openContentDetail('${c.id}')" style="line-height:1.4;flex:1;cursor:pointer">${c.title}</span><span onclick="event.stopPropagation();removeFromCalendar('${c.id}')" style="cursor:pointer;opacity:.5;font-size:13px;line-height:1;flex-shrink:0;padding-left:2px" title="Remove from calendar">×</span></div>`;}).join('')}
-          ${myJobs.length>3?`<div style="font-size:10px;color:var(--t3)">+${myJobs.length-3} jobs</div>`:''}
           ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.calView='day';S.calDate='${ds}';renderPage()">+${more} more</div>`:''}
         </div>`;
-      }).join('')}
-    </div>
+      }).join('')}    </div>
   </div>`;
   return calHeader+renderCalTodoLayout(data,monthGrid,todayStr);
 }
@@ -4466,8 +4467,6 @@ function removeFromCalendar(cid){
   if(!c)return;
   const uid=S.user.id;
   if(c.calScheduled) c.calScheduled[uid]=false;
-  // Clear personal due date so item goes back to unscheduled
-  if(c.dueDates) c.dueDates[uid]='';
   saveNow(data,c.id);
   renderPage();
   showAIToast('↩ Moved back to job list');
@@ -4475,9 +4474,26 @@ function removeFromCalendar(cid){
 
 function calDropTodoMonth(e,dateStr){
   e.preventDefault();
-  const contentId=e.dataTransfer.getData('text/plain');
-  if(!contentId) return;
+  const raw=e.dataTransfer.getData('text/plain');
+  if(!raw) return;
+
+  // Existing block dragged to a new date — just move it, respecting its due date
+  if(raw.startsWith('BLOCK:')){
+    const blockId=raw.slice(6);
+    const data=D();
+    const b=data.scheduleBlocks.find(x=>x.id===blockId);
+    if(!b) return;
+    if(b.dueDate&&dateStr>b.dueDate){alert('Cannot schedule after the due date ('+b.dueDate+').');return;}
+    b.date=dateStr;
+    save(data);renderPage();
+    showAIToast('📅 Block moved');
+    return;
+  }
+
+  const contentId=raw;
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c) return;
+  const dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
+  if(dueDate&&dateStr>dueDate){alert('Cannot schedule after the due date ('+dueDate+').');return;}
   const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
   openModal(`<div class="modal-title">📌 Schedule on ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="padding:10px 14px;background:${st.color}18;border-radius:var(--r);margin-bottom:14px;border-left:3px solid ${st.color}">
@@ -4745,6 +4761,7 @@ function calDropTodo(e, dateStr, hour, slotEl){
     if(!b) return;
     const isManager=isManagerUser(S.user);
     const dur=b.endHour-b.startHour;
+        if(b.dueDate&&dateStr>b.dueDate){alert('Cannot schedule after the due date ('+b.dueDate+').');return;}
     const doMove=(reason)=>{
       const oldDate=b.date||'';
       const oldStart=b.startHour;
@@ -4776,10 +4793,12 @@ function calDropTodo(e, dateStr, hour, slotEl){
     return;
   }
 
-  const contentId=raw;
+    const contentId=raw;
   const data=D();
   const c=data.contents.find(x=>x.id===contentId);
   if(!c) return;
+  const _dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
+  if(_dueDate&&dateStr>_dueDate){alert('Cannot schedule after the due date ('+_dueDate+').');return;}
   const b=getBrand(data,c.brandId);
   const st=getStatus(data,c.statusId);
   const endHour=Math.min(hour+2, HOURS_RANGE_END);
@@ -4812,9 +4831,11 @@ function calDropConfirm(contentId, dateStr){
   const startHour=parseInt(document.getElementById('cdrop-start').value);
   const endHour=parseInt(document.getElementById('cdrop-end').value);
   if(endHour<=startHour){alert('End must be after start');return;}
+    const dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
+  if(dueDate&&dateStr>dueDate){alert('Cannot schedule after the due date ('+dueDate+').');return;}
   const b=getBrand(data,c.brandId);
   const st=getStatus(data,c.statusId);
-  // Create a schedule block for this time slot
+  // Create a schedule block for this time slot — the deadline itself is never touched
   if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=[];
   data.scheduleBlocks.push({
     id:'sb'+uid(),
@@ -4824,13 +4845,12 @@ function calDropConfirm(contentId, dateStr){
     endHour,
     label:c.title,
     color:st.color||b.color,
-    contentId:c.id  // link back to the content piece
+    contentId:c.id,  // link back to the content piece
+    dueDate  // the real deadline — travels with the block, never overwritten by rescheduling
   });
   // Mark content as scheduled so it leaves the todo list
   if(!c.calScheduled)c.calScheduled={};
   c.calScheduled[S.user.id]=true;
-  if(!c.dueDates)c.dueDates={};
-  c.dueDates[S.user.id]=dateStr;
   saveNow(data,c.id);closeModal();renderPage();
   showAIToast(`📌 "${c.title}" added to calendar at ${startHour<12?startHour+'am':startHour===12?'12pm':(startHour-12)+'pm'}`);
 }
