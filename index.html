@@ -4140,8 +4140,10 @@ function renderCalendar(){
     const isCompleted=!!b.completed;
     const blockColor=isCompleted?'#c8f04a':b.color;
     const completedTag=isCompleted?`<div style="font-size:10px;color:#c8f04a99;font-family:'DM Mono',monospace;font-weight:700;text-transform:uppercase;letter-spacing:.04em">✓ Done</div>`:'';
-    const isPastDue=b.dueDate&&b.date>b.dueDate;
-    const dueBadge=b.dueDate?`<div style="font-size:10px;font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;color:${isPastDue?'#ff5a5a':blockColor+'cc'}">Due ${fmt(b.dueDate)}${isPastDue?' ⚠':''}</div>`:'';
+        const _liveC=b.contentId?data.contents.find(x=>x.id===b.contentId):null;
+    const _effDue=_liveC?(_liveC.dueDates?.[b.userId]||_liveC.postingDate||''):(b.dueDate||'');
+    const isPastDue=_effDue&&b.date>_effDue;
+    const dueBadge=_effDue?`<div style="font-size:10px;font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;color:${isPastDue?'#ff5a5a':blockColor+'cc'}">Due ${fmt(_effDue)}${isPastDue?' ⚠':''}</div>`:'';
     return `<div class="cal-block" draggable="true"
       ondragstart="calBlockDragStart(event,'${b.id}')"
       style="top:${top}px;height:${h}px;left:calc(${left}% + ${colIdx===0?3:gutter}px);right:calc(${100-(left+pct)}% + ${colIdx===numCols-1?3:gutter}px);background:${blockColor}22;border-left:3px solid ${blockColor};border-radius:4px;${isCompleted?'opacity:0.75;':''}"
@@ -4248,14 +4250,16 @@ function renderCalendar(){
           ondragleave="this.style.outline=''"
           ondrop="this.style.outline='';calDropTodoMonth(event,'${ds}')">
           <div onclick="S.calView='day';S.calDate='${ds}';renderPage()" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
-          ${dayBlocks.map(b=>{
-            const isPastDue=b.dueDate&&b.date>b.dueDate;
+                    ${dayBlocks.map(b=>{
+            const _liveC=b.contentId?data.contents.find(x=>x.id===b.contentId):null;
+            const _effDue=_liveC?(_liveC.dueDates?.[b.userId]||_liveC.postingDate||''):(b.dueDate||'');
+            const isPastDue=_effDue&&b.date>_effDue;
             return `<div draggable="true" ondragstart="calBlockDragStart(event,'${b.id}')" style="font-size:11px;padding:2px 5px;border-radius:3px;background:${b.color}22;color:${b.color};margin-bottom:2px;font-weight:600;word-break:break-word;line-height:1.4;cursor:grab">
               <div style="display:flex;align-items:flex-start;gap:3px">
                 <span onclick="openBlockDetail('${b.id}')" style="flex:1;cursor:pointer">${b.label}</span>
                 ${b.contentId?`<span onclick="event.stopPropagation();deleteBlock('${b.id}')" style="cursor:pointer;opacity:.5;font-size:13px;flex-shrink:0" title="Remove from calendar">×</span>`:''}
               </div>
-              ${b.dueDate?`<div style="font-size:9px;font-family:'DM Mono',monospace;font-weight:700;color:${isPastDue?'var(--red)':b.color+'cc'}">Due ${fmt(b.dueDate)}${isPastDue?' ⚠':''}</div>`:''}
+              ${_effDue?`<div style="font-size:9px;font-family:'DM Mono',monospace;font-weight:700;color:${isPastDue?'var(--red)':b.color+'cc'}">Due ${fmt(_effDue)}${isPastDue?' ⚠':''}</div>`:''}
             </div>`;
           }).join('')}
           ${(()=>{
@@ -4478,12 +4482,14 @@ function calDropTodoMonth(e,dateStr){
   if(!raw) return;
 
   // Existing block dragged to a new date — just move it, respecting its due date
-  if(raw.startsWith('BLOCK:')){
+    if(raw.startsWith('BLOCK:')){
     const blockId=raw.slice(6);
     const data=D();
     const b=data.scheduleBlocks.find(x=>x.id===blockId);
     if(!b) return;
-    if(b.dueDate&&dateStr>b.dueDate){alert('Cannot schedule after the due date ('+b.dueDate+').');return;}
+    const liveContent=b.contentId?data.contents.find(x=>x.id===b.contentId):null;
+    const liveDue=liveContent?(liveContent.dueDates?.[b.userId]||liveContent.postingDate||''):(b.dueDate||'');
+    if(liveDue&&dateStr>liveDue){alert('Cannot schedule after the due date ('+liveDue+').');return;}
     b.date=dateStr;
     save(data);renderPage();
     showAIToast('📅 Block moved');
@@ -4761,7 +4767,9 @@ function calDropTodo(e, dateStr, hour, slotEl){
     if(!b) return;
     const isManager=isManagerUser(S.user);
     const dur=b.endHour-b.startHour;
-        if(b.dueDate&&dateStr>b.dueDate){alert('Cannot schedule after the due date ('+b.dueDate+').');return;}
+    const liveContent=b.contentId?data.contents.find(x=>x.id===b.contentId):null;
+    const liveDue=liveContent?(liveContent.dueDates?.[b.userId]||liveContent.postingDate||''):(b.dueDate||'');
+    if(liveDue&&dateStr>liveDue){alert('Cannot schedule after the due date ('+liveDue+').');return;}
     const doMove=(reason)=>{
       const oldDate=b.date||'';
       const oldStart=b.startHour;
