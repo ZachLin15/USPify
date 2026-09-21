@@ -4681,26 +4681,9 @@ function calDrop(event,newDate){
   const data=D();
   const c=data.contents.find(x=>x.id===contentId);
   if(!c) return;
-    const isManager=isManagerUser(S.user);
-
-  const doMove=(reason)=>{
-    const oldDate=c.postingDate||'';
-    if(!S._calPendingDates) S._calPendingDates={};
-    S._calPendingDates[contentId]=newDate;
-    c.postingDate=newDate;
-    if(!isManager&&reason){
-      logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
-    }
-        if(isManager||S.user.role==='senior'||S.user.role==='content_creator'){
-      saveNow(data).then(()=>showAIToast('📅 Date updated'));
-    } else {
-      localStorage.setItem(KEY,JSON.stringify(data));
-      showAIToast('📅 Date moved — click Save to confirm');
-    }
-    renderPageOnly();
-  };
-  if(isManager){
-    doMove('');
+  const isManager=isManagerUser(S.user);
+  if(isManager||S.user.role==='content_creator'||S.user.role==='senior'){
+    calDoMove(contentId,newDate,'');
   } else {
     openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
       <div style="font-size:14px;color:var(--t2);margin-bottom:14px;line-height:1.6">Moving <strong>${c.title}</strong> to <strong>${newDate}</strong>. Please provide a reason — all team members will be notified.</div>
@@ -4714,10 +4697,31 @@ function calDrop(event,newDate){
           const r=document.getElementById('cal-rs-reason').value.trim();
           if(!r){alert('Please enter a reason.');return;}
           closeModal();
-          (${doMove.toString()})(r);
+          calDoMove('${contentId}','${newDate}',r);
         ">Confirm Reschedule</button>
       </div>`);
   }
+}
+
+function calDoMove(contentId,newDate,reason){
+  const data=D();
+  const c=data.contents.find(x=>x.id===contentId);
+  if(!c) return;
+  const isManager=isManagerUser(S.user);
+  const oldDate=c.postingDate||'';
+  if(!S._calPendingDates) S._calPendingDates={};
+  S._calPendingDates[contentId]=newDate;
+  c.postingDate=newDate;
+  if(!isManager&&reason){
+    logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
+  }
+  if(isManager||S.user.role==='senior'||S.user.role==='content_creator'){
+    saveNow(data).then(()=>showAIToast('📅 Date updated'));
+  } else {
+    localStorage.setItem(KEY,JSON.stringify(data));
+    showAIToast('📅 Date moved — click Save to confirm');
+  }
+  renderPageOnly();
 }
  
 function toggleBrandCalBrand(brandId){
