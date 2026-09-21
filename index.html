@@ -4704,29 +4704,9 @@ function calDrop(event,newDate){
   const data=D();
   const c=data.contents.find(x=>x.id===contentId);
   if(!c) return;
-  const isManager=isManagerUser(S.user);
+    const isManager=isManagerUser(S.user);
 
-  // Content creators (Leonard) can't move dates directly — send a request for
-  // Jack/Carmen/Caleb to approve instead.
-  if(!isManager&&S.user.role!=='senior'&&S.user.role==='content_creator'){
-    if(newDate===c.postingDate) return;
-    openModal(`<div class="modal-title">📅 Request Reschedule<button class="modal-close" onclick="closeModal()">×</button></div>
-      <div style="font-size:14px;color:var(--t2);margin-bottom:14px;line-height:1.6">Requesting to move <strong>${c.title}</strong> from <strong>${fmt(c.postingDate)}</strong> to <strong>${fmt(newDate)}</strong>. This needs approval from Jack, Carmen or Caleb before it takes effect.</div>
-      <div class="form-row">
-        <label class="form-label">Reason</label>
-        <textarea class="form-textarea" id="cal-rs-req-reason" placeholder="e.g. Client requested date change, shooting conflict..." style="min-height:90px;font-size:15px"></textarea>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-ac" onclick="
-          const r=document.getElementById('cal-rs-req-reason').value.trim();
-          if(!r){alert('Please enter a reason.');return;}
-          submitRescheduleRequest('${contentId}','${newDate}',r);
-        ">Send Request</button>
-      </div>`);
-    renderPageOnly();
-    return;
-  }
+  const doMove=(reason)=>{
 
   const doMove=(reason)=>{
     const oldDate=c.postingDate||'';
@@ -4736,7 +4716,7 @@ function calDrop(event,newDate){
     if(!isManager&&reason){
       logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
     }
-    if(isManager||S.user.role==='senior'){
+        if(isManager||S.user.role==='senior'||S.user.role==='content_creator'){
       saveNow(data).then(()=>showAIToast('📅 Date updated'));
     } else {
       localStorage.setItem(KEY,JSON.stringify(data));
