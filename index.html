@@ -4822,8 +4822,7 @@ async function rejectRescheduleRequest(requestId){
   await saveNow(data);render();
   showAIToast('🚫 Reschedule request rejected');
 }
-
-function toggleBrandCalBrand(brandId){  
+ 
 function toggleBrandCalBrand(brandId){
   if(!Array.isArray(S.brandCalBrands)) S.brandCalBrands=['all'];
   if(brandId==='all'){
