@@ -2084,15 +2084,15 @@ function D(){
   if(!raw){
     // No cache yet — return a minimal shell so the app can render a loading state
     // Supabase data will arrive via initCloudSync() shortly
-    const d={users:[],brands:[],contents:[],statuses:getDefault().statuses,
-      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[],rescheduleRequests:[]};
+        const d={users:[],brands:[],contents:[],statuses:getDefault().statuses,
+      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[]};
     return d;
   }
   let data;
   try{data=JSON.parse(raw);}catch(e){
     localStorage.removeItem(KEY);
     return {users:[],brands:[],contents:[],statuses:getDefault().statuses,
-      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[],rescheduleRequests:[]};
+      scheduleBlocks:[],adMetrics:[],tasks:[],deletionLog:[],deletedBrandIds:[]};
   }
 
   // Guard: ensure top-level arrays always exist (prevent .filter/.map crashes)
@@ -2105,7 +2105,6 @@ function D(){
   if(!Array.isArray(data.tasks)) data.tasks=[];
   if(!Array.isArray(data.deletionLog)) data.deletionLog=[];
   if(!Array.isArray(data.deletedBrandIds)) data.deletedBrandIds=[];
-  if(!Array.isArray(data.rescheduleRequests)) data.rescheduleRequests=[];
   data.users=data.users.filter(x=>x&&x.id);
   data.brands=data.brands.filter(x=>x&&x.id);
   data.statuses=data.statuses.filter(x=>x&&x.id);
@@ -3863,28 +3862,6 @@ async function reviseWithNote(id){
 function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
-  const rr=(data.rescheduleRequests||[]).filter(r=>r.status==='pending');
-  const rescheduleSection=rr.length?`<div class="panel" style="margin-top:16px">
-    <div class="ph"><div class="ph-title" style="color:var(--blu)">📅 Reschedule Requests</div><div class="ph-sub">${rr.length} pending</div></div>
-    <div class="pb">${rr.map(r=>{
-      const b=getBrand(data,r.brandId);
-      return `<div class="appr-item" style="flex-direction:column;align-items:stretch;gap:10px">
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <div class="appr-icon" style="background:${b.color}22">📅</div>
-          <div class="appr-info" style="flex:1">
-            <div class="appr-name" onclick="openContentDetail('${r.contentId}')">${r.contentTitle}</div>
-            <div class="appr-meta">${brandBadge(b)} · ${fmt(r.oldDate)} → <strong style="color:var(--blu)">${fmt(r.newDate)}</strong></div>
-            <div class="appr-meta" style="margin-top:2px">Requested by ${r.requestedByName} · ${fmt(r.createdAt)}</div>
-            ${r.reason?`<div style="font-size:13px;color:var(--t2);margin-top:4px;font-style:italic">"${r.reason}"</div>`:''}
-          </div>
-        </div>
-        <div class="appr-actions" style="justify-content:flex-end">
-          <button class="btn-approve" onclick="approveRescheduleRequest('${r.id}')">✓ Approve</button>
-          <button class="btn-revise" onclick="rejectRescheduleRequest('${r.id}')">✕ Reject</button>
-        </div>
-      </div>`;
-    }).join('')}</div>
-  </div>`:'';
   // Catch ALL senior approval statuses
   const sa=data.contents.filter(c=>
     c.statusId==='senior_approval'||
@@ -3939,7 +3916,7 @@ function renderApprovals(){
       const mover=clientEntry?getUser(data,clientEntry.changedBy):{name:'?'};
       return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c,'posted','Mark Posted')}</div>`;
     }).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
-  </div>${rescheduleSection}`;
+    </div>`;
 }
 // ===================== CLIENT POST PAGE =====================
 function renderClientPost(){
@@ -4634,8 +4611,8 @@ function renderBrandCalendar(){
         const shown=items;
         const more=0;
         const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
-        const canRequest=S.user.role==='content_creator';
-        const isDrop=S.calEditMode||isSeniorOrManager||canRequest;
+        const isContentCreator=S.user.role==='content_creator';
+        const isDrop=S.calEditMode||isSeniorOrManager||isContentCreator;
         return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
           ${isDrop?`ondragover="event.preventDefault()" ondrop="calDrop(event,'${ds}')"`:''}>
           <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
@@ -4741,64 +4718,6 @@ function calDrop(event,newDate){
         ">Confirm Reschedule</button>
       </div>`);
   }
-}
-function submitRescheduleRequest(contentId,newDate,reason){
-  const data=D();
-  const c=data.contents.find(x=>x.id===contentId);
-  if(!c) return;
-  if(!Array.isArray(data.rescheduleRequests)) data.rescheduleRequests=[];
-  const today=new Date().toISOString().split('T')[0];
-  data.rescheduleRequests.push({
-    id:'rr'+uid(),
-    contentId:c.id,
-    contentTitle:c.title,
-    brandId:c.brandId,
-    requestedBy:S.user.id,
-    requestedByName:S.user.name,
-    oldDate:c.postingDate||'',
-    newDate,
-    reason,
-    status:'pending',
-    createdAt:today
-  });
-  saveNow(data).then(()=>{
-    closeModal();renderPage();
-    showAIToast('📨 Reschedule request sent for approval');
-  });
-}
-
-async function approveRescheduleRequest(requestId){
-  const data=D();
-  const req=(data.rescheduleRequests||[]).find(r=>r.id===requestId);
-  if(!req||req.status!=='pending') return;
-  const c=data.contents.find(x=>x.id===req.contentId);
-  if(!c){req.status='approved';req.resolvedBy=S.user.id;req.resolvedAt=new Date().toISOString().split('T')[0];await saveNow(data);render();return;}
-  c.postingDate=req.newDate;
-  const isVid=(c.type==='Video'||c.type==='Reels');
-  c.dueDates={
-    hualu:addBusinessDays(req.newDate,isVid?-4:-3),
-    leonard:addBusinessDays(req.newDate,isVid?-7:-5),
-    jack:''
-  };
-  logReschedule(data,c.title,req.oldDate,req.newDate,req.reason,req.requestedBy);
-  req.status='approved';
-  req.resolvedBy=S.user.id;
-  req.resolvedByName=S.user.name;
-  req.resolvedAt=new Date().toISOString().split('T')[0];
-  await saveNow(data,c.id);render();
-  showAIToast(`✅ Reschedule approved — ${c.title} moved to ${fmt(req.newDate)}`);
-}
-
-async function rejectRescheduleRequest(requestId){
-  const data=D();
-  const req=(data.rescheduleRequests||[]).find(r=>r.id===requestId);
-  if(!req||req.status!=='pending') return;
-  req.status='rejected';
-  req.resolvedBy=S.user.id;
-  req.resolvedByName=S.user.name;
-  req.resolvedAt=new Date().toISOString().split('T')[0];
-  await saveNow(data);render();
-  showAIToast('🚫 Reschedule request rejected');
 }
  
 function toggleBrandCalBrand(brandId){
@@ -12452,9 +12371,7 @@ function getNotifCount(data){
     e.movedBy!==uid&&
     (e.movedAt||'')>=_7dAgoRs
   ).length;
-  // Pending reschedule requests — only Jack/Carmen/Caleb (admin/senior) act on these
-  const rrCount=(role==='admin'||role==='senior')?(data.rescheduleRequests||[]).filter(r=>r.status==='pending').length:0;
-  return seen.size+delCount+rsCount+rrCount;
+    return seen.size+delCount+rsCount;
 }
 function promptReschedule(onConfirm){
   openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
