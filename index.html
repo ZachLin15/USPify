@@ -1896,6 +1896,23 @@ function updateDueDatesFromPosting(c){
   c.dueDates.leonard=addBusinessDays(c.postingDate, isVideo?-7:-5);
 }
 
+// Effective due date for a SPECIFIC user's task on a content piece — not the posting date.
+// Prefers an explicit per-user due date (hualu/leonard/jack, or a manually-edited one).
+// Otherwise derives one from the stage-specific lead time of whichever task/stage this
+// user is actually on right now, counting back from the posting date.
+function getTaskDueDate(c, userId, data){
+  if(!c) return '';
+  if(c.dueDates && c.dueDates[userId]) return c.dueDates[userId];
+  if(!c.postingDate) return '';
+  const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===userId&&t.status==='open');
+  const statusId=openTask?openTask.statusId:c.statusId;
+  const d=data||D();
+  const u=(d.users||[]).find(x=>x.id===userId);
+  const role=u?u.role:'';
+  const days=getStageDaysForUser(statusId, role);
+  return addBusinessDays(c.postingDate, -days);
+}
+
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
 const AMENDMENT_IDS=['copy_amendment','design_amendment','ideation_amendment'];
 
@@ -2845,9 +2862,9 @@ function renderJobTodoList(){
   const allJobs=[
     ...jobs.map(c=>({c,type:'job'})),
     ...unstartedForMonth.map(c=>({c,type:'unstarted'})),
-  ].sort((a,b)=>{
-    const da=a.c.dueDates?.[uid]||a.c.postingDate||'9999';
-    const db=b.c.dueDates?.[uid]||b.c.postingDate||'9999';
+    ].sort((a,b)=>{
+    const da=getTaskDueDate(a.c,uid,data)||'9999';
+    const db=getTaskDueDate(b.c,uid,data)||'9999';
     return da.localeCompare(db);
   });
 
@@ -2860,7 +2877,7 @@ function renderJobTodoList(){
       ${allJobs.map(({c,type})=>{
         const b=getBrand(data,c.brandId);
         const st=getStatus(data,c.statusId);
-        const dueDate=c.dueDates?.[uid]||c.postingDate||'';
+        const dueDate=getTaskDueDate(c,uid,data);
         const isLate=dueDate&&dueDate<today;
         const daysLeft=dueDate?Math.round((new Date(dueDate)-new Date(today))/(1000*60*60*24)):null;
         const isToday=dueDate===today;
@@ -2964,7 +2981,7 @@ function renderDashboard(){
   const _userJobs=getActiveJobsForUser(data,S.user.id);
   const overdue=isAdmin
     ? contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length
-    : _userJobs.filter(c=>{const due=c.dueDates?.[S.user.id]||c.postingDate||'';return due&&due<today;}).length;
+        : _userJobs.filter(c=>{const due=getTaskDueDate(c,S.user.id,data);return due&&due<today;}).length;
   // Pending tasks = active jobs for this user right now
  let pendingJobs=getActiveJobsForUser(data,S.user.id);
   if(S.user.role==='content_creator'){
@@ -2973,8 +2990,8 @@ function renderDashboard(){
   }
   const _pendingCutoff=new Date();_pendingCutoff.setDate(_pendingCutoff.getDate()+30);
   const _pendingCutoffStr=_pendingCutoff.toISOString().split('T')[0];
-  pendingJobs=pendingJobs.filter(c=>{
-    const due=c.dueDates?.[S.user.id]||c.postingDate||'';
+    pendingJobs=pendingJobs.filter(c=>{
+    const due=getTaskDueDate(c,S.user.id,data);
     if(!due) return false; // no due date set = not counted as pending yet
     return due<=_pendingCutoffStr; // overdue (due < today) OR due within next 30 days
   });
