@@ -1913,6 +1913,19 @@ function getTaskDueDate(c, userId, data){
   return addBusinessDays(c.postingDate, -days);
 }
 
+// Due date for a specific STAGE of the flow (ideation, shoot/design, video_editing,
+// copywriting, etc.) — resolves whoever is actually PIC'd for that stage right now
+// (respecting per-content overrides and Responsibilities assignment) rather than
+// assuming it's always Hualu/Leonard.
+function getStageDueDate(c, stageId, data){
+  if(!c||!c.postingDate) return '';
+  const d=data||D();
+  const pic=getPIC(d, stageId, c);
+  if(!pic) return '';
+  const days=getStageDaysForUser(stageId, pic.role);
+  return addBusinessDays(c.postingDate, -days);
+}
+
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
 const AMENDMENT_IDS=['copy_amendment','design_amendment','ideation_amendment'];
 
@@ -7167,11 +7180,17 @@ function renderDetailPage(id, forceTab){
         <div class="meta-item-label">\uD83D\uDCC5 Posting date</div>
         <div class="meta-item-val" style="color:${lateClass?'var(--red)':st.color}">${fmt(c.postingDate)||'Not set'}${lateClass?' ⚠':''}</div>
       </div>
-      ${c.dueDates?`
-      <div class="due-row"><span class="due-person">Hualu due</span><span class="due-val" style="color:var(--pnk)">${fmt(c.dueDates.hualu)||'\u2014'}</span></div>
-      <div class="due-row"><span class="due-person">Leonard due</span><span class="due-val" style="color:var(--tel)">${fmt(c.dueDates.leonard)||'\u2014'}</span></div>
-      ${c.dueDates.jack?`<div class="due-row"><span class="due-person">Jack due</span><span class="due-val" style="color:var(--blu)">${fmt(c.dueDates.jack)}</span></div>`:''}
-      `:''}
+            ${(()=>{
+        const flow=usesShootFlow(c)?VIDEO_FLOW:CAROUSEL_FLOW;
+        const stages=flow.filter(s=>!s.isAmend&&!s.isSub&&s.id!=='posted'&&s.id!=='client_approval');
+        return stages.map(s=>{
+          const pic=getPIC(data,s.id,c);
+          if(!pic) return '';
+          const due=getStageDueDate(c,s.id,data);
+          const stLabel=(s.label||s.id).replace('\n',' ');
+          return `<div class="due-row"><span class="due-person">${stLabel} — ${pic.name}</span><span class="due-val" style="color:${pic.color||'var(--t3)'}">${due?fmt(due):'—'}</span></div>`;
+        }).join('');
+      })()}
     </div>
 
     <div class="side-section">
