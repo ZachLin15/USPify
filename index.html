@@ -1900,30 +1900,51 @@ function updateDueDatesFromPosting(c){
 // Prefers an explicit per-user due date (hualu/leonard/jack, or a manually-edited one).
 // Otherwise derives one from the stage-specific lead time of whichever task/stage this
 // user is actually on right now, counting back from the posting date.
+// Stage-intrinsic lead time in business days — how long THIS stage itself typically
+// takes, independent of who's assigned to it. Picks whichever side of the
+// STAGE_WORKDAYS pair is populated for that stage.
+function getStageIntrinsicDays(statusId){
+  const map=STAGE_WORKDAYS[statusId];
+  if(!map) return 0;
+  const [hDays,lDays]=map;
+  return hDays!=null?hDays:(lDays!=null?lDays:0);
+}
+
+// Cumulative business days before the posting date that a given stage is due.
+// Sums that stage's own lead time PLUS every stage still to come after it in the
+// flow (including review/approval stages), so due dates move strictly earlier the
+// further back in the pipeline a stage is — ideation is always due before shooting,
+// which is always due before video editing, which is always due before copywriting —
+// instead of each stage being computed in isolation off the posting date, which
+// produced out-of-order dates (e.g. video editing due BEFORE shooting).
+function getCumulativeDaysBeforePosting(c, stageId){
+  const flow=usesShootFlow(c)?VIDEO_FLOW:CAROUSEL_FLOW;
+  const stages=flow.filter(s=>!s.isAmend);
+  const idx=stages.findIndex(s=>s.id===stageId);
+  if(idx===-1) return getStageIntrinsicDays(stageId);
+  let total=0;
+  for(let i=idx;i<stages.length;i++){
+    if(stages[i].id==='posted') continue;
+    total+=getStageIntrinsicDays(stages[i].id);
+  }
+  return total;
+}
+
 function getTaskDueDate(c, userId, data){
   if(!c) return '';
   if(c.dueDates && c.dueDates[userId]) return c.dueDates[userId];
   if(!c.postingDate) return '';
   const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===userId&&t.status==='open');
   const statusId=openTask?openTask.statusId:c.statusId;
-  const d=data||D();
-  const u=(d.users||[]).find(x=>x.id===userId);
-  const role=u?u.role:'';
-  const days=getStageDaysForUser(statusId, role);
-  return addBusinessDays(c.postingDate, -days);
+  return addBusinessDays(c.postingDate, -getCumulativeDaysBeforePosting(c,statusId));
 }
 
 // Due date for a specific STAGE of the flow (ideation, shoot/design, video_editing,
-// copywriting, etc.) — resolves whoever is actually PIC'd for that stage right now
-// (respecting per-content overrides and Responsibilities assignment) rather than
-// assuming it's always Hualu/Leonard.
+// copywriting, etc.) — uses the cumulative pipeline position above, so it's always
+// consistent with the stage's actual place in the sequence, regardless of who's PIC'd.
 function getStageDueDate(c, stageId, data){
   if(!c||!c.postingDate) return '';
-  const d=data||D();
-  const pic=getPIC(d, stageId, c);
-  if(!pic) return '';
-  const days=getStageDaysForUser(stageId, pic.role);
-  return addBusinessDays(c.postingDate, -days);
+  return addBusinessDays(c.postingDate, -getCumulativeDaysBeforePosting(c,stageId));
 }
 
 const MAIN_STATUS_ORDER=['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video','copywriting','senior_approval_copy','client_approval','posted'];
