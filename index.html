@@ -4795,6 +4795,13 @@ function calDoMove(contentId,newDate,reason){
   if(!S._calPendingDates) S._calPendingDates={};
   S._calPendingDates[contentId]=newDate;
   c.postingDate=newDate;
+  // Keep the cached per-person due dates in sync with the new posting date —
+  // otherwise getTaskDueDate() keeps returning the OLD due date forever, since it
+  // checks c.dueDates[userId] before recalculating from postingDate.
+  const isVidDrop=(c.type==='Video'||c.type==='Reels');
+  c.dueDates=c.dueDates||{};
+  c.dueDates.hualu=addBusinessDays(newDate,isVidDrop?-4:-3);
+  c.dueDates.leonard=addBusinessDays(newDate,isVidDrop?-7:-5);
   if(!isManager&&reason){
     logReschedule(data, c.title, oldDate, newDate, reason, S.user.id);
   }
