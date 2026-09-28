@@ -2769,15 +2769,47 @@ function isUnstartedContent(c){
   return c.statusId==='ideation'
     && (!c.assignees||c.assignees.length===0)
     && !(c.workflowTasks||[]).some(t=>t.status==='open')
-    && !c.ideationPendingApproval;
+        && !c.ideationPendingApproval;
+}
+
+// Kick off the copywriting track the moment ideation is approved, so it can run
+// CONCURRENTLY with design/shoot/video editing instead of waiting for them to finish.
+function startConcurrentCopyTrack(data, c){
+  const today=new Date().toISOString().split('T')[0];
+  c.copyStatusId='copywriting';
+  c.designVideoDone=false;
+  const copyPic=getPIC(data,'copywriting',c);
+  if(!c.assignees.includes(copyPic.id)) c.assignees=[...c.assignees, copyPic.id];
+  if(!c.workflowTasks) c.workflowTasks=[];
+  c.workflowTasks.push({id:'wt'+uid(),assigneeId:copyPic.id,status:'open',statusId:'copywriting',label:'✍️ Copywriting',openedAt:today});
+}
+
+// Once BOTH the design/video track (c.designVideoDone) and the copy track
+// (c.copyStatusId==='approved') are done, move on to Client Approval — whichever
+// track finishes last is the one that actually triggers this.
+function tryJoinCopyAndDesignTracks(data, c){
+  if(c.designVideoDone && c.copyStatusId==='approved'){
+    const today=new Date().toISOString().split('T')[0];
+    const creator=getPIC(data,'client_approval',c);
+    c.statusId='client_approval';
+    c.statusHistory.push({statusId:'client_approval',changedBy:S.user.id,changedAt:today});
+    c.assignees=[creator.id];
+    notifyApproved(c,creator,'Design/video & copy both approved → Client Approval',S.user.name);
+    return true;
+  }
+  return false;
 }
 
 function getActiveJobsForUser(data, userId){
   const u=data.users.find(x=>x.id===userId);
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
-  // Stage is relevant if it's in their role's stages OR they have a PIC override for it
-  const stageOk=c=>activeStages.includes(c.statusId)||(c.pic&&c.pic[c.statusId]===userId);
+  // A concurrent track (e.g. copywriting running alongside design/video editing) opens
+  // a workflow task whose OWN stage can differ from the content's overall stage — so a
+  // task is relevant if the content's overall stage matches, OR one of this user's open
+  // tasks has its own stage in their active list.
+  const stageOk=c=>activeStages.includes(c.statusId)||(c.pic&&c.pic[c.statusId]===userId)||
+    (c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open'&&activeStages.includes(t.statusId));
   // User is responsible if they are the assignee OR the PIC for the current stage
   const isResponsible=c=>c.assignees.includes(userId)||(c.pic&&c.pic[c.statusId]===userId);
   return [...new Set([
@@ -2826,10 +2858,10 @@ function makeTodoJobRow(c, uid, today){
   const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
   const isAmendTask=openTask&&openTask.label&&(openTask.label.includes('Amendment')||openTask.label.includes('amendment'));
   const stageColor=isAmendTask?'var(--red)':getJobStageColor(c.statusId);
-  const stageLabel=isAmendTask?'🔄 Amendment':getJobStageLabel(c.statusId);
+    const stageLabel=isAmendTask?'🔄 Amendment':getJobStageLabel(c.statusId);
   const isLateFlag=c.postingDate&&c.postingDate<today&&c.statusId!=='posted';
   const taskLabel=openTask&&!isAmendTask?openTask.label:'';
-  const tabTarget=getDefaultTabForContent(c);
+  const tabTarget=getDefaultTabForContent(c,uid);
   return `<div class="todo-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer">
     <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0;margin-top:1px"></div>
     <div style="flex:1;min-width:0">
@@ -2919,10 +2951,10 @@ function renderJobTodoList(){
         const openTask=(c.workflowTasks||[]).find(t=>t.assigneeId===uid&&t.status==='open');
         const isAmend=openTask&&openTask.label&&openTask.label.toLowerCase().includes('amendment');
         const stageColor=isAmend?'var(--red)':getJobStageColor(c.statusId);
-        const stageLabel=isAmend?'🔄 Amendment':type==='unstarted'?'💡 Ideation':getJobStageLabel(c.statusId);
+                const stageLabel=isAmend?'🔄 Amendment':type==='unstarted'?'💡 Ideation':getJobStageLabel(c.statusId);
         const urgColor=isLate?'var(--red)':isToday?'var(--red)':daysLeft!==null&&daysLeft<=2?'var(--amb)':daysLeft!==null&&daysLeft<=5?'var(--ora)':'var(--t3)';
         const urgLabel=isLate?`${Math.abs(daysLeft)}d overdue`:isToday?'TODAY':daysLeft===1?'1d left':daysLeft!==null?`${daysLeft}d left`:'';
-        const tabTarget=getDefaultTabForContent(c);
+        const tabTarget=getDefaultTabForContent(c,uid);
         return `<div class="todo-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px">
           <div style="display:flex;align-items:center;gap:8px;width:100%">
             <div style="width:10px;height:10px;border-radius:50%;background:${stageColor};flex-shrink:0"></div>
@@ -6085,10 +6117,10 @@ function renderTeam(){
         const itemRows=items.map(({c,task})=>{
           const prog=getProgressForContent(c);
           const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
-          const isTaskKind=c.jobKind==='task';
+                    const isTaskKind=c.jobKind==='task';
           const isAmendTask=task&&task.label&&(task.label.includes('Amendment')||task.label.includes('amendment'));
           const borderColor=isTaskKind?'var(--pur)':isAmendTask?'var(--red)':'var(--b2)';
-          const tabTarget=getDefaultTabForContent(c);
+          const tabTarget=getDefaultTabForContent(c,u.id);
           return `<div class="task-item" onclick="openContentDetail('${c.id}','${tabTarget}')" style="cursor:pointer;padding-left:8px;border-left:2px solid ${borderColor};margin-bottom:4px">
             <div class="task-check${c.statusId==='posted'?' done':''}"></div>
             ${isTaskKind?`<span style="font-size:10px;font-weight:700;color:var(--pur);background:var(--purd);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">TASK</span>`:''}
@@ -7091,7 +7123,7 @@ function renderDetailPage(id, forceTab){
   const statusBtns=canChangeStatus?data.statuses.filter(s=>!s.isAmendment).map(s=>`<div class="sbadge" style="background:${s.color}22;color:${s.color};cursor:pointer;border:2px solid ${s.id===c.statusId?s.color:'transparent'};margin:3px;padding:5px 10px;font-size:13px" onclick="changeStatus('${id}','${s.id}')">${s.name}</div>`).join(''):'';
 
   // Smart default tab — type-aware, supports forceTab override
-  const defaultTab = forceTab || getDefaultTabForContent(c);
+  const defaultTab = forceTab || getDefaultTabForContent(c, S.user.id);
   const isVideoType = usesShootFlow(c);
 
   // ── TASK KIND: skip flow pipeline and content tabs, show simple task view ──
@@ -7348,7 +7380,14 @@ function openContentDetail(id, forceTab){
   renderDetailPage(id, forceTab);
 }
 
-function getDefaultTabForContent(c){
+function getDefaultTabForContent(c, forUserId){
+  // If copywriting is running concurrently and this viewer is the copy PIC, send them
+  // straight to the Copywriting tab rather than whatever the main design/video stage is.
+  if(forUserId && c.copyStatusId && c.copyStatusId!=='approved'){
+    const _wfData=D();
+    const _copyPic=getPIC(_wfData,'copywriting',c);
+    if(_copyPic && _copyPic.id===forUserId) return 'dp-copy';
+  }
   // Type-aware tab mapping — carousel has dp-design, video has dp-video/dp-shoot
   const isVideo=usesShootFlow(c);
   const map={
@@ -7532,13 +7571,22 @@ function submitCopyForReview(id,verIdx){
 async function approveCopyVersion(id,verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
+  const today=new Date().toISOString().split('T')[0];
   const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
-  v[verIdx].approvals.push({userId:S.user.id,status:'approved',note,date:new Date().toISOString().split('T')[0]});
+  v[verIdx].approvals.push({userId:S.user.id,status:'approved',note,date:today});
   v[verIdx].pendingReview=false;c.copyVersions=v;c.copyPendingReview=false;
-  c.statusId='senior_approval_copy';const _sr=getSenior(data,c);c.assignees=[_sr.id];notifyApproved(c,_sr,'Copy ready for review ✍️',S.user.name);c.statusHistory.push({statusId:'senior_approval_copy',changedBy:S.user.id,changedAt:new Date().toISOString().split('T')[0]});
+  c.copyStatusId='approved';
+  // Close the copy creator's open workflow task — their part of the pipeline is done
+  const copyPic=getPIC(data,'copywriting',c);
+  (c.workflowTasks||[]).filter(t=>t.assigneeId===copyPic.id&&t.statusId==='copywriting'&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✅ Copy ${v[verIdx].label} approved by ${S.user.name}.${note?' Note: '+note:''} → Senior Approval.`,type:'copy',createdAt:new Date().toISOString().split('T')[0]});
-  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast('✅ Copy approved → Senior Approval');
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✅ Copy ${v[verIdx].label} approved by ${S.user.name}.${note?' Note: '+note:''}`,type:'copy',createdAt:today});
+  const joined=tryJoinCopyAndDesignTracks(data,c);
+  if(!joined){
+    notifyApproved(c,copyPic,'Copy approved ✅ — waiting on design/video to finish',S.user.name);
+  }
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast(joined?'✅ Copy approved → Client Approval':'✅ Copy approved — waiting on design/video to finish');
 }
 
 async function amendCopyVersion(id,verIdx){
@@ -7546,19 +7594,21 @@ async function amendCopyVersion(id,verIdx){
   const note=document.getElementById('copy-review-note-'+id)?.value||'';
   if(!note.trim()){alert('Please add a note explaining what needs to change.');return;}
   const today=new Date().toISOString().split('T')[0];
-  const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
+    const v=getCopyVersions(c);if(!v[verIdx].approvals)v[verIdx].approvals=[];
   v[verIdx].approvals.push({userId:S.user.id,status:'amendment',note,date:today});
   v[verIdx].pendingReview=false;c.copyVersions=v;c.copyPendingReview=false;
-  const creator=getContentCreator(data,c);
-  // Close reviewer's open tasks
-  (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
+  // Copy track just resets to drafting — this must NOT touch c.statusId, since the
+  // design/video track may still be running its own, unrelated, concurrent stage.
+  c.copyStatusId='copywriting';
+  const creator=getPIC(data,'copywriting',c);
+  // Close reviewer's open tasks, and any already-open copywriting task for the creator
+  // (e.g. from the original kickoff never having been closed on submit), then reopen one.
+  (c.workflowTasks||[]).filter(t=>t.status==='open'&&(t.assigneeId===S.user.id||(t.assigneeId===creator.id&&t.statusId==='copywriting'))).forEach(t=>{t.status='done';t.closedAt=today;});
+  if(!c.workflowTasks) c.workflowTasks=[];
+  c.workflowTasks.push({id:'wt'+uid(),assigneeId:creator.id,status:'open',statusId:'copywriting',label:'✍️ Copywriting (amendment)',openedAt:today});
+  if(!c.assignees.includes(creator.id)) c.assignees=[...c.assignees, creator.id];
   notifyRejected(c,creator,`Copy ${v[verIdx].label} needs changes`,S.user.name,note);
-  if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
-  c.statusId='copywriting';
-  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
-  c.assignees=[creator.id];
-  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);
-}
+  await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);}
 
 function renderCopywritingPanel(c,id){
   const versions=getCopyVersions(c);
@@ -7566,7 +7616,11 @@ function renderCopywritingPanel(c,id){
   const ver=versions[verIdx];
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
   const data=D();
-  const isCreator=c.statusId==='copywriting'&&canActOnStage(data,c,'copywriting',S.user);
+    // Copywriting can now run concurrently with design/video editing, so editability is
+  // driven by the independent copy track (c.copyStatusId), not the overall c.statusId.
+  // Content that started before this change has no copyStatusId yet, so fall back to the
+  // old check in that case.
+  const isCreator=(c.copyStatusId?c.copyStatusId==='copywriting':c.statusId==='copywriting')&&canActOnStage(data,c,'copywriting',S.user);
   const isLocked=!!ver.pendingReview||!!(ver.approvals||[]).find(a=>a.status==='approved');
   const isReadOnly=!isCreator||isLocked;
   const VER_COLORS=['#3acca0','#5a9fff','#9a7aff','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
@@ -8442,13 +8496,18 @@ async function approveDesign(id, verIdx){
   // Close all of designer's open tasks before handing off
   const designer=getPIC(data,'design',c);
   (c.workflowTasks||[]).filter(t=>t.assigneeId===designer.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
-  c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
-  notifyApproved(c,creator,'Design approved — write the copy! ✍️',S.user.name);
-  c.statusId='copywriting';
-  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
-  c.assignees=[creator.id];
+  c.designVideoDone=true;
+  const joined=tryJoinCopyAndDesignTracks(data,c);
+  if(!joined){
+    if(!c.copyStatusId) c.copyStatusId='copywriting'; // safety net for content that started before this change
+    c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;c.copyNotifDismissed={};
+    c.statusId='copywriting';
+    c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
+    c.assignees=[creator.id];
+    notifyApproved(c,creator,'Design approved ✅ — copywriting continues in parallel',S.user.name);
+  }
   await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`✅ Design approved — ✍️ ${creator.name} notified for copywriting`);
+  showAIToast(joined?`✅ Design approved — copy already done → moved to Client Approval`:`✅ Design approved — waiting on copywriting to finish`);
 }
 
 async function amendDesign(id, verIdx){
@@ -9275,8 +9334,45 @@ function renderWorkflowActionBox(data, c){
   const designer=getDesigner(data,c);
   const creator=getContentCreator(data,c);
   const senior=getSenior(data,c);
-  const isVideo=usesShootFlow(c);
+    const isVideo=usesShootFlow(c);
   const isCarousel=!isVideo;
+
+  // ── CONCURRENT COPY TRACK ─────────────────────────────────────────────────
+  // Once ideation is approved, copywriting runs alongside design/video editing
+  // instead of waiting for them to finish. Show its own box, independent of the
+  // main st, but only to the people actually involved in the copy track — anyone
+  // else (e.g. the designer) falls through to the normal design/video boxes below.
+  if(c.copyStatusId && c.copyStatusId!=='approved'){
+    const copyPic=getPIC(data,'copywriting',c);
+    const copyVersions=getCopyVersions(c);
+    const latestCopy=copyVersions[copyVersions.length-1]||{};
+    const copyPendingReview=!!latestCopy.pendingReview;
+    const alongside=isVideo?'video editing':'design';
+    if(copyPendingReview && isSenior){
+      return `<div class="wf-action-box review">
+        <div class="wf-action-title">🔍 Copy Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
+        <div class="wf-action-sub">Submitted by ${copyPic.name} — running alongside ${alongside}. Review the copy in the <strong>Copywriting tab</strong>, then decide there.</div>
+        <div class="wf-action-row" style="margin-top:12px">
+          <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+        </div>
+      </div>`+renderReviewHistory(c);
+    }
+    if(copyPendingReview && S.user.id===copyPic.id){
+      return `<div class="wf-action-box review">
+        <div class="wf-action-title">⏳ Waiting for Senior Approval — Copy</div>
+        <div class="wf-action-sub">Your copy has been submitted for review — running alongside ${alongside}, no need to wait on it.</div>
+      </div>`+renderReviewHistory(c);
+    }
+    if(!copyPendingReview && S.user.id===copyPic.id){
+      return `<div class="wf-action-box copy">
+        <div class="wf-action-title">✍️ Copywriting Phase — Your Turn <span style="font-size:12px;background:var(--teld);color:var(--tel);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">Running alongside ${alongside}</span></div>
+        <div class="wf-action-sub">Write the caption/copy in the <strong>Copywriting tab</strong> — you don't need to wait for ${alongside} to finish.</div>
+        <div class="wf-action-row">
+          <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+        </div>
+      </div>`+renderReviewHistory(c);
+    }
+  }
 
   // ── CAROUSEL: Ideation — creator submits ──────────────────────────────────
   if(isCarousel && st==='ideation' && isCreator){
@@ -9687,8 +9783,9 @@ async function wfApproveIdeationForVideo(id){
   c.statusId='shoot';
   c.statusHistory.push({statusId:'shoot',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
+  startConcurrentCopyTrack(data,c);
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`✅ Ideation approved — 🎬 ${creator.name} notified to shoot!`);
+  showAIToast(`✅ Ideation approved — 🎬 ${creator.name} notified to shoot! (copywriting can start now too)`);
 }
 
 async function wfAmendIdeationForVideo(id){
@@ -9731,18 +9828,23 @@ async function wfApproveVideo(id){
   saveWfReviewComment(id,'Senior Approved — Edited Video');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getPIC(data,'copywriting',c);
-  const today=new Date().toISOString().split('T')[0];
+    const today=new Date().toISOString().split('T')[0];
   c.videoReviewPending=false;
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
-  c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;
-  c.copyNotifDismissed={};
-  notifyApproved(c,creator,'Video approved — write the copy! ✍️',S.user.name);
   if(!data.statuses.find(s=>s.id==='copywriting')) data.statuses.push({id:'copywriting',name:'Copywriting',color:'#3acca0',step:6,isAmendment:false});
-  c.statusId='copywriting';
-  c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
-  c.assignees=[creator.id];
+  c.designVideoDone=true;
+  const joined=tryJoinCopyAndDesignTracks(data,c);
+  if(!joined){
+    if(!c.copyStatusId) c.copyStatusId='copywriting'; // safety net for content that started before this change
+    c.copyNotified=true;c.copyNotifiedAt=today;c.copyNotifiedBy=S.user.name;
+    c.copyNotifDismissed={};
+    c.statusId='copywriting';
+    c.statusHistory.push({statusId:'copywriting',changedBy:S.user.id,changedAt:today});
+    c.assignees=[creator.id];
+    notifyApproved(c,creator,'Video approved ✅ — copywriting continues in parallel',S.user.name);
+  }
   await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`✅ Video approved — ✍️ ${creator.name} notified for copywriting`);
+  showAIToast(joined?`✅ Video approved — copy already done → moved to Client Approval`:`✅ Video approved — waiting on copywriting to finish`);
 }
 
 async function wfAmendVideo(id){
@@ -12301,11 +12403,12 @@ async function approveIdeation(id, verIdx){
   c.assignees.forEach(uid2=>{
     (c.workflowTasks||[]).filter(t=>t.assigneeId===uid2&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   });
-  c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
+    c.statusHistory.push({statusId:'design',changedBy:S.user.id,changedAt:today});
   c.statusId='design';c.assignees=[designer.id];
   c.workflowTasks.push({id:'wt'+uid(),assigneeId:designer.id,status:'open',statusId:'design',label:'🎨 Design',openedAt:today});
+  startConcurrentCopyTrack(data,c);
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`✅ Approved — 🎨 ${designer.name} notified for design`);
+  showAIToast(`✅ Approved — 🎨 ${designer.name} notified for design (copywriting can start now too)`);
 }
 
 async function requestIdeaAmendment(id, verIdx){
@@ -12639,7 +12742,7 @@ function renderNotifPanel(){
       sections.push(`<div class="np-section-header" style="background:var(--ambd);color:var(--amb)">✅ AWAITING YOUR APPROVAL (${reviewItems.length})</div>`
         +reviewItems.map(c=>{
           const b=getBrand(data,c.brandId);const col=colorMap[c.statusId]||'var(--amb)';
-          const tabTarget=getDefaultTabForContent(c);
+          const tabTarget=getDefaultTabForContent(c,uid);
           return `<div class="np-item" style="border-left:3px solid ${col}">
             <div class="np-icon" style="background:${col}18;color:${col};font-size:18px;cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">✅</div>
             <div class="np-info" style="cursor:pointer" onclick="dismissSeniorNotif('${c.id}');openContentDetail('${c.id}','${tabTarget}')">
