@@ -6092,7 +6092,7 @@ function renderTeam(){
     // Find all active content for this user:
     let allRelevant=getActiveJobsForUser(data,u.id);
 
-    // content_creator (e.g. Leonard) is the start of the workflow — include ALL unstarted
+        // content_creator (e.g. Leonard) is the start of the workflow — include ALL unstarted
     // content (ideation, unassigned, no open tasks) so his card mirrors his full to-do list.
     if(u.role==='content_creator'){
       const unstarted=data.contents.filter(c=>
@@ -6101,7 +6101,13 @@ function renderTeam(){
       allRelevant=[...allRelevant,...unstarted];
     }
 
-    // Mirror the Dashboard's "My Active Jobs" panel exactly — no date filtering.
+    // Only show what's actually near-term — overdue/undated items still show (they're
+    // actionable now), but anything due more than 2 months out just clutters the list
+    // and buries what people should be working on today.
+    const _teamCutoff=new Date();
+    _teamCutoff.setMonth(_teamCutoff.getMonth()+2);
+    const _teamCutoffStr=_teamCutoff.toISOString().split('T')[0];
+    allRelevant=allRelevant.filter(c=>!c.postingDate||c.postingDate<=_teamCutoffStr);
 
     const byBrand={};
     allRelevant.forEach(c=>{
