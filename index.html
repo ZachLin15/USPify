@@ -6119,9 +6119,12 @@ function renderTeam(){
         byStage[stageKey].push({c,task:openTask[0]||null});
       });
 
-      const stageSections=Object.entries(byStage).map(([stageId,items])=>{
+        const stageSections=Object.entries(byStage).map(([stageId,items])=>{
         const stLabel=STAGE_LABELS[stageId]||stageId;
-        const itemRows=items.map(({c,task})=>{
+        // Soonest due first — items were previously left in whatever order the data
+        // happened to fall out in, producing dates that jumped around non-chronologically.
+        const sortedItems=[...items].sort((a,b)=>(a.c.postingDate||'9999-99-99').localeCompare(b.c.postingDate||'9999-99-99'));
+        const itemRows=sortedItems.map(({c,task})=>{
           const prog=getProgressForContent(c);
           const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
                     const isTaskKind=c.jobKind==='task';
