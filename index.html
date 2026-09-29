@@ -2880,16 +2880,17 @@ function renderJobTodoList(){
   const data=D();
   const uid=S.user.id;
   const today=new Date().toISOString().split('T')[0];
-  const jobs=getActiveJobsForUser(data,uid);
-  const isContentCreator=S.user.role==='content_creator';
+    const jobs=getActiveJobsForUser(data,uid);
   const targetMonth=S.dashMonthFilter||new Date().toISOString().slice(0,7);
-  const unstartedForMonth=isContentCreator
-    ? data.contents.filter(c=>
-        isUnstartedContent(c)&&
-        c.postingDate&&c.postingDate.startsWith(targetMonth)&&
-        !jobs.some(j=>j.id===c.id)
-      )
-    : [];
+  // Unstarted ideation content belongs to whoever is set as ITS ideation PIC (Responsibilities
+  // tab / per-content override) — not just whoever has the content_creator role — so a senior
+  // like Jack, set as the ideation PIC for some brands, sees his own not-yet-started work too.
+  const unstartedForMonth=data.contents.filter(c=>
+    isUnstartedContent(c)&&
+    c.postingDate&&c.postingDate.startsWith(targetMonth)&&
+    !jobs.some(j=>j.id===c.id)&&
+    getPIC(data,'ideation',c).id===uid
+  );
 
   const upcomingBlocks=(data.scheduleBlocks||[])
     .filter(b=>b.userId===uid&&b.date&&b.date>=today&&!b.completed)
@@ -2979,11 +2980,9 @@ function renderJobTodoList(){
 function buildTodoPanelHTML(){
   const data=D();
   const uid=S.user.id;
-  const jobs=getActiveJobsForUser(data,uid);
+    const jobs=getActiveJobsForUser(data,uid);
   const targetMonth=S.dashMonthFilter||new Date().toISOString().slice(0,7);
-  const unstartedCount=S.user.role==='content_creator'
-    ? data.contents.filter(c=>isUnstartedContent(c)&&c.postingDate&&c.postingDate.startsWith(targetMonth)&&!jobs.some(j=>j.id===c.id)).length
-    : 0;
+  const unstartedCount=data.contents.filter(c=>isUnstartedContent(c)&&c.postingDate&&c.postingDate.startsWith(targetMonth)&&!jobs.some(j=>j.id===c.id)&&getPIC(data,'ideation',c).id===uid).length;
   const todayForBlocks=new Date().toISOString().split('T')[0];
   const upcomingBlocksCount=(data.scheduleBlocks||[]).filter(b=>b.userId===uid&&b.date&&b.date>=todayForBlocks&&!b.completed).length;  const totalCount=jobs.length+unstartedCount+upcomingBlocksCount;
   return `<div class="todo-panel">
@@ -3033,9 +3032,9 @@ function renderDashboard(){
   const isAdmin=isAdminUser(S.user);
 
   // Non-admin: only show content assigned to them
-  const allContents=isAdmin
+    const allContents=isAdmin
     ? data.contents
-    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open')||(S.user.role==='content_creator'&&isUnstartedContent(c)));
+    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open')||(isUnstartedContent(c)&&getPIC(data,'ideation',c).id===S.user.id));
   const allMonths=[...new Set(allContents.filter(c=>c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   if(!S.dashMonthFilter||S.dashMonthFilter==='all') S.dashMonthFilter=curMonth;
   const contents=allContents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
@@ -3049,9 +3048,9 @@ function renderDashboard(){
     ? contents.filter(c=>c.postingDate&&c.postingDate<today&&c.statusId!=='posted').length
         : _userJobs.filter(c=>{const due=getTaskDueDate(c,S.user.id,data);return due&&due<today;}).length;
   // Pending tasks = active jobs for this user right now
- let pendingJobs=getActiveJobsForUser(data,S.user.id);
-  if(S.user.role==='content_creator'){
-    const unstarted=data.contents.filter(c=>isUnstartedContent(c)&&!pendingJobs.some(r=>r.id===c.id));
+  let pendingJobs=getActiveJobsForUser(data,S.user.id);
+  {
+    const unstarted=data.contents.filter(c=>isUnstartedContent(c)&&!pendingJobs.some(r=>r.id===c.id)&&getPIC(data,'ideation',c).id===S.user.id);
     pendingJobs=[...pendingJobs,...unstarted];
   }
   const _pendingCutoff=new Date();_pendingCutoff.setDate(_pendingCutoff.getDate()+30);
@@ -4418,8 +4417,9 @@ function renderMiniCal(todayStr){
 
 function renderCalTodoLayout(data,mainGrid,todayStr){
   const myJobs=getActiveJobsForUser(data,S.user.id);
-  const unstarted=isAdminUser(S.user)||S.user.id==='leonard'
-    ?data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10):[];
+  const unstarted=isAdminUser(S.user)
+    ?data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)).slice(0,10)
+    :data.contents.filter(c=>isUnstartedContent(c)&&!myJobs.some(j=>j.id===c.id)&&getPIC(data,'ideation',c).id===S.user.id).slice(0,10);
 
   // Determine visible date range from current calendar view
   const _calViewStart=(()=>{
