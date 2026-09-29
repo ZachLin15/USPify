@@ -6092,14 +6092,15 @@ function renderTeam(){
     // Find all active content for this user:
     let allRelevant=getActiveJobsForUser(data,u.id);
 
-        // content_creator (e.g. Leonard) is the start of the workflow — include ALL unstarted
-    // content (ideation, unassigned, no open tasks) so his card mirrors his full to-do list.
-    if(u.role==='content_creator'){
-      const unstarted=data.contents.filter(c=>
-        isUnstartedContent(c)&&!allRelevant.some(r=>r.id===c.id)
-      );
-      allRelevant=[...allRelevant,...unstarted];
-    }
+    // Unstarted content (ideation stage, nobody assigned yet) belongs to whoever the
+    // Responsibilities tab / per-content override designates as THAT content's ideation
+    // PIC — not just whoever has the content_creator role. Otherwise a senior like Jack,
+    // set as the ideation PIC for some brands, would never see his own not-yet-started
+    // ideation work here, only Leonard's.
+    const unstarted=data.contents.filter(c=>
+      isUnstartedContent(c)&&!allRelevant.some(r=>r.id===c.id)&&getPIC(data,'ideation',c).id===u.id
+    );
+    allRelevant=[...allRelevant,...unstarted];
 
     // Only show what's actually near-term — overdue/undated items still show (they're
     // actionable now), but anything due more than 2 months out just clutters the list
