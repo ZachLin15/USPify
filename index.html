@@ -3849,7 +3849,12 @@ function renderBrandPage(){
 
   const monthSummary=(()=>{
     const now=new Date();
-    const monthKeys=[0,1,2].map(off=>new Date(now.getFullYear(),now.getMonth()+off,1).toISOString().slice(0,7));
+    // Build the YYYY-MM key from LOCAL year/month directly — never round-trip through
+    // toISOString() on a locally-constructed date, since that converts to UTC first
+    // and rolls the 1st of the month back into the PREVIOUS month for any timezone
+    // ahead of UTC (e.g. this rolled "September" back to "August" for UTC+8 users).
+    const ym=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const monthKeys=[0,1,2].map(off=>ym(new Date(now.getFullYear(),now.getMonth()+off,1)));
     const brandAll=data.contents.filter(c=>c.brandId===S.brand);
     const card=(key)=>{
       const items=brandAll.filter(c=>c.postingDate&&c.postingDate.startsWith(key));
@@ -3859,7 +3864,7 @@ function renderBrandPage(){
       const overdue=items.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted').length;
       const pct=total?Math.round(posted/total*100):0;
       const label=new Date(key+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-      return `<div class="panel" style="padding:14px 16px;cursor:pointer" onclick="S.brandMonthFilter='${key}';renderPage()" title="Click to view ${label} in the table below">
+      return `<div class="panel" style="padding:14px 16px;cursor:pointer;min-width:280px;flex-shrink:0" onclick="S.brandMonthFilter='${key}';renderPage()" title="Click to view ${label} in the table below">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
           <span style="font-weight:700;font-size:14px;color:var(--t1)">${label}</span>
           <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${total} piece${total!==1?'s':''}</span>
@@ -3873,7 +3878,9 @@ function renderBrandPage(){
         </div>
       </div>`;
     };
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">${monthKeys.map(card).join('')}</div>`;
+    // Horizontally scrollable row (native scrollbar shows as a drag-bar underneath)
+    // instead of squeezing 3 cards into whatever width happens to be available.
+    return `<div style="display:flex;gap:12px;margin-bottom:16px;overflow-x:auto;padding-bottom:8px">${monthKeys.map(card).join('')}</div>`;
   })();
 
   // ── TEAM ON THIS BRAND — for the SELECTED month (tabs below, default = current
@@ -3884,7 +3891,8 @@ function renderBrandPage(){
   // due that month (as assignee or PIC on any stage) show up.
   const teamSummary=(()=>{
     const now=new Date();
-    const monthKeys=[0,1,2].map(off=>new Date(now.getFullYear(),now.getMonth()+off,1).toISOString().slice(0,7));
+    const ym=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const monthKeys=[0,1,2].map(off=>ym(new Date(now.getFullYear(),now.getMonth()+off,1)));
     if(!S.brandTeamMonth||!monthKeys.includes(S.brandTeamMonth)) S.brandTeamMonth=monthKeys[0];
     const selMonth=S.brandTeamMonth;
     const monthLabel=new Date(selMonth+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
@@ -3916,6 +3924,17 @@ function renderBrandPage(){
       </span>`;
     }).join(''):`<span style="font-size:12px;color:var(--t3)">Nothing here</span>`;
 
+    // Fixed, compact column widths (person col + 3 narrow number columns) instead of
+    // a <table> stretched to the full panel width — that's what was leaving huge gaps
+    // between 4 columns on a wide screen.
+    const colsCss='180px 90px 90px 90px';
+    const headerRow=`<div style="display:grid;grid-template-columns:${colsCss};gap:10px;padding:6px 4px;border-bottom:1px solid var(--b1)">
+      <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">Person</span>
+      <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center">Active</span>
+      <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center">Completed</span>
+      <span style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center">Overdue</span>
+    </div>`;
+
     const rowsHtml=uids.map(uid=>{
       const u=data.users.find(x=>x.id===uid);
       if(!u) return '';
@@ -3926,11 +3945,14 @@ function renderBrandPage(){
       const buckets=[['active',activeItems,'var(--blu)'],['completed',completedItems,'var(--ac)'],['overdue',overdueItems,'var(--red)']];
       const cell=(cat,catItems,color)=>{
         const n=catItems.length;
-        if(!n) return `<td style="text-align:center;color:var(--t3)">–</td>`;
+        if(!n) return `<div style="text-align:center;color:var(--t3)">–</div>`;
         const isOpen=S.brandTeamExpand===`${uid}:${cat}`;
-        return `<td style="text-align:center"><span onclick="toggleTeamExpand('${uid}','${cat}')" style="cursor:pointer;display:inline-block;min-width:22px;padding:2px 10px;border-radius:20px;background:${color}${isOpen?'33':'22'};color:${color};font-size:12px;font-weight:700;font-family:'DM Mono',monospace;border:1px solid ${isOpen?color:'transparent'}">${n}</span></td>`;
+        return `<div style="text-align:center"><span onclick="toggleTeamExpand('${uid}','${cat}')" style="cursor:pointer;display:inline-block;min-width:22px;padding:2px 10px;border-radius:20px;background:${color}${isOpen?'33':'22'};color:${color};font-size:12px;font-weight:700;font-family:'DM Mono',monospace;border:1px solid ${isOpen?color:'transparent'}">${n}</span></div>`;
       };
-      let row=`<tr><td style="white-space:nowrap"><div style="display:flex;align-items:center;gap:8px">${userAvatar(u)}<span style="font-weight:600">${u.name}</span></div></td>${buckets.map(([cat,catItems,color])=>cell(cat,catItems,color)).join('')}</tr>`;
+      let row=`<div style="display:grid;grid-template-columns:${colsCss};gap:10px;padding:9px 4px;align-items:center;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="flex-shrink:0">${userAvatar(u)}</span><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.name}</span></div>
+        ${buckets.map(([cat,catItems,color])=>cell(cat,catItems,color)).join('')}
+      </div>`;
       const expand=S.brandTeamExpand;
       if(expand&&expand.split(':')[0]===uid){
         const cat=expand.split(':')[1];
@@ -3938,10 +3960,10 @@ function renderBrandPage(){
         if(found){
           const [,catItems,color]=found;
           const catLabel=cat==='active'?'Active':cat==='completed'?'Completed':'Overdue';
-          row+=`<tr><td colspan="4" style="padding:8px 4px 14px 4px;background:var(--s1)">
+          row+=`<div style="padding:2px 4px 14px 4px;background:var(--s1)">
             <div style="font-size:11px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${catLabel} — ${u.name}</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px">${chipsFor(catItems)}</div>
-          </td></tr>`;
+          </div>`;
         }
       }
       return row;
@@ -3949,18 +3971,14 @@ function renderBrandPage(){
 
     return `<div class="panel" style="padding:14px 16px;margin-bottom:16px">
       ${panelHead}
-      <div style="overflow-x:auto">
-        <table class="ctable" style="min-width:100%">
-          <thead><tr><th style="white-space:nowrap">Person</th><th style="text-align:center;white-space:nowrap">Active</th><th style="text-align:center;white-space:nowrap">Completed</th><th style="text-align:center;white-space:nowrap">Overdue</th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
+      ${headerRow}
+      ${rowsHtml}
     </div>`;
   })();
 
 
 
-  return sidebarBtn+monthSummary+teamSummary+stats+socialLinks+infoBar+renderBrandMiniCalendar(b,data)+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
+  return sidebarBtn+monthSummary+teamSummary+stats+socialLinks+infoBar+`<div style="overflow-x:auto">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
