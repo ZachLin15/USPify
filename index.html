@@ -2759,8 +2759,13 @@ function renderPage(){
 //   - Leonard seeing the entire backlog just because he's first in flow
 
 const ACTIVE_WORK_STAGES={
-  content_creator:['ideation','shoot','copywriting'],      // actual work stages only
-  designer:['design','video_editing'],
+  // Amendment statuses (copy_amendment/design_amendment/ideation_amendment) are included
+  // here too — doRevise() sends content back to the same person who owns the underlying
+  // work (content_creator for copy/ideation, designer for design), so without these the
+  // amendment is invisible on that person's dashboard/Team card even though c.assignees
+  // was set correctly (same bug class as the Task jobKind fix above).
+  content_creator:['ideation','shoot','copywriting','copy_amendment','ideation_amendment'],
+  designer:['design','video_editing','design_amendment'],
   senior:['senior_approval_ideation','senior_approval_video','senior_approval_copy','senior_approval'],
   client:['client_approval'],
   admin:MAIN_STATUS_ORDER,
@@ -2818,13 +2823,20 @@ function getActiveJobsForUser(data, userId){
   // and role fallback, the same resolution the workflow-flow diagram's initials use, so
   // someone can't be the shown owner of a stage there and invisible here).
   const isResponsible=c=>c.assignees.includes(userId)||getPIC(data,c.statusId,c).id===userId;
+  // Standalone "Task" jobs (jobKind==='task', from Add Job → Task) are lightweight
+  // to-dos with no brand workflow — but they ARE meant to show up here: the Team page
+  // renders a dedicated "TASK" badge for them (isTaskKind) and the detail page has a
+  // whole simplified view for jobKind==='task'. They used to be filtered out of this
+  // list entirely (c.jobKind!=='task'), which meant that UI could never actually be
+  // reached — a task assigned via "Add Job" never appeared on the assignee's to-do.
+  // A task is "responsible"/"active" simply by having an open workflowTask for this
+  // user, regardless of stageOk/isResponsible (which are keyed to brand-workflow roles
+  // that a plain task doesn't participate in).
   return [...new Set([
     // 1. Has an explicit open workflow task assigned to this user
     ...data.contents.filter(c=>
-      c.jobKind!=='task'&&
       (c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open')&&
-      stageOk(c)&&
-      isResponsible(c)
+      (c.jobKind==='task'||(stageOk(c)&&isResponsible(c)))
     ),
     // 2. Explicitly in assignees, OR the resolved PIC for the current stage — AND at one of their active stages
     ...data.contents.filter(c=>
@@ -2833,7 +2845,7 @@ function getActiveJobsForUser(data, userId){
       c.statusId!=='posted'&&
       stageOk(c)
     ),
-  ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted'&&c.jobKind!=='task');
+  ].map(c=>c.id))].map(id=>data.contents.find(c=>c.id===id)).filter(Boolean).filter(c=>c.statusId!=='posted');
 }
 
 // ===================== JOB-BASED TODO PANEL (dashboard) =====================
@@ -4269,17 +4281,28 @@ async function doRevise(id){
   // Notify the right person based on amendment type
   const creator=getContentCreator(data,c);
   const designer=getDesigner(data,c);
+  if(!c.workflowTasks) c.workflowTasks=[];
+  let revisionTarget;
   if(amendType==='copy_amendment'||finalStatus==='copywriting'){
     c.assignees=[creator.id];
     notifyRejected(c,creator,'Copy needs revision',S.user.name,note);
+    revisionTarget=creator;
   } else if(amendType==='design_amendment'||finalStatus==='design'||finalStatus==='video_editing'){
     c.assignees=[designer.id];
     notifyRejected(c,designer,'Design needs revision',S.user.name,note);
+    revisionTarget=designer;
   } else {
     // Generic revert — notify based on who owns the target status
     const targetUser=(finalStatus==='ideation'||finalStatus==='shoot'||finalStatus==='copywriting')?creator:designer;
     c.assignees=[targetUser.id];
     notifyRejected(c,targetUser,`Revision needed: ${getStatus(data,finalStatus).name}`,S.user.name,note);
+    revisionTarget=targetUser;
+  }
+  // Open a real workflow task for the revision, same as every other status-transition
+  // function (wfTransition/approveContent/etc) — without this, an amendment sent outside
+  // that unlisted-stage set still wouldn't show up wherever tasks (not just stage) are checked.
+  if(revisionTarget&&revisionTarget.id){
+    c.workflowTasks.push({id:'wt'+uid(),assigneeId:revisionTarget.id,status:'open',statusId:finalStatus,label:getStatus(data,finalStatus).name+' (amendment)',openedAt:today});
   }
   await saveNow(data,c.id);closeModal();render();
   showAIToast(`🔄 Amendment sent`);
@@ -4409,9 +4432,32 @@ function renderCalendar(){
   // ── DAY VIEW ─────────────────────────────────────────────────────────────
   if(S.calView==='day'){
     const isToday=S.calDate===todayStr;
-    const body=`<div style="display:grid;grid-template-columns:52px 1fr;border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;width:100%">
-      <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
-      <div>${renderDayCol(S.calDate,isToday)}</div>
+    // All-day row for deadline tasks (blockType==='task' blocks have no startHour/endHour
+    // and no `date` field — they're keyed by deadline/taskStart, not the time grid — so
+    // renderDayCol's b.date===ds filter can never show them. Week and Month views already
+    // have this same all-day strip; Day view was the one place missing it, so a task
+    // created via "Add deadline task" was invisible whenever you were on Day view for
+    // that date, even though it correctly shows in Week/Month and the sidebar list.
+    const dayTaskBlocks=userBlocks.filter(b=>b.blockType==='task'&&!b.completed&&b.deadline&&S.calDate<=(b.deadline||'')&&S.calDate>=(b.taskStart||b.deadline||''));
+    const dayTaskRow=dayTaskBlocks.length?`<div style="display:grid;grid-template-columns:52px 1fr;background:var(--bg);border-bottom:1px solid var(--b1);width:100%">
+      <div style="border-right:1px solid var(--b1);display:flex;align-items:center;justify-content:center">
+        <span style="font-size:9px;color:var(--t4);font-family:'DM Mono',monospace;writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.05em">Tasks</span>
+      </div>
+      <div style="padding:3px 4px;min-height:28px">
+        ${dayTaskBlocks.map(b=>{
+          const isLate=b.deadline<todayStr;
+          return `<div onclick="openBlockDetail('${b.id}')" style="font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:${b.color}22;color:${b.color};margin-bottom:2px;cursor:pointer;display:inline-block;margin-right:4px;border-left:3px solid ${b.color};${isLate?'border-left-color:var(--red);color:var(--red);background:var(--redd)':''}" title="${b.label}">
+            ${b.label}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:'';
+    const body=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden;width:100%">
+      ${dayTaskRow}
+      <div style="display:grid;grid-template-columns:52px 1fr;width:100%">
+        <div style="background:var(--s2);border-right:1px solid var(--b1)">${timeLabels}</div>
+        <div>${renderDayCol(S.calDate,isToday)}</div>
+      </div>
     </div>`;
     return calHeader+renderCalTodoLayout(data,body,todayStr);
   }
