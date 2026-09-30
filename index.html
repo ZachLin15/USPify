@@ -2811,10 +2811,13 @@ function getActiveJobsForUser(data, userId){
   // a workflow task whose OWN stage can differ from the content's overall stage — so a
   // task is relevant if the content's overall stage matches, OR one of this user's open
   // tasks has its own stage in their active list.
-  const stageOk=c=>activeStages.includes(c.statusId)||(c.pic&&c.pic[c.statusId]===userId)||
+  const stageOk=c=>activeStages.includes(c.statusId)||getPIC(data,c.statusId,c).id===userId||
     (c.workflowTasks||[]).some(t=>t.assigneeId===userId&&t.status==='open'&&activeStages.includes(t.statusId));
-  // User is responsible if they are the assignee OR the PIC for the current stage
-  const isResponsible=c=>c.assignees.includes(userId)||(c.pic&&c.pic[c.statusId]===userId);
+  // User is responsible if they are the assignee OR the resolved PIC for the current stage
+  // (getPIC, not just a raw c.pic override — it also covers brand Responsibilities config
+  // and role fallback, the same resolution the workflow-flow diagram's initials use, so
+  // someone can't be the shown owner of a stage there and invisible here).
+  const isResponsible=c=>c.assignees.includes(userId)||getPIC(data,c.statusId,c).id===userId;
   return [...new Set([
     // 1. Has an explicit open workflow task assigned to this user
     ...data.contents.filter(c=>
@@ -2823,10 +2826,10 @@ function getActiveJobsForUser(data, userId){
       stageOk(c)&&
       isResponsible(c)
     ),
-    // 2. Explicitly in assignees AND at one of their active stages
+    // 2. Explicitly in assignees, OR the resolved PIC for the current stage — AND at one of their active stages
     ...data.contents.filter(c=>
       c.jobKind!=='task'&&
-      c.assignees.includes(userId)&&
+      isResponsible(c)&&
       c.statusId!=='posted'&&
       stageOk(c)
     ),
@@ -3036,7 +3039,7 @@ function renderDashboard(){
   // Non-admin: only show content assigned to them
     const allContents=isAdmin
     ? data.contents
-    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open')||(isUnstartedContent(c)&&getPIC(data,'ideation',c).id===S.user.id));
+    : data.contents.filter(c=>c.assignees.includes(S.user.id)||(c.workflowTasks||[]).some(t=>t.assigneeId===S.user.id&&t.status==='open')||(isUnstartedContent(c)&&getPIC(data,'ideation',c).id===S.user.id)||getPIC(data,c.statusId,c).id===S.user.id);
   const allMonths=[...new Set(allContents.filter(c=>c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   if(!S.dashMonthFilter||S.dashMonthFilter==='all') S.dashMonthFilter=curMonth;
   const contents=allContents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.dashMonthFilter));
@@ -3638,7 +3641,8 @@ function renderBrandPage(){
   if(S.user.role==='freelancer'){
     contents=contents.filter(c=>
       c.assignees.includes(S.user.id)||
-      (c.pic&&Object.values(c.pic).includes(S.user.id))
+      (c.pic&&Object.values(c.pic).includes(S.user.id))||
+      getPIC(data,c.statusId,c).id===S.user.id
     );
   }
   const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
@@ -3908,7 +3912,7 @@ function renderBrandPage(){
     const monthItems=brandContents.filter(c=>c.postingDate&&c.postingDate.startsWith(selMonth));
 
     // Everyone connected to something due this month (assignee OR PIC on any stage)
-    const uids=[...new Set(monthItems.flatMap(c=>[...c.assignees,...(c.pic?Object.values(c.pic):[])]))].filter(Boolean);
+    const uids=[...new Set(monthItems.flatMap(c=>[...c.assignees,...(c.pic?Object.values(c.pic):[]),getPIC(data,c.statusId,c).id]))].filter(Boolean);
 
     const panelHead=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
         <div style="display:flex;align-items:baseline;gap:8px">
@@ -3940,7 +3944,7 @@ function renderBrandPage(){
     const rowsHtml=uids.map(uid=>{
       const u=data.users.find(x=>x.id===uid);
       if(!u) return '';
-      const items=monthItems.filter(c=>c.assignees.includes(uid)||(c.pic&&Object.values(c.pic).includes(uid)));
+      const items=monthItems.filter(c=>c.assignees.includes(uid)||(c.pic&&Object.values(c.pic).includes(uid))||getPIC(data,c.statusId,c).id===uid);
       const completedItems=items.filter(c=>c.statusId==='posted');
       const overdueItems=items.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted');
       const activeItems=items.filter(c=>c.statusId!=='posted'&&!isLate(c.postingDate));
@@ -4049,6 +4053,14 @@ async function approveWithNote(id, nextStatusId){
   const today=localISO(new Date());
   c.statusId=nextStatusId;
   c.statusHistory.push({statusId:nextStatusId,changedBy:S.user.id,changedAt:today});
+  // Keep assignees in sync with the new stage's actual owner (getPIC) — this Approvals-page
+  // action changes who owns the work without going through wfTransition, so without this the
+  // previous stage's assignee (e.g. the senior who just approved) stays listed as owner and
+  // the real new owner never appears on their own dashboard.
+  if(nextStatusId!=='posted'){
+    const newPic=getPIC(data,nextStatusId,c);
+    if(newPic&&newPic.id) c.assignees=[newPic.id];
+  }
   if(note){
     if(!c.comments)c.comments=[];
     c.comments.push({id:'cm'+uid(),userId:S.user.id,text:'✅ Approved. '+note,type:'general',createdAt:today});
@@ -4225,7 +4237,7 @@ async function approveContent(id,nextStatusId){
   else if(nextStatusId==='copywriting'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Approved → start copywriting ✍️',S.user.name);}
   else if(nextStatusId==='shoot'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Script approved — start shooting 🎬',S.user.name);}
   else if(nextStatusId==='video_editing'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Start editing ✂️',S.user.name);}
-  else if(nextStatusId==='client_approval'){notifyApproved(c,nextPic,'Approved → Client Approval 🤝',S.user.name);}
+  else if(nextStatusId==='client_approval'){c.assignees=[nextPic.id];notifyApproved(c,nextPic,'Approved → Client Approval 🤝',S.user.name);}
   await saveNow(data,c.id);render();
 }
 function openReviseModal(id, prefillNote){
@@ -10541,6 +10553,14 @@ function saveCopyComment(id){
 function changeStatus(id,statusId){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c||c.statusId===statusId)return;
   c.statusId=statusId;c.statusHistory.push({statusId,changedBy:S.user.id,changedAt:localISO(new Date())});
+  // This is a manual force-update (the "Status" override panel), which bypasses the normal
+  // wfTransition flow — so it must still sync assignees to whoever the new stage actually
+  // resolves to (per-content override / brand Responsibilities config / role fallback).
+  // Otherwise the real owner never lands in c.assignees and goes invisible on their own
+  // dashboard even though every other view (workflow flow diagram, badges) shows them as
+  // the stage's PIC via getPIC.
+  const newPic=getPIC(data,statusId,c);
+  if(newPic&&newPic.id&&!c.assignees.includes(newPic.id)) c.assignees=[...c.assignees,newPic.id];
   save(data,id);renderDetailPage(id);renderSidebar();
 }
 function confirmDeleteContent(id){
@@ -10987,7 +11007,15 @@ function saveEditContent(id){
   c.driveLink=document.getElementById('ef-drive').value.trim();
   c.assignees=[...document.querySelectorAll('.assignee-check.selected input')].map(i=>i.value);
   c.dueDates={hualu:postingDate?addDays(postingDate,-4):'',leonard:postingDate?addDays(postingDate,-7):'',jack:''};
-  if(newStatus!==c.statusId){c.statusId=newStatus;c.statusHistory.push({statusId:newStatus,changedBy:S.user.id,changedAt:localISO(new Date())});}
+  if(newStatus!==c.statusId){
+    c.statusId=newStatus;
+    c.statusHistory.push({statusId:newStatus,changedBy:S.user.id,changedAt:localISO(new Date())});
+    // The assignee checkboxes above were rendered from the content's assignees BEFORE this
+    // status change, so if the admin didn't also manually re-check the new stage's owner,
+    // c.assignees is now stale. Same fix as changeStatus/approveWithNote: fall back to getPIC.
+    const newPic=getPIC(data,newStatus,c);
+    if(newPic&&newPic.id&&!c.assignees.includes(newPic.id)) c.assignees=[...c.assignees,newPic.id];
+  }
   save(data);closeModal();render();renderDetailPage(id);
 }
 
