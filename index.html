@@ -4820,12 +4820,12 @@ function renderBrandCalendar(){
 
   // ── CALENDAR GRID ──────────────────────────────────────────────────────────
   const grid=`<div style="border:1px solid var(--b1);border-radius:var(--r2);overflow:hidden">
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);background:var(--s2);border-bottom:1px solid var(--b1)">
-      ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--s2);border-bottom:1px solid var(--b1)">
+      ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div style="min-width:0;overflow:hidden;text-align:center;padding:8px;font-size:12px;font-weight:700;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">${d}</div>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">
       ${cells.map(d=>{
-        if(!d) return`<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);background:var(--s3)"></div>`;
+        if(!d) return`<div style="min-width:0;overflow:hidden;min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);background:var(--s3)"></div>`;
         const ds=localISO(d);
         const isT=ds===todayStr;
         const items=(contentByDate[ds]||[]);
@@ -4834,7 +4834,7 @@ function renderBrandCalendar(){
         const isSeniorOrManager=isManagerUser(S.user)||S.user.role==='senior';
         const isContentCreator=S.user.role==='content_creator';
         const isDrop=S.calEditMode||isSeniorOrManager||isContentCreator;
-        return `<div style="min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
+        return `<div style="min-width:0;overflow:hidden;min-height:130px;border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:5px;${isT?'background:rgba(200,240,74,0.04)':''}${isDrop?';outline:1px dashed var(--b2)':''}"
           ${isDrop?`ondragover="event.preventDefault()" ondrop="calDrop(event,'${ds}')"`:''}>
           <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${shown.map(c=>{
