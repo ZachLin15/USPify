@@ -5176,6 +5176,7 @@ function openAddBlockModalDate(dateStr, startH){
     <div style="display:flex;gap:0;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);overflow:hidden;margin-bottom:16px">
       <button id="mode-timeblock" onclick="switchBlockMode('timeblock')" style="flex:1;padding:8px;font-size:13px;font-weight:700;font-family:'Syne',sans-serif;border:none;cursor:pointer;background:var(--ac);color:#0f0f11;transition:all .15s">⏰ Time Block</button>
       <button id="mode-task" onclick="switchBlockMode('task')" style="flex:1;padding:8px;font-size:13px;font-weight:700;font-family:'Syne',sans-serif;border:none;cursor:pointer;background:transparent;color:var(--t2);transition:all .15s">✅ Deadline Task</button>
+      <button id="mode-recurring" onclick="switchBlockMode('recurring')" style="flex:1;padding:8px;font-size:13px;font-weight:700;font-family:'Syne',sans-serif;border:none;cursor:pointer;background:transparent;color:var(--t2);transition:all .15s">🔁 Recurring Task</button>
     </div>
 
     <div class="form-row"><label class="form-label">Label</label><input class="form-input" id="sb-label" type="text" placeholder="e.g. Video editing"></div>
@@ -5228,6 +5229,26 @@ function openAddBlockModalDate(dateStr, startH){
       </div>
     </div>
 
+    <!-- Recurring task fields -->
+    <div id="sb-recurring-fields" style="display:none">
+      <div class="form-row">
+        <label class="form-label">Repeats</label>
+        <select class="form-select" id="sb-recur-preset" onchange="onRecurPresetChange()">
+          <option value="daily">Every day</option>
+          <option value="weekdays">Weekdays only (Mon–Fri)</option>
+          <option value="custom">Custom days...</option>
+        </select>
+      </div>
+      <div class="form-row" id="sb-recur-days-row" style="display:none">
+        <label class="form-label">Which days</label>
+        <div style="display:flex;gap:10px;padding:6px 0">${dayChecks.replace(/sb-repeat-/g,'sb-recur-day-')}</div>
+      </div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:10px">This task has no end date — it keeps coming back on the days you pick. Check it off each day it's done; it reappears the next matching day automatically.</div>
+      <div class="form-row"><label class="form-label">Color</label>
+        <input type="color" id="sb-color-recur" value="#9a7aff" style="width:60px;height:34px;border:none;background:transparent;cursor:pointer;border-radius:var(--r)">
+      </div>
+    </div>
+
     <!-- Attachments (both modes) -->
     <div class="form-row">
       <label class="form-label">Attachments <span style="font-weight:400;color:var(--t3)">(optional)</span></label>
@@ -5249,14 +5270,23 @@ function openAddBlockModalDate(dateStr, startH){
 }
 
 function switchBlockMode(mode){
-  const isTask=mode==='task';
-  document.getElementById('sb-timeblock-fields').style.display=isTask?'none':'block';
-  document.getElementById('sb-task-fields').style.display=isTask?'block':'none';
-  document.getElementById('mode-timeblock').style.background=isTask?'transparent':'var(--ac)';
-  document.getElementById('mode-timeblock').style.color=isTask?'var(--t2)':'#0f0f11';
-  document.getElementById('mode-task').style.background=isTask?'var(--ac)':'transparent';
-  document.getElementById('mode-task').style.color=isTask?'#0f0f11':'var(--t2)';
-}window._blockAttachments=[];
+  document.getElementById('sb-timeblock-fields').style.display=mode==='timeblock'?'block':'none';
+  document.getElementById('sb-task-fields').style.display=mode==='task'?'block':'none';
+  document.getElementById('sb-recurring-fields').style.display=mode==='recurring'?'block':'none';
+  ['timeblock','task','recurring'].forEach(m=>{
+    const btn=document.getElementById('mode-'+m);
+    if(!btn) return;
+    const active=m===mode;
+    btn.style.background=active?'var(--ac)':'transparent';
+    btn.style.color=active?'#0f0f11':'var(--t2)';
+  });
+}
+function onRecurPresetChange(){
+  const preset=document.getElementById('sb-recur-preset')?.value;
+  const row=document.getElementById('sb-recur-days-row');
+  if(row) row.style.display=preset==='custom'?'block':'none';
+}
+window._blockAttachments=[];
 
 function renderBlockAttachList(){
   const list=document.getElementById('sb-attachments-list');
@@ -5357,6 +5387,22 @@ function saveBlockDate(dateStr){
     data.scheduleBlocks.push({id:'sb'+uid(),userId,deadline,taskStart,label,color:finalColor,blockType:'task',...(desc?{desc}:{}),...(brandId?{brandId}:{}),...(attachments.length?{attachments}:{})});
     save(data);closeModal();renderPage();
     showAIToast('✅ Deadline task added');
+    return;
+  }
+  const isRecurringMode=document.getElementById('sb-recurring-fields')?.style.display!=='none';
+  if(isRecurringMode){
+    const preset=document.getElementById('sb-recur-preset')?.value||'daily';
+    const dayDefsR=[{k:'mon',dow:1},{k:'tue',dow:2},{k:'wed',dow:3},{k:'thu',dow:4},{k:'fri',dow:5},{k:'sat',dow:6},{k:'sun',dow:0}];
+    let repeatDays;
+    if(preset==='daily') repeatDays=[0,1,2,3,4,5,6];
+    else if(preset==='weekdays') repeatDays=[1,2,3,4,5];
+    else repeatDays=dayDefsR.filter(d=>document.getElementById('sb-recur-day-'+d.k)?.checked).map(d=>d.dow);
+    if(!repeatDays.length){alert('Pick at least one day for this recurring task.');return;}
+    const recurColor=document.getElementById('sb-color-recur')?.value||'#9a7aff';
+    const finalColor=selectedBrand?selectedBrand.color:recurColor;
+    data.scheduleBlocks.push({id:'sb'+uid(),userId,label,color:finalColor,blockType:'recurring_task',repeatDays,completedDates:[],createdDate:dateStr,...(desc?{desc}:{}),...(brandId?{brandId}:{}),...(attachments.length?{attachments}:{})});
+    save(data);closeModal();renderPage();
+    showAIToast('🔁 Recurring task added');
     return;
   }
   if(endHour<=startHour){alert('End must be after start');return;}
@@ -6274,6 +6320,7 @@ function saveNewUser(){
 function renderTeam(){
   const data=D();
   const isAdmin=isAdminUser(S.user);
+  const todayStrForTeam=localISO(new Date());
       const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
 
   // Icon only — the name always comes from data.statuses (see getJobStageLabel),
@@ -6334,12 +6381,17 @@ function renderTeam(){
 
         const stageSections=Object.entries(byStage).map(([stageId,items])=>{
         const stLabel=`${STAGE_ICONS[stageId]||''} ${getStatus(data,stageId).name}`.trim();
-        // Soonest due first — items were previously left in whatever order the data
-        // happened to fall out in, producing dates that jumped around non-chronologically.
-        const sortedItems=[...items].sort((a,b)=>(a.c.postingDate||'9999-99-99').localeCompare(b.c.postingDate||'9999-99-99'));
+        // Soonest due first, using THIS person's own due date (c.dueDates[u.id] — e.g. the
+        // hualu/leonard design or copy milestone), falling back to the overall posting date
+        // only when no per-person date has been set. Previously this always sorted and
+        // displayed the content's final posting date, which isn't when this particular
+        // person's piece of the work is actually due.
+        const dueFor=c=>c.dueDates?.[u.id]||c.postingDate||'';
+        const sortedItems=[...items].sort((a,b)=>(dueFor(a.c)||'9999-99-99').localeCompare(dueFor(b.c)||'9999-99-99'));
         const itemRows=sortedItems.map(({c,task})=>{
           const prog=getProgressForContent(c);
-          const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
+          const myDue=dueFor(c);
+          const lateClass=isLate(myDue)&&c.statusId!=='posted';
                     const isTaskKind=c.jobKind==='task';
           const isAmendTask=task&&task.label&&(task.label.includes('Amendment')||task.label.includes('amendment'));
           const borderColor=isTaskKind?'var(--pur)':isAmendTask?'var(--red)':'var(--b2)';
@@ -6350,7 +6402,7 @@ function renderTeam(){
             ${isAmendTask?`<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--redd);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">🔄 AMEND</span>`:''}
             <span class="task-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.title.slice(0,30)}${c.title.length>30?'…':''}</span>
             ${!isTaskKind?progressBar(prog,'var(--t3)',60):''}
-            <span class="task-due${lateClass?' late':''}" style="font-size:12px;min-width:44px;text-align:right">${fmt(c.postingDate)||'—'}</span>
+            <span class="task-due${lateClass?' late':''}" style="font-size:12px;min-width:44px;text-align:right">${fmt(myDue)||'—'}</span>
           </div>`;
         }).join('');
 
@@ -6373,9 +6425,65 @@ function renderTeam(){
       </div>`;
     }).join('');
 
+    // Calendar deadline-tasks (My Calendar → Add Block → "Deadline Task") and recurring
+    // tasks (My Calendar → Add Block → "Recurring Task") both live in data.scheduleBlocks,
+    // not data.contents — a totally different record shape from the content-workflow jobs
+    // above, so getActiveJobsForUser never sees them and they were missing from this page
+    // entirely even though the page's own subtitle promises "Workload, tasks & auto-progress".
+    const todayDow=new Date().getDay();
+    const recurringTasks=(data.scheduleBlocks||[]).filter(bl=>bl.userId===u.id&&bl.blockType==='recurring_task'&&(bl.repeatDays||[]).includes(todayDow));
+    const calendarTasks=(data.scheduleBlocks||[]).filter(bl=>bl.userId===u.id&&bl.blockType==='task'&&!bl.completed&&bl.deadline&&bl.deadline<=_teamCutoffStr);
+    const calendarTasksSorted=[...calendarTasks].sort((a,b)=>(a.deadline||'9999-99-99').localeCompare(b.deadline||'9999-99-99'));
+    // "Today's Task" = recurring tasks scheduled for today + deadline tasks that are due
+    // today or already overdue. Everything further out stays in the "Upcoming" section below.
+    const dueTodayOrOverdue=calendarTasksSorted.filter(bl=>bl.deadline<=todayStrForTeam);
+    const upcomingDeadlineTasks=calendarTasksSorted.filter(bl=>bl.deadline>todayStrForTeam);
+
+    const todayRowsRecurring=recurringTasks.map(bl=>{
+      const doneToday=(bl.completedDates||[]).includes(todayStrForTeam);
+      return `<div class="task-item" style="cursor:pointer;padding-left:8px;border-left:2px solid var(--pur);margin-bottom:4px">
+        <div class="task-check${doneToday?' done':''}" style="cursor:pointer" onclick="event.stopPropagation();toggleRecurringTaskDoneToday('${bl.id}')"></div>
+        <span style="font-size:10px;font-weight:700;color:var(--pur);background:var(--purd);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">🔁 DAILY</span>
+        <span class="task-name" onclick="openBlockDetail('${bl.id}')" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${doneToday?'text-decoration:line-through;color:var(--t3)':''}">${(bl.label||'').slice(0,30)}${(bl.label||'').length>30?'…':''}</span>
+        <span style="font-size:12px;min-width:44px;text-align:right;color:var(--t3)">${doneToday?'✓ done':'today'}</span>
+      </div>`;
+    }).join('');
+    const todayRowsDeadline=dueTodayOrOverdue.map(bl=>{
+      const lateClass=bl.deadline<todayStrForTeam;
+      return `<div class="task-item" onclick="openBlockDetail('${bl.id}')" style="cursor:pointer;padding-left:8px;border-left:2px solid var(--blu);margin-bottom:4px">
+        <div class="task-check"></div>
+        <span style="font-size:10px;font-weight:700;color:var(--blu);background:var(--blud);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">TASK</span>
+        <span class="task-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(bl.label||'').slice(0,30)}${(bl.label||'').length>30?'…':''}</span>
+        <span class="task-due${lateClass?' late':''}" style="font-size:12px;min-width:44px;text-align:right">${fmt(bl.deadline)}</span>
+      </div>`;
+    }).join('');
+    const todayTaskCount=recurringTasks.length+dueTodayOrOverdue.length;
+    const todaysTaskHTML=todayTaskCount?`<div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--b1);margin-bottom:7px">
+          <span style="font-size:14px;font-weight:700;color:var(--t2)">⭐ Today's Task</span>
+          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${todayTaskCount} task${todayTaskCount!==1?'s':''}</span>
+        </div>
+        ${todayRowsRecurring}${todayRowsDeadline}
+      </div>`:'';
+
+    const calendarTasksHTML=upcomingDeadlineTasks.length?`<div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--b1);margin-bottom:7px">
+          <span style="font-size:14px;font-weight:700;color:var(--t2)">📅 Upcoming Tasks</span>
+          <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${upcomingDeadlineTasks.length} task${upcomingDeadlineTasks.length!==1?'s':''}</span>
+        </div>
+        ${upcomingDeadlineTasks.map(bl=>{
+          return `<div class="task-item" onclick="openBlockDetail('${bl.id}')" style="cursor:pointer;padding-left:8px;border-left:2px solid var(--blu);margin-bottom:4px">
+            <div class="task-check"></div>
+            <span style="font-size:10px;font-weight:700;color:var(--blu);background:var(--blud);padding:1px 5px;border-radius:4px;font-family:'DM Mono',monospace;flex-shrink:0">TASK</span>
+            <span class="task-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(bl.label||'').slice(0,30)}${(bl.label||'').length>30?'…':''}</span>
+            <span class="task-due" style="font-size:12px;min-width:44px;text-align:right">${fmt(bl.deadline)}</span>
+          </div>`;
+        }).join('')}
+      </div>`:'';
+
     // Completed items count
     const completedCount=data.contents.filter(c=>c.assignees.includes(u.id)&&c.statusId==='posted').length;
-    const totalActive=allRelevant.length;
+    const totalActive=allRelevant.length+calendarTasksSorted.length+recurringTasks.length;
     const barPct=Math.min(100,Math.round(totalActive/Math.max(totalActive+completedCount,1)*100));
     const barColor=totalActive>6?'var(--red)':totalActive>3?'var(--amb)':'var(--ac)';
 
@@ -6393,7 +6501,9 @@ function renderTeam(){
       </div>
       <div class="pb" style="padding-bottom:8px">
         <div class="wl-bar-bg" style="margin-bottom:14px"><div class="wl-bar" style="width:${barPct}%;background:${barColor}"></div></div>
-        ${Object.keys(byBrand).length?brandSections:`<div class="empty-msg" style="padding:10px 0">No active tasks</div>`}
+        ${todaysTaskHTML}
+        ${Object.keys(byBrand).length?brandSections:(todaysTaskHTML||calendarTasksHTML?'':`<div class="empty-msg" style="padding:10px 0">No active tasks</div>`)}
+        ${calendarTasksHTML}
         ${completedCount?`<div style="padding:8px 0;border-top:1px solid var(--b1);font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">✓ ${completedCount} piece${completedCount!==1?'s':''} completed</div>`:''}</div>
     </div>`;
   }).join('');
@@ -7230,6 +7340,27 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
   const histIds = (statusHistory||[]).map(h=>h.statusId);
 
+  // Copywriting runs CONCURRENTLY with design/video editing (c.copyStatusId), tracked
+  // separately from the overall statusHistory-driven sequence above. Without this, the
+  // pipeline visual always shows Copywriting/Copy Amendment/Copy Approval as untouched
+  // "pending" steps while design is still in progress, even though the copywriter may
+  // already be actively working on it (or already done) — which looks like the feature
+  // isn't actually running concurrently at all. Only kicks in while the main sequence
+  // hasn't organically reached the copy steps yet; once it has (design finished first,
+  // c.statusId itself walks into 'copywriting'/'senior_approval_copy'), the normal
+  // activeIdx-based logic below already reflects it correctly on its own.
+  const copyIdx = flow.findIndex(s=>s.id==='copywriting');
+  const hasConcurrentCopy = !!(contentObj&&contentObj.copyStatusId) && copyIdx>=0 && activeIdx<copyIdx;
+  let copyState='not_started';
+  let copyAmendUsed=false;
+  if(hasConcurrentCopy){
+    const copyVersions=getCopyVersions(contentObj);
+    copyAmendUsed=copyVersions.some(v=>(v.approvals||[]).some(a=>a.status==='amendment'));
+    if(contentObj.copyStatusId==='approved') copyState='approved';
+    else if(copyVersions.some(v=>v.pendingReview)) copyState='pending_review';
+    else copyState='in_progress';
+  }
+
   // Map flow step id → tab to open when clicked
   const FLOW_TAB_MAP={
     'script':'dp-ideation',
@@ -7246,8 +7377,15 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
 
   let html='<div class="flow-pipeline">';
   flow.forEach((step, i)=>{
-    const isDone = i < activeIdx;
-    const isActive = i === activeIdx;
+    let isDone = i < activeIdx;
+    let isActive = i === activeIdx;
+    if(hasConcurrentCopy && step.id==='copywriting'){
+      isDone = copyState==='approved';
+      isActive = copyState==='in_progress'||copyState==='pending_review';
+    } else if(hasConcurrentCopy && step.id==='senior_approval_copy'){
+      isDone = copyState==='approved';
+      isActive = copyState==='pending_review';
+    }
     const color = step.color;
     const stateClass = isDone?'done':isActive?'active':'pending';
     const labelClass = isDone?'done':isActive?'active':'';
@@ -7261,7 +7399,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     const clickAttr = (isClickable && contentId) ? `onclick="flowNodeClick('${contentId}','${tabTarget}')" style="cursor:pointer"` : '';
 
     if(step.isAmend){
-      const wasUsed = histIds.includes(step.id);
+      const wasUsed = (hasConcurrentCopy&&step.id==='copy_amendment')?copyAmendUsed:histIds.includes(step.id);
       html+=`
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 2px;margin-top:-2px">
           <div style="width:2px;height:10px;background:${wasUsed?step.color:'var(--b2)'}"></div>
@@ -7890,7 +8028,15 @@ function renderCopywritingPanel(c,id){
     :(isSeniorOrAdmin&&ver.text&&!ver.pendingReview&&!(ver.approvals||[]).find(a=>a.status==='approved'))?`
     <div style="padding:10px 12px;background:var(--s2);border-radius:var(--r);font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">Waiting for creator to submit ${ver.label} for review.</div>`:'';
 
-  const submitBtnHTML='';
+  // This was previously left blank — the copywriter had no way to actually submit their
+  // copy for senior review while it's running concurrently with design/video editing
+  // (the old "Submit Copy" button lives in the top workflow box, but that one only
+  // appears once the OVERALL content stage reaches 'copywriting', which — by design —
+  // doesn't happen until design/video finishes if copy is still running concurrently).
+  const submitBtnHTML=(isCreator&&!isLocked&&ver.text&&ver.text.trim())?`
+    <div style="margin-top:14px">
+      <button class="btn btn-ac" style="width:100%;padding:12px;font-size:15px" onclick="submitCopyForReview('${id}',${verIdx})">📤 Submit ${ver.label} for Review</button>
+    </div>`:'';
     const copyComments=(c.comments||[]).filter(cm=>cm.type==='copy'||cm.type==='general');
   const commentsHTML=copyComments.map(cm=>renderCommentItem(cm,id)).join('');
 
@@ -9398,8 +9544,14 @@ function getSenior(data,c){
     const st=c.statusId;
     const brandId=c.brandId;
     let reviewStage='copywriting_review';
-    if(st==='senior_approval_ideation'||c.ideationPendingApproval) reviewStage='ideation_review';
-    else if(st==='senior_approval_video'||c.videoReviewPending) reviewStage='video_review';
+    // Check the UNAMBIGUOUS statusId values first — st==='senior_approval_video'/'senior_approval_copy'
+    // can only mean a video or copy review respectively. Only fall back to the stale
+    // c.ideationPendingApproval/c.videoReviewPending flags (which can get stuck true from an
+    // earlier stage and never cleared) when st itself doesn't already say which stage this is.
+    if(st==='senior_approval_video') reviewStage='video_review';
+    else if(st==='senior_approval_copy') reviewStage='copywriting_review';
+    else if(st==='senior_approval_ideation'||c.ideationPendingApproval) reviewStage='ideation_review';
+    else if(c.videoReviewPending) reviewStage='video_review';
     else if(st==='design'||st==='senior_approval_design') reviewStage='design_review';
     else if(st==='client_approval') reviewStage='client_approval';
     else if(st==='posted') reviewStage='posted';
@@ -9731,7 +9883,14 @@ function renderWorkflowActionBox(data, c){
   }
 
   // ── COPYWRITING ───────────────────────────────────────────────────────────
-  if(st==='copywriting' && isCreator){
+  // Content tracked by the concurrent copy system (c.copyStatusId set) has its own
+  // submit/review UI living in the Copywriting tab itself (renderCopywritingPanel —
+  // submitCopyForReview/approveCopyVersion/amendCopyVersion), which is version-aware and
+  // keeps c.copyStatusId in sync. The old wfSubmitCopy()/wfSeniorApprove() pair below
+  // doesn't touch c.copyStatusId at all — showing BOTH submit buttons at once would let
+  // either one run and leave the other's bookkeeping stale. So once a content piece has
+  // started on the concurrent track, only point people to the Copywriting tab here.
+  if(st==='copywriting' && isCreator && !c.copyStatusId){
     return withHistory(`<div class="wf-action-box copy">
       <div class="wf-action-title">✍️ Copywriting Phase — Your Turn</div>
       <div class="wf-action-sub">Write the caption/copy in the <strong>Copywriting tab</strong>, then submit for ${senior.name}'s approval.</div>
@@ -9741,12 +9900,33 @@ function renderWorkflowActionBox(data, c){
       </div>
     </div>`);
   }
+  if(st==='copywriting' && isCreator && c.copyStatusId){
+    return withHistory(`<div class="wf-action-box copy">
+      <div class="wf-action-title">✍️ Copywriting Phase — Your Turn</div>
+      <div class="wf-action-sub">Write the caption/copy and submit it for review — all inside the <strong>Copywriting tab</strong>.</div>
+      <div class="wf-action-row">
+        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+      </div>
+    </div>`);
+  }
 
   // ── SENIOR APPROVAL (all stages) ─────────────────────────────────────────
   if((st==='senior_approval'||st==='senior_approval_ideation'||st==='senior_approval_video'||st==='senior_approval_copy') && isSenior){
     const history=c.statusHistory||[];
     const prevStatus=history.length>=2?history[history.length-2]?.statusId:null;
-    const isIdeationReview=!c.videoReviewPending&&!!(c.ideationPendingApproval||(isVideo&&(prevStatus==='ideation'||st==='senior_approval_ideation')&&!c.copyPendingReview&&!c.scriptPendingApproval));
+    // st is UNAMBIGUOUS once it's actually 'senior_approval_video' or 'senior_approval_copy' —
+    // those can only mean a video review or a copy review respectively, so this must never
+    // reclassify them as an ideation review, no matter what a stale c.ideationPendingApproval
+    // flag or the prevStatus-guessing heuristic below suggest. That's exactly how content
+    // whose ideation was approved long ago (and has since been shot, edited, and reached
+    // Video Approval) could get stuck re-showing "Ideation / Script Review — Approve to
+    // notify to shoot" instead of the actual pending Video Review: the old heuristic below
+    // only has evidence from 2 history entries back, which isn't reliable once several
+    // approvals/amendments have happened since, and it was overriding the senior-sees-video
+    // case outright. Only fall back to the heuristic when st itself is genuinely ambiguous
+    // (the legacy generic 'senior_approval', or already 'senior_approval_ideation').
+    const isUnambiguousLaterStage=st==='senior_approval_video'||st==='senior_approval_copy';
+    const isIdeationReview=!isUnambiguousLaterStage&&!c.videoReviewPending&&!!(st==='senior_approval_ideation'||c.ideationPendingApproval||(isVideo&&prevStatus==='ideation'&&!c.copyPendingReview&&!c.scriptPendingApproval));
 
     if(isVideo && isIdeationReview){
       c.ideationPendingApproval=true;
@@ -12061,15 +12241,20 @@ function openBlockDetail(id){
   }
 
   const u=getUser(data,b.userId);
-  const fmtH=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
+  const fmtH=h=>h===undefined||h===null?'':h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
   const sl=fmtH(b.startHour);
   const el=fmtH(b.endHour);
   const isOwner=S.user.id===b.userId;
   const isAdmin=isAdminUser(S.user);
   const canEdit=isAdmin||isOwner;
   const isCompleted=!!b.completed;
+  const isRecurring=b.blockType==='recurring_task';
+  const todayStrDetail=localISO(new Date());
+  const doneToday=isRecurring&&(b.completedDates||[]).includes(todayStrDetail);
+  const recurDayNames=isRecurring?(b.repeatDays||[]).slice().sort().map(d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', '):'';
   const whenStr=b.blockType==='task'
     ?(b.taskStart&&b.taskStart!==b.deadline?`${b.taskStart} → ${b.deadline} (deadline)`:b.deadline?`Due: ${b.deadline}`:'—')
+    :isRecurring?`Repeats: ${recurDayNames||'—'}`
     :b.date?`${b.date}`:b.dayOfWeek!==undefined?`${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][b.dayOfWeek]} (weekly)`:'—';
 
   // Brand info
@@ -12084,7 +12269,12 @@ function openBlockDetail(id){
       :'';
 
   // Completed status banner
-  const completedBanner=isCompleted
+  const completedBanner=isRecurring
+    ?(doneToday?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);margin-bottom:10px">
+        <span style="font-size:16px">✅</span>
+        <span style="font-size:14px;font-weight:700;color:var(--ac)">Done for today</span>
+      </div>`:'')
+    :isCompleted
     ?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);margin-bottom:10px">
         <span style="font-size:16px">✅</span>
         <span style="font-size:14px;font-weight:700;color:var(--ac)">Completed${b.completedAt?' on '+b.completedAt:''}</span>
@@ -12093,10 +12283,11 @@ function openBlockDetail(id){
 
   const actionBtns=canEdit?`
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--b1)">
-      ${!isCompleted?`<button class="btn btn-ac btn-sm" onclick="markBlockComplete('${id}')">✅ Complete</button>`:''}
+      ${isRecurring?`<button class="btn btn-ac btn-sm" onclick="toggleRecurringTaskDoneToday('${id}')">${doneToday?'↩️ Mark not done today':'✅ Mark done today'}</button>`:''}
+      ${!isRecurring&&!isCompleted?`<button class="btn btn-ac btn-sm" onclick="markBlockComplete('${id}')">✅ Complete</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditBlockModal('${id}')">✏️ Edit</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal();openRescheduleBlock('${id}')">📅 Reschedule</button>
-      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteBlock('${id}')">🗑 Delete</button>
+      ${!isRecurring?`<button class="btn btn-ghost btn-sm" onclick="closeModal();openRescheduleBlock('${id}')">📅 Reschedule</button>`:''}
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteBlock('${id}')">🗑 Delete${isRecurring?' task':''}</button>
       ${b.recurringGroupId?`<button class="btn btn-danger btn-sm" onclick="deleteBlockSeries('${b.recurringGroupId}','${b.date}')">🗑 Delete series</button>`:''}
     </div>`
     :`<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`;
@@ -12113,7 +12304,7 @@ function openBlockDetail(id){
         <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Date</span>
         <strong>${whenStr}</strong>
       </div>
-      ${b.blockType!=='task'?`<div style="display:flex;align-items:center;gap:8px">
+      ${(b.blockType!=='task'&&!isRecurring)?`<div style="display:flex;align-items:center;gap:8px">
         <span style="color:var(--t3);font-size:13px;font-family:'DM Mono',monospace;min-width:60px">Time</span>
         <strong>${sl} – ${el}</strong>
       </div>`:''}
@@ -12165,6 +12356,17 @@ function markBlockComplete(id){
   b.color='#c8f04a'; // green
   save(data);closeModal();renderPage();
   showAIToast('✅ Block marked as completed');
+}
+function toggleRecurringTaskDoneToday(id){
+  const data=D();
+  const b=data.scheduleBlocks.find(x=>x.id===id);if(!b)return;
+  const today=localISO(new Date());
+  b.completedDates=b.completedDates||[];
+  const idx=b.completedDates.indexOf(today);
+  if(idx>=0){ b.completedDates.splice(idx,1); }
+  else { b.completedDates.push(today); }
+  save(data);closeModal();renderPage();
+  showAIToast(idx>=0?'↩️ Unmarked for today':'✅ Marked done for today');
 }
 function saveBlockEdit(id){
   const data=D();
