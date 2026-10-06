@@ -6380,13 +6380,12 @@ function renderTeam(){
       });
 
         const stageSections=Object.entries(byStage).map(([stageId,items])=>{
-        const stLabel=`${STAGE_ICONS[stageId]||''} ${getStatus(data,stageId).name}`.trim();
-        // Soonest due first, using THIS person's own due date (c.dueDates[u.id] — e.g. the
-        // hualu/leonard design or copy milestone), falling back to the overall posting date
-        // only when no per-person date has been set. Previously this always sorted and
-        // displayed the content's final posting date, which isn't when this particular
-        // person's piece of the work is actually due.
-        const dueFor=c=>c.dueDates?.[u.id]||c.postingDate||'';
+                const stLabel=`${STAGE_ICONS[stageId]||''} ${getStatus(data,stageId).name}`.trim();
+        const dueFor=c=>{
+          if(stageId==='design'||stageId==='video_editing'||stageId==='senior_approval_video') return c.dueDates?.hualu||c.postingDate||'';
+          if(stageId==='copywriting'||stageId==='senior_approval_copy') return c.dueDates?.leonard||c.postingDate||'';
+          return c.postingDate||'';
+        };
         const sortedItems=[...items].sort((a,b)=>(dueFor(a.c)||'9999-99-99').localeCompare(dueFor(b.c)||'9999-99-99'));
         const itemRows=sortedItems.map(({c,task})=>{
           const prog=getProgressForContent(c);
