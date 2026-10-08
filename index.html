@@ -7417,7 +7417,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
       </div>`;
   };
 
-  if(!isConcurrentLayout){
+    if(!isConcurrentLayout){
     let html='<div class="flow-pipeline">';
     flow.forEach((step,i)=>{ html+=renderNode(step,i,flow); });
     html+='</div>';
@@ -7428,25 +7428,23 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   const copyFlow = flow.filter(s=>COPY_GROUP.has(s.id));
   const tailFlow = flow.filter(s=>TAIL_GROUP.has(s.id));
   const origIdx = step=>flow.indexOf(step);
-  const shootPos = mainFlow.findIndex(s=>s.id==='shoot');
+
+  const laneLabel=text=>`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">${text}</div>`;
 
   let mainHtml='<div class="flow-pipeline">';
   mainFlow.forEach(step=>{ mainHtml+=renderNode(step, origIdx(step), mainFlow); });
   mainHtml+='</div>';
 
-  const copySpacer = `<div style="visibility:hidden;display:contents">${mainFlow.slice(0,shootPos).map(step=>renderNode(step, origIdx(step), mainFlow)).join('')}</div>`;
-  let copyHtml=`<div class="flow-pipeline" style="margin-top:14px">`+copySpacer;
+  let copyHtml=laneLabel('✍️ Copywriting — runs concurrently with Shooting / Video Editing')+'<div class="flow-pipeline">';
   copyFlow.forEach(step=>{ copyHtml+=renderNode(step, origIdx(step), copyFlow); });
   copyHtml+='</div>';
 
-  const tailSpacer = `<div style="visibility:hidden;display:contents">${mainFlow.map(step=>renderNode(step, origIdx(step), mainFlow)).join('')}</div>`;
-  let tailHtml=`<div class="flow-pipeline" style="margin-top:14px">`+tailSpacer;
+  let tailHtml=laneLabel('✅ Once both approved above')+'<div class="flow-pipeline">';
   tailFlow.forEach(step=>{ tailHtml+=renderNode(step, origIdx(step), tailFlow); });
   tailHtml+='</div>';
 
-  return `<div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:2px 0 -4px">🔀 Copywriting runs concurrently, starting from Shooting</div>`+mainHtml+copyHtml+tailHtml;
+  return mainHtml+copyHtml+tailHtml;
 }
-
 function flowNodeClick(id, tabId){
   // Find the tab button matching this panel id and click it
   const tabs=document.querySelectorAll('.detail-tab');
