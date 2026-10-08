@@ -9136,15 +9136,15 @@ function renderIdeationPanel(c, id){
 
 function switchIdeaVer(id, idx){
   if(!window._ideaVer) window._ideaVer={};
-  window._ideaVer[id]=idx;
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  // Save current text fields before switching
-  _saveIdeaTextFields(c, getIdeationVersions(c), Math.min(idx, getIdeationVersions(c).length-1));
+  const versions=getIdeationVersions(c);
+  const prevIdx=Math.min(window._ideaVer[id]||0, versions.length-1);
+  _saveIdeaTextFields(c, versions, prevIdx);
   save(data);
+  window._ideaVer[id]=idx;
   const panel=document.getElementById('dp-ideation');
   if(panel) panel.innerHTML=renderIdeationPanel(c,id);
 }
-
 function addIdeaVersion(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
