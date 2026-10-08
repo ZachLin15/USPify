@@ -11304,7 +11304,7 @@ function saveEditContent(id){
     // status change, so if the admin didn't also manually re-check the new stage's owner,
     // c.assignees is now stale. Same fix as changeStatus/approveWithNote: fall back to getPIC.
     const newPic=getPIC(data,newStatus,c);
-    if(newPic&&newPic.id&&!c.assignees.includes(newPic.id)) c.assignees=[...c.assignees,newPic.id];
+        c.assignees=newPic&&newPic.id?[newPic.id]:[];
   }
   save(data);closeModal();render();renderDetailPage(id);
 }
