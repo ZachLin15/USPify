@@ -7434,7 +7434,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     const gridItem=(colStart,colEnd,inner)=>`<div style="grid-column:${colStart}/${colEnd||colStart+1};grid-row:1">${inner}</div>`;
 
   let mainHtml=`<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
-  const mainOrder=['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','design_amendment','senior_approval_video','client_approval','posted'];
+    const mainOrder=['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','senior_approval_video','client_approval','posted'];
   let prevCol=null;
   mainOrder.forEach(sid=>{
     const step=flow.find(s=>s.id===sid); if(!step) return;
@@ -7451,7 +7451,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
 
   let copyHtml=`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">✍️ Copywriting — runs concurrently with Shooting / Video Editing</div>`+
     `<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
-  const copyOrder=['copywriting','copy_amendment','senior_approval_copy'];
+    const copyOrder=['copywriting','senior_approval_copy'];
   prevCol=null;
   copyOrder.forEach(sid=>{
     const step=flow.find(s=>s.id===sid); if(!step) return;
