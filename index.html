@@ -2897,7 +2897,8 @@ function renderJobTodoList(){
   const data=D();
   const uid=S.user.id;
   const today=localISO(new Date());
-    const jobs=getActiveJobsForUser(data,uid);
+        const _jobCutoff=localISO(new Date(Date.now()+90*86400000));
+    const jobs=getActiveJobsForUser(data,uid).filter(c=>!c.postingDate||c.postingDate<=_jobCutoff);
   const targetMonth=S.dashMonthFilter||localYM(new Date());
   // Unstarted ideation content belongs to whoever is set as ITS ideation PIC (Responsibilities
   // tab / per-content override) — not just whoever has the content_creator role — so a senior
