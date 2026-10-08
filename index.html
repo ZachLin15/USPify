@@ -5991,10 +5991,14 @@ async function saveWfReviewerSettings(){
   const r=getWfReviewers();
   const activeTab=S.respTab||'video';
   const stages=REVIEWER_STAGES_BY_TYPE[activeTab]||REVIEWER_STAGES_BY_TYPE.video;
+  const allTabs=CONTENT_TYPES.map(t=>t.id);
   data.brands.forEach(b=>{
     stages.forEach(s=>{
       const el=document.getElementById(`wfrev-${b.id}-${s.id}`);
-      if(el) r[`${b.id}:${activeTab}:${s.id}`]=el.value;
+      if(!el) return;
+      allTabs.forEach(tab=>{
+        if((REVIEWER_STAGES_BY_TYPE[tab]||[]).some(st=>st.id===s.id)) r[`${b.id}:${tab}:${s.id}`]=el.value;
+      });
     });
   });
   data.wfReviewers=r;
