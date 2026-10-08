@@ -7362,16 +7362,9 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     'posted':'dp-history',
   };
   const NON_CLICKABLE=new Set(['design','senior_approval','design_amendment','copy_amendment']);
-
-  // Copywriting runs CONCURRENTLY with shooting/video editing, so on the video flow it's
-  // drawn as its own lane under Shooting. Client Approval and Posted only make sense once
-  // BOTH the video side and the copy side are done, so they're drawn as a third row, pushed
-  // out past the end of the longer (video) row rather than chained onto either lane.
-  const COPY_GROUP=new Set(['copywriting','copy_amendment','senior_approval_copy']);
-  const TAIL_GROUP=new Set(['client_approval','posted']);
   const isConcurrentLayout = flow.some(s=>s.id==='shoot');
 
-  const renderNode=(step,i,rowFlow)=>{
+  const renderNode=(step,i)=>{
     let isDone = i < activeIdx;
     let isActive = i === activeIdx;
     if(hasConcurrentCopy && step.id==='copywriting'){
@@ -7401,11 +7394,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
           <div style="width:2px;height:10px;background:${wasUsed?step.color:'var(--b2)'}"></div>
         </div>`;
     }
-    const prevNonAmend = rowFlow.slice(0,rowFlow.indexOf(step)).filter(s=>!s.isAmend);
-    const connector = prevNonAmend.length>0
-      ? `<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${color}`:''}"></div>`
-      : '';
-    return connector+`
+    return `
       <div class="flow-step" ${clickAttr} title="${isClickable?'Click to open tab':''}">
         <div class="flow-step-inner">
           <div class="flow-node ${stateClass}" style="color:${color};${isActive?`box-shadow:0 0 0 4px ${color}44`:''}${isClickable?' transition:transform .12s;':''}" ${isClickable?`onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'"`:''}">
@@ -7417,30 +7406,69 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
       </div>`;
   };
 
-    if(!isConcurrentLayout){
+  if(!isConcurrentLayout){
     let html='<div class="flow-pipeline">';
-    flow.forEach((step,i)=>{ html+=renderNode(step,i,flow); });
+    flow.forEach((step,i)=>{
+      if(!step.isAmend){
+        const prevNonAmend = flow.slice(0,i).filter(s=>!s.isAmend);
+        if(prevNonAmend.length>0){
+          const isDone=i<activeIdx, isActive=i===activeIdx;
+          html+=`<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${step.color}`:''}"></div>`;
+        }
+      }
+      html+=renderNode(step,i);
+    });
     html+='</div>';
     return html;
   }
 
-    const mainFlow = flow.filter(s=>!COPY_GROUP.has(s.id));
-  const copyFlow = flow.filter(s=>COPY_GROUP.has(s.id));
-  const origIdx = step=>flow.indexOf(step);
+  // Video flow: shared grid columns so Copywriting / Copy Approval pin directly under
+  // Shooting / Video Approval instead of being eyeballed into roughly the right place.
+  const COL={
+    ideation:1, ideation_amendment:2, senior_approval_ideation:4,
+    shoot:6, video_editing:8, design_amendment:9, senior_approval_video:11,
+    client_approval:13, posted:15,
+    copywriting:6, copy_amendment:9, senior_approval_copy:11,
+  };
+  const TOTAL_COLS=15;
+  const gridItem=(colStart,colEnd,inner)=>`<div style="grid-column:${colStart}/${colEnd||colStart+1}">${inner}</div>`;
 
-  const laneLabel=text=>`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">${text}</div>`;
-
-  let mainHtml='<div class="flow-pipeline">';
-  mainFlow.forEach(step=>{ mainHtml+=renderNode(step, origIdx(step), mainFlow); });
+  let mainHtml=`<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
+  const mainOrder=['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','design_amendment','senior_approval_video','client_approval','posted'];
+  let prevCol=null;
+  mainOrder.forEach(sid=>{
+    const step=flow.find(s=>s.id===sid); if(!step) return;
+    const i=flow.indexOf(step);
+    const col=COL[sid];
+    if(!step.isAmend && prevCol!=null){
+      const isDone=i<activeIdx, isActive=i===activeIdx;
+      mainHtml+=gridItem(prevCol+1,col,`<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${step.color}`:''};margin-top:19px;width:100%"></div>`);
+    }
+    mainHtml+=gridItem(col,col+1,renderNode(step,i));
+    if(!step.isAmend) prevCol=col;
+  });
   mainHtml+='</div>';
 
-  let copyHtml=laneLabel('✍️ Copywriting — runs concurrently with Shooting / Video Editing')+'<div class="flow-pipeline">';
-  copyFlow.forEach(step=>{ copyHtml+=renderNode(step, origIdx(step), copyFlow); });
+  let copyHtml=`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">✍️ Copywriting — runs concurrently with Shooting / Video Editing</div>`+
+    `<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
+  const copyOrder=['copywriting','copy_amendment','senior_approval_copy'];
+  prevCol=null;
+  copyOrder.forEach(sid=>{
+    const step=flow.find(s=>s.id===sid); if(!step) return;
+    const i=flow.indexOf(step);
+    const col=COL[sid];
+    if(!step.isAmend && prevCol!=null){
+      const isDone = sid==='senior_approval_copy' ? copyState==='approved' : false;
+      const isActive = sid==='senior_approval_copy' ? copyState==='pending_review' : false;
+      copyHtml+=gridItem(prevCol+1,col,`<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${step.color}`:''};margin-top:19px;width:100%"></div>`);
+    }
+    copyHtml+=gridItem(col,col+1,renderNode(step,i));
+    if(!step.isAmend) prevCol=col;
+  });
   copyHtml+='</div>';
 
   return mainHtml+copyHtml;
-}
-function flowNodeClick(id, tabId){
+}function flowNodeClick(id, tabId){
   // Find the tab button matching this panel id and click it
   const tabs=document.querySelectorAll('.detail-tab');
   tabs.forEach(btn=>{
