@@ -7424,9 +7424,8 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     return html;
   }
 
-  const mainFlow = flow.filter(s=>!COPY_GROUP.has(s.id) && !TAIL_GROUP.has(s.id));
+    const mainFlow = flow.filter(s=>!COPY_GROUP.has(s.id));
   const copyFlow = flow.filter(s=>COPY_GROUP.has(s.id));
-  const tailFlow = flow.filter(s=>TAIL_GROUP.has(s.id));
   const origIdx = step=>flow.indexOf(step);
 
   const laneLabel=text=>`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">${text}</div>`;
@@ -7439,11 +7438,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   copyFlow.forEach(step=>{ copyHtml+=renderNode(step, origIdx(step), copyFlow); });
   copyHtml+='</div>';
 
-  let tailHtml=laneLabel('✅ Once both approved above')+'<div class="flow-pipeline">';
-  tailFlow.forEach(step=>{ tailHtml+=renderNode(step, origIdx(step), tailFlow); });
-  tailHtml+='</div>';
-
-  return mainHtml+copyHtml+tailHtml;
+  return mainHtml+copyHtml;
 }
 function flowNodeClick(id, tabId){
   // Find the tab button matching this panel id and click it
