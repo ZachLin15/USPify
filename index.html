@@ -3657,7 +3657,7 @@ function renderBrandPage(){
       getPIC(data,c.statusId,c).id===S.user.id
     );
   }
-  const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.jobKind!=='task'&&c.postingDate)
+    const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.jobKind!=='task'&&c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:8px">
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
       <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option>
