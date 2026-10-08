@@ -9821,7 +9821,7 @@ function renderWorkflowActionBox(data, c){
       ${reviewCommentBox('Your feedback on the ideation — required for amendment, optional for approval…')}
       <div class="wf-action-row" style="margin-top:12px">
         <button class="wf-btn wf-btn-green" onclick="approveIdeation('${id}',0)">✅ Approve → 🎨 Design</button>
-        <button class="wf-btn wf-btn-red" onclick="requestIdeaAmendment('${id}',0)">🔄 Amendment Needed → Back to ${creator.name}</button>
+        <button class="wf-btn wf-btn-red" onclick="requestIdeaAmendment('${id}',0)">🔄 Amendment Needed</button>
       </div>
     </div>`);
   }
@@ -9852,7 +9852,7 @@ function renderWorkflowActionBox(data, c){
       ${reviewCommentBox('Your feedback on the design…')}
       <div class="wf-action-row" style="margin-top:12px">
         <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve → ✍️ Copywriting</button>
-        <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed → Back to ${designer.name}</button>
+        <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed</button>
       </div>
     </div>`);
   }
@@ -9881,8 +9881,8 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-sub">Submitted by ${creator.name}. Review the script in the Ideation tab, add your comment, then decide:</div>
       ${reviewCommentBox('Your feedback on the script / ideation…')}
       <div class="wf-action-row" style="margin-top:12px">
-        <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify ${creator.name} to Shoot</button>
-        <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
+        <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve</button>
+        <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed</button>
       </div>
     </div>`);
   }
@@ -9979,8 +9979,8 @@ function renderWorkflowActionBox(data, c){
         <div class="wf-action-sub">Submitted by ${creator.name}. Review the script in the <strong>Ideation tab</strong>, add your comment, then decide:</div>
         ${reviewCommentBox('Your feedback on the script / ideation…')}
         <div class="wf-action-row" style="margin-top:12px">
-          <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify ${creator.name} to Shoot</button>
-          <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
+          <button class="wf-btn wf-btn-green" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve</button>
+          <button class="wf-btn wf-btn-red" onclick="wfAmendIdeationForVideo('${id}')">🔄 Amendment Needed</button>
         </div>
       </div>`);
     }
@@ -9993,7 +9993,7 @@ function renderWorkflowActionBox(data, c){
         ${reviewCommentBox('Your feedback on the edited video…')}
         <div class="wf-action-row" style="margin-top:12px">
           <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approved → ✍️ Copywriting</button>
-          <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment Needed → Back to ${designer.name}</button>
+          <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment Needed</button>
         </div>
       </div>`);
     }
@@ -10005,7 +10005,7 @@ function renderWorkflowActionBox(data, c){
         ${reviewCommentBox('Your feedback on the design…')}
         <div class="wf-action-row" style="margin-top:12px">
           <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve Design → ✍️ Copywriting</button>
-          <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed → Back to ${designer.name}</button>
+          <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed</button>
         </div>
       </div>`);
     }
@@ -10016,7 +10016,7 @@ function renderWorkflowActionBox(data, c){
       ${reviewCommentBox('Your feedback on the copy / caption…')}
       <div class="wf-action-row" style="margin-top:12px">
         <button class="wf-btn wf-btn-green" onclick="wfSeniorApprove('${id}')">✅ Approve → 🤝 Client Approval</button>
-        <button class="wf-btn wf-btn-red" onclick="wfSeniorAmend('${id}')">🔄 Amendment Needed → Back to ${creator.name}</button>
+        <button class="wf-btn wf-btn-red" onclick="wfSeniorAmend('${id}')">🔄 Amendment Needed</button>
       </div>
     </div>`);
   }
