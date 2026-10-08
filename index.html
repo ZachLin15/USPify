@@ -8032,6 +8032,7 @@ function wfAmendConcurrentCopy(id){
 }
 
 function renderCopywritingPanel(c,id){
+  if(!c.copyStatusId&&c.jobKind!=='task'&&['shoot','video_editing','design','senior_approval_video'].includes(c.statusId)){startConcurrentCopyTrack(D(),c);save(D());}
   const versions=getCopyVersions(c);
   const verIdx=Math.min(getCopyVerIdx(id),versions.length-1);
   const ver=versions[verIdx];
