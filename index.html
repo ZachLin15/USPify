@@ -8008,8 +8008,30 @@ async function amendCopyVersion(id,verIdx){
   if(!c.workflowTasks) c.workflowTasks=[];
   c.workflowTasks.push({id:'wt'+uid(),assigneeId:creator.id,status:'open',statusId:'copywriting',label:'✍️ Copywriting (amendment)',openedAt:today});
   if(!c.assignees.includes(creator.id)) c.assignees=[...c.assignees, creator.id];
-  notifyRejected(c,creator,`Copy ${v[verIdx].label} needs changes`,S.user.name,note);
+    notifyRejected(c,creator,`Copy ${v[verIdx].label} needs changes`,S.user.name,note);
   await saveNow(data,c.id);renderDetailPage(id);renderSidebar();renderTopbar();showAIToast(`✍️ Copy amendment — ${creator.name} notified`);}
+
+function wfSubmitConcurrentCopy(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const versions=getCopyVersions(c);
+  const verIdx=Math.min(getCopyVerIdx(id), versions.length-1);
+  submitCopyForReview(id, verIdx);
+  renderDetailPage(id);renderSidebar();renderTopbar();
+}
+function wfApproveConcurrentCopy(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const versions=getCopyVersions(c);
+  const pendingIdx=versions.findIndex(v=>v.pendingReview);
+  const verIdx=pendingIdx>=0?pendingIdx:Math.min(getCopyVerIdx(id),versions.length-1);
+  approveCopyVersion(id, verIdx);
+}
+function wfAmendConcurrentCopy(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const versions=getCopyVersions(c);
+  const pendingIdx=versions.findIndex(v=>v.pendingReview);
+  const verIdx=pendingIdx>=0?pendingIdx:Math.min(getCopyVerIdx(id),versions.length-1);
+  amendCopyVersion(id, verIdx);
+}
 
 function renderCopywritingPanel(c,id){
   const versions=getCopyVersions(c);
@@ -9765,12 +9787,17 @@ function renderWorkflowActionBox(data, c){
     const latestCopy=copyVersions[copyVersions.length-1]||{};
     const copyPendingReview=!!latestCopy.pendingReview;
     const alongside=isVideo?'video editing':'design';
-    if(copyPendingReview && isSenior){
+        if(copyPendingReview && isSenior){
       return `<div class="wf-action-box review">
         <div class="wf-action-title">🔍 Copy Review <span style="font-size:12px;background:var(--ambd);color:var(--amb);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">⏳ Awaiting your review</span></div>
-        <div class="wf-action-sub">Submitted by ${copyPic.name} — running alongside ${alongside}. Review the copy in the <strong>Copywriting tab</strong>, then decide there.</div>
+        <div class="wf-action-sub">Submitted by ${copyPic.name} — running alongside ${alongside}. <a href="javascript:void(0)" onclick="flowNodeClick('${id}','dp-copy')" style="color:var(--blu)">Read it in the Copywriting tab</a>, then decide here:</div>
+        <div style="margin-top:12px;border-top:1px solid var(--b1);padding-top:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--t2);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">💬 Review Comment (visible to all)</div>
+          <textarea id="copy-review-note-${id}" class="form-textarea" style="min-height:70px;font-size:14px;resize:vertical" placeholder="Your feedback on the copy…"></textarea>
+        </div>
         <div class="wf-action-row" style="margin-top:12px">
-          <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+          <button class="wf-btn wf-btn-green" onclick="wfApproveConcurrentCopy('${id}')">✅ Approve</button>
+          <button class="wf-btn wf-btn-red" onclick="wfAmendConcurrentCopy('${id}')">🔄 Amendment Needed</button>
         </div>
       </div>`+renderReviewHistory(c);
     }
@@ -9780,12 +9807,12 @@ function renderWorkflowActionBox(data, c){
         <div class="wf-action-sub">Your copy has been submitted for review — running alongside ${alongside}, no need to wait on it.</div>
       </div>`+renderReviewHistory(c);
     }
-    if(!copyPendingReview && S.user.id===copyPic.id){
+        if(!copyPendingReview && S.user.id===copyPic.id){
       return `<div class="wf-action-box copy">
         <div class="wf-action-title">✍️ Copywriting Phase — Your Turn <span style="font-size:12px;background:var(--teld);color:var(--tel);padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-weight:700;margin-left:6px">Running alongside ${alongside}</span></div>
-        <div class="wf-action-sub">Write the caption/copy in the <strong>Copywriting tab</strong> — you don't need to wait for ${alongside} to finish.</div>
+        <div class="wf-action-sub">Write the caption/copy in the <strong>Copywriting tab</strong> — you don't need to wait for ${alongside} to finish. Save your work there first, then submit here.</div>
         <div class="wf-action-row">
-          <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
+          <button class="wf-btn wf-btn-amb" onclick="wfSubmitConcurrentCopy('${id}')">📤 Submit Copy → Senior Approval</button>
         </div>
       </div>`+renderReviewHistory(c);
     }
