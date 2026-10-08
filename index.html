@@ -7339,15 +7339,6 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
   const histIds = (statusHistory||[]).map(h=>h.statusId);
 
-  // Copywriting runs CONCURRENTLY with design/video editing (c.copyStatusId), tracked
-  // separately from the overall statusHistory-driven sequence above. Without this, the
-  // pipeline visual always shows Copywriting/Copy Amendment/Copy Approval as untouched
-  // "pending" steps while design is still in progress, even though the copywriter may
-  // already be actively working on it (or already done) — which looks like the feature
-  // isn't actually running concurrently at all. Only kicks in while the main sequence
-  // hasn't organically reached the copy steps yet; once it has (design finished first,
-  // c.statusId itself walks into 'copywriting'/'senior_approval_copy'), the normal
-  // activeIdx-based logic below already reflects it correctly on its own.
   const copyIdx = flow.findIndex(s=>s.id==='copywriting');
   const hasConcurrentCopy = !!(contentObj&&contentObj.copyStatusId) && copyIdx>=0 && activeIdx<copyIdx;
   let copyState='not_started';
@@ -7360,8 +7351,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     else copyState='in_progress';
   }
 
-  // Map flow step id → tab to open when clicked
-    const FLOW_TAB_MAP={
+  const FLOW_TAB_MAP={
     'script':'dp-ideation',
     'ideation':'dp-ideation',
     'design':'dp-design',
@@ -7371,11 +7361,17 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     'client_approval':'dp-comments',
     'posted':'dp-history',
   };
-  // Non-clickable steps (design, senior_approval amendments)
   const NON_CLICKABLE=new Set(['design','senior_approval','design_amendment','copy_amendment']);
 
-  let html='<div class="flow-pipeline">';
-  flow.forEach((step, i)=>{
+  // Copywriting runs CONCURRENTLY with shooting/video editing, so on the video flow it's
+  // drawn as its own lane under Shooting. Client Approval and Posted only make sense once
+  // BOTH the video side and the copy side are done, so they're drawn as a third row, pushed
+  // out past the end of the longer (video) row rather than chained onto either lane.
+  const COPY_GROUP=new Set(['copywriting','copy_amendment','senior_approval_copy']);
+  const TAIL_GROUP=new Set(['client_approval','posted']);
+  const isConcurrentLayout = flow.some(s=>s.id==='shoot');
+
+  const renderNode=(step,i,rowFlow)=>{
     let isDone = i < activeIdx;
     let isActive = i === activeIdx;
     if(hasConcurrentCopy && step.id==='copywriting'){
@@ -7389,8 +7385,6 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     const stateClass = isDone?'done':isActive?'active':'pending';
     const labelClass = isDone?'done':isActive?'active':'';
 
-    // Determine clickability: clickable if it has a tab mapping AND not in non-clickable set
-    // Special: 'script' label 'Copywriting' (step index >=6 for video) maps to copy tab
     let tabTarget = FLOW_TAB_MAP[step.id]||'';
     if(step.label.includes('Copywriting')) tabTarget='dp-copy';
     if(step.label.includes('Ideation')||step.label.includes('Script\nIdea')) tabTarget='dp-ideation';
@@ -7399,32 +7393,58 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
 
     if(step.isAmend){
       const wasUsed = (hasConcurrentCopy&&step.id==='copy_amendment')?copyAmendUsed:histIds.includes(step.id);
-      html+=`
+      return `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 2px;margin-top:-2px">
           <div style="width:2px;height:10px;background:${wasUsed?step.color:'var(--b2)'}"></div>
           <div class="flow-amend-node" style="border-color:${wasUsed?step.color:'var(--b2)'};color:${wasUsed?step.color:'var(--t4)'};opacity:${wasUsed?1:0.4}">\u21A9</div>
           <div class="flow-amend-label" style="color:${wasUsed?step.color:'var(--t4)'};opacity:${wasUsed?1:0.4}">${step.label.replace('\n','<br>')}</div>
           <div style="width:2px;height:10px;background:${wasUsed?step.color:'var(--b2)'}"></div>
         </div>`;
-    } else {
-      const prevNonAmend = flow.slice(0,i).filter(s=>!s.isAmend);
-      if(prevNonAmend.length>0){
-        html+=`<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${color}`:''}"></div>`;
-      }
-      html+=`
-        <div class="flow-step" ${clickAttr} title="${isClickable?'Click to open tab':''}">
-          <div class="flow-step-inner">
-            <div class="flow-node ${stateClass}" style="color:${color};${isActive?`box-shadow:0 0 0 4px ${color}44`:''}${isClickable?' transition:transform .12s;':''}" ${isClickable?`onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'"`:''}">
-              ${isDone?`<span class="flow-check" style="color:#0c0c0e;font-size:17px">✓</span>`:isActive?`<span style="font-size:18px">${step.icon}</span>`:`<span style="font-size:16px;opacity:0.3">${step.icon}</span>`}
-            </div>
-            <div class="flow-node-label ${labelClass}" style="${isActive?`color:${color};font-weight:700`:isDone?'color:var(--t3)':'color:var(--t4)'}${isClickable?';text-decoration:underline dotted;text-underline-offset:2px':''}">${(step.flowLabel||step.label).replace('\n','<br>')}</div>
-            ${(()=>{const pic=getPIC(data,step.id,contentObj);return pic?`<div style="font-size:11px;color:${pic.color};font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;text-align:center;white-space:nowrap">${pic.init}</div>`:''})()}
-          </div>
-        </div>`;
     }
-  });
-  html+='</div>';
-  return html;
+    const prevNonAmend = rowFlow.slice(0,rowFlow.indexOf(step)).filter(s=>!s.isAmend);
+    const connector = prevNonAmend.length>0
+      ? `<div class="flow-connector ${isDone||isActive?'done':''}" style="${isDone||isActive?`background:${color}`:''}"></div>`
+      : '';
+    return connector+`
+      <div class="flow-step" ${clickAttr} title="${isClickable?'Click to open tab':''}">
+        <div class="flow-step-inner">
+          <div class="flow-node ${stateClass}" style="color:${color};${isActive?`box-shadow:0 0 0 4px ${color}44`:''}${isClickable?' transition:transform .12s;':''}" ${isClickable?`onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'"`:''}">
+            ${isDone?`<span class="flow-check" style="color:#0c0c0e;font-size:17px">✓</span>`:isActive?`<span style="font-size:18px">${step.icon}</span>`:`<span style="font-size:16px;opacity:0.3">${step.icon}</span>`}
+          </div>
+          <div class="flow-node-label ${labelClass}" style="${isActive?`color:${color};font-weight:700`:isDone?'color:var(--t3)':'color:var(--t4)'}${isClickable?';text-decoration:underline dotted;text-underline-offset:2px':''}">${(step.flowLabel||step.label).replace('\n','<br>')}</div>
+            ${(()=>{const pic=getPIC(data,step.id,contentObj);return pic?`<div style="font-size:11px;color:${pic.color};font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;text-align:center;white-space:nowrap">${pic.init}</div>`:''})()}
+        </div>
+      </div>`;
+  };
+
+  if(!isConcurrentLayout){
+    let html='<div class="flow-pipeline">';
+    flow.forEach((step,i)=>{ html+=renderNode(step,i,flow); });
+    html+='</div>';
+    return html;
+  }
+
+  const mainFlow = flow.filter(s=>!COPY_GROUP.has(s.id) && !TAIL_GROUP.has(s.id));
+  const copyFlow = flow.filter(s=>COPY_GROUP.has(s.id));
+  const tailFlow = flow.filter(s=>TAIL_GROUP.has(s.id));
+  const origIdx = step=>flow.indexOf(step);
+  const shootPos = mainFlow.findIndex(s=>s.id==='shoot');
+
+  let mainHtml='<div class="flow-pipeline">';
+  mainFlow.forEach(step=>{ mainHtml+=renderNode(step, origIdx(step), mainFlow); });
+  mainHtml+='</div>';
+
+  const copySpacer = `<div style="visibility:hidden;display:contents">${mainFlow.slice(0,shootPos).map(step=>renderNode(step, origIdx(step), mainFlow)).join('')}</div>`;
+  let copyHtml=`<div class="flow-pipeline" style="margin-top:14px">`+copySpacer;
+  copyFlow.forEach(step=>{ copyHtml+=renderNode(step, origIdx(step), copyFlow); });
+  copyHtml+='</div>';
+
+  const tailSpacer = `<div style="visibility:hidden;display:contents">${mainFlow.map(step=>renderNode(step, origIdx(step), mainFlow)).join('')}</div>`;
+  let tailHtml=`<div class="flow-pipeline" style="margin-top:14px">`+tailSpacer;
+  tailFlow.forEach(step=>{ tailHtml+=renderNode(step, origIdx(step), tailFlow); });
+  tailHtml+='</div>';
+
+  return `<div style="font-size:11px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:2px 0 -4px">🔀 Copywriting runs concurrently, starting from Shooting</div>`+mainHtml+copyHtml+tailHtml;
 }
 
 function flowNodeClick(id, tabId){
