@@ -9807,9 +9807,8 @@ function renderWorkflowActionBox(data, c){
     return withHistory(`<div class="wf-action-box copy">
       <div class="wf-action-title">💡 Ideation — Your Turn</div>
       <div class="wf-action-sub">Write your ideation notes in the <strong>Ideation tab</strong>, then submit for ${senior.name}'s approval before design begins.</div>
-      <div class="wf-action-row">
+            <div class="wf-action-row">
         <button class="wf-btn wf-btn-amb" onclick="submitIdeaForApproval('${id}',0)">📤 Submit for Senior Approval</button>
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-ideation')">💡 Open Ideation Tab →</button>
       </div>
     </div>`);
   }
@@ -9872,7 +9871,6 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-sub">Write your script and ideation notes in the <strong>Ideation tab</strong>, then submit for ${senior.name}'s approval before shooting begins.</div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-amb" onclick="wfSubmitIdeationForVideo('${id}')">📤 Submit Ideation → Senior Approval</button>
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-ideation')">💡 Open Ideation Tab →</button>
       </div>
     </div>`);
   }
@@ -9903,7 +9901,6 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-sub">Write or refine your script in the <strong>Ideation tab</strong>, then submit for approval.</div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-amb" onclick="wfSubmitScript('${id}')">📤 Submit Script → Senior Approval</button>
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-ideation')">📝 Open Ideation Tab →</button>
       </div>
     </div>`);
   }
@@ -9915,7 +9912,6 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-title">🎬 Shooting Phase — Your Turn</div>
       <div class="wf-action-sub">Add your raw footage links in the <strong>Shooting tab</strong>, then hand off to the editor.</div>
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-shoot')">🎥 Open Shooting Tab →</button>
         <button class="wf-btn wf-btn-${footageCount?'green':'ghost'}" style="${!footageCount?'opacity:.5;cursor:not-allowed':''}" onclick="${footageCount?`wfShootDone('${id}')`:``}">✅ Shooting Done → Assign to Video Editor</button>
       </div>
       ${!footageCount?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Add at least one footage link in the tab above first</div>`:''}
@@ -9928,7 +9924,6 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-title">✂️ Video Editing Phase${isDesigner?' — Your Turn':''}</div>
       <div class="wf-action-sub">${isDesigner?`Upload your edited video and submit for senior review — all inside the <strong>Video Editing tab</strong>.`:isSenior&&c.videoReviewPending?`${designer.name} has submitted the edited video for your review.`:`Video is being edited by ${designer.name}.`}</div>
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-video')">🎬 Open Video Editing Tab →</button>
         ${isDesigner?`<button class="wf-btn wf-btn-${(c.videoEditLink||c.editedFileName)?'green':'ghost'}" style="${!(c.videoEditLink||c.editedFileName)?'opacity:.5;cursor:not-allowed':''}" onclick="${(c.videoEditLink||c.editedFileName)?`wfVideoDone('${id}')`:``}">📤 Submit for Senior Review</button>`:''}
       </div>
       ${isDesigner&&!(c.videoEditLink||c.editedFileName)?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload your edited video in the tab above first</div>`:''}
@@ -9949,17 +9944,13 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-sub">Write the caption/copy in the <strong>Copywriting tab</strong>, then submit for ${senior.name}'s approval.</div>
       <div class="wf-action-row">
         <button class="wf-btn wf-btn-amb" onclick="wfSubmitCopy('${id}')">📤 Submit Copy → Senior Approval</button>
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
       </div>
     </div>`);
   }
   if(st==='copywriting' && isCreator && c.copyStatusId){
     return withHistory(`<div class="wf-action-box copy">
       <div class="wf-action-title">✍️ Copywriting Phase — Your Turn</div>
-      <div class="wf-action-sub">Write the caption/copy and submit it for review — all inside the <strong>Copywriting tab</strong>.</div>
-      <div class="wf-action-row">
-        <button class="wf-btn wf-btn-blue" onclick="flowNodeClick('${id}','dp-copy')">✍️ Open Copywriting Tab →</button>
-      </div>
+      <div class="wf-action-sub">Write the caption/copy and submit it for review in the <strong>Copywriting tab</strong>.</div>
     </div>`);
   }
 
