@@ -8959,8 +8959,11 @@ function getIdeationVersions(c){
 }
 
 function getIdeaVerIndex(id){
-  if(!window._ideaVer) window._ideaVer={};
-  return window._ideaVer[id]||0;
+  const data=D();const c=data.contents.find(x=>x.id===id);
+  if(!c) return 0;
+  const versions=getIdeationVersions(c);
+  if(typeof c.activeIdeaVerIdx==='number') return Math.min(c.activeIdeaVerIdx, versions.length-1);
+  return versions.length-1;
 }
 
 // Palette for version tab colors cycling
@@ -9135,13 +9138,12 @@ function renderIdeationPanel(c, id){
 }
 
 function switchIdeaVer(id, idx){
-  if(!window._ideaVer) window._ideaVer={};
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
-  const prevIdx=Math.min(window._ideaVer[id]||0, versions.length-1);
+  const prevIdx=Math.min(typeof c.activeIdeaVerIdx==='number'?c.activeIdeaVerIdx:versions.length-1, versions.length-1);
   _saveIdeaTextFields(c, versions, prevIdx);
+  c.activeIdeaVerIdx=idx;
   save(data);
-  window._ideaVer[id]=idx;
   const panel=document.getElementById('dp-ideation');
   if(panel) panel.innerHTML=renderIdeationPanel(c,id);
 }
@@ -9153,9 +9155,9 @@ function addIdeaVersion(id){
   _saveIdeaTextFields(c, versions, curIdx);
   const n=versions.length+1;
   versions.push({label:'V'+n, paragraph:'', videoScript:'', refImages:[], mgmtComments:[]});
-  c.ideationVersions=versions;
+    c.ideationVersions=versions;
+  c.activeIdeaVerIdx=versions.length-1; // switch to new version
   save(data);
-  window._ideaVer[id]=versions.length-1; // switch to new version
   const panel=document.getElementById('dp-ideation');
   if(panel) panel.innerHTML=renderIdeationPanel(c,id);
 }
@@ -9169,8 +9171,8 @@ function deleteIdeaVersion(id, idx){
   // Re-label versions sequentially
   versions.forEach((v,i)=>v.label='V'+(i+1));
   c.ideationVersions=versions;
+  c.activeIdeaVerIdx=Math.max(0,idx-1);
   save(data);
-  window._ideaVer[id]=Math.max(0,idx-1);
   const panel=document.getElementById('dp-ideation');
   if(panel) panel.innerHTML=renderIdeationPanel(c,id);
 }
@@ -10221,8 +10223,7 @@ async function wfAmendIdeationForVideo(id){
   const nextN=versions.length+1;
   versions.push({label:'V'+nextN,paragraph:'',videoScript:'',refImages:[],mgmtComments:[]});
   c.ideationVersions=versions;
-  if(!window._ideaVer)window._ideaVer={};
-  window._ideaVer[id]=versions.length-1;
+  c.activeIdeaVerIdx=versions.length-1;
   c.ideationPendingApproval=false;
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,creator,'Ideation needs changes',S.user.name,note);
@@ -12909,8 +12910,7 @@ async function requestIdeaAmendment(id, verIdx){
   const nextN=versions.length+1;
   versions.push({label:'V'+nextN,paragraph:'',videoScript:'',refImages:[],mgmtComments:[]});
   c.ideationVersions=versions;
-  if(!window._ideaVer)window._ideaVer={};
-  window._ideaVer[id]=versions.length-1;
+  c.activeIdeaVerIdx=versions.length-1;
   c.ideationPendingApproval=false;
   // Close reviewer's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
