@@ -7431,7 +7431,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     copywriting:6, copy_amendment:9, senior_approval_copy:11,
   };
   const TOTAL_COLS=15;
-  const gridItem=(colStart,colEnd,inner)=>`<div style="grid-column:${colStart}/${colEnd||colStart+1}">${inner}</div>`;
+    const gridItem=(colStart,colEnd,inner)=>`<div style="grid-column:${colStart}/${colEnd||colStart+1};grid-row:1">${inner}</div>`;
 
   let mainHtml=`<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
   const mainOrder=['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','design_amendment','senior_approval_video','client_approval','posted'];
