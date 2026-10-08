@@ -7361,11 +7361,11 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   }
 
   // Map flow step id → tab to open when clicked
-  const FLOW_TAB_MAP={
+    const FLOW_TAB_MAP={
     'script':'dp-ideation',
     'ideation':'dp-ideation',
     'design':'dp-design',
-    'shoot':'dp-video',
+    'shoot':usesShootFlow(contentObj)?'dp-shoot':'dp-design',
     'video_editing':'dp-video',
     'copywriting':'dp-copy',
     'client_approval':'dp-comments',
