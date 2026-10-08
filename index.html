@@ -7311,29 +7311,26 @@ function getProgressForFlowPipeline(c){
 
 // Determine where we are in the flow based on statusHistory
 function getFlowCurrentIndex(flow, statusHistory, currentStatusId){
-  // Match flow steps against history in sequence.
-  // Since some IDs (e.g. senior_approval) appear multiple times, we consume
-  // history entries as we walk the flow left-to-right.
+  // The content's ACTUAL current stage is always currentStatusId — that's authoritative.
+  // History can contain a stray later-stage entry from a round that got rejected back to
+  // an earlier stage (e.g. submitted for Video Approval, then amended back to Video
+  // Editing); walking history and taking the last match found would pick up that stale
+  // later entry and show the pipeline as further along than the content really is. So the
+  // current step's position in the flow wins outright, and history is only used as a
+  // fallback for the rare case currentStatusId isn't a literal flow step.
+  const directIdx=flow.findIndex(s=>!s.isAmend && s.id===currentStatusId);
+  if(directIdx>=0) return directIdx;
+
   const hist=[...(statusHistory||[])];
   let lastMatched=0;
-  let histCursor=0; // walk history in order
-
+  let histCursor=0;
   for(let i=0;i<flow.length;i++){
     const step=flow[i];
-    if(step.isAmend){
-      // Amendment: check if this amendment id appears anywhere from histCursor onward
-      const found=hist.slice(histCursor).findIndex(h=>h.statusId===step.id);
-      if(found>=0){lastMatched=i;histCursor+=found+1;}
-    } else {
-      // Normal step: look for this id from histCursor onward
-      const found=hist.slice(histCursor).findIndex(h=>h.statusId===step.id);
-      if(found>=0){lastMatched=i;histCursor+=found+1;}
-      else if(step.id===currentStatusId&&histCursor<=hist.length){lastMatched=i;}
-    }
+    const found=hist.slice(histCursor).findIndex(h=>h.statusId===step.id);
+    if(found>=0){lastMatched=i;histCursor+=found+1;}
   }
   return lastMatched;
 }
-
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
   const data=D();
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
