@@ -3649,7 +3649,7 @@ function naturalCompare(a,b){
 
 function renderBrandPage(){
   const data=D();const b=getBrand(data,S.brand);
-  let contents=data.contents.filter(c=>c.brandId===S.brand);
+    let contents=data.contents.filter(c=>c.brandId===S.brand&&c.jobKind!=='task');
   // Freelancers only see content assigned to them
   if(S.user.role==='freelancer'){
         contents=contents.filter(c=>
@@ -3657,7 +3657,7 @@ function renderBrandPage(){
       getPIC(data,c.statusId,c).id===S.user.id
     );
   }
-  const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.postingDate).map(c=>c.postingDate.slice(0,7)))].sort();
+  const brandAllMonths=[...new Set(data.contents.filter(c=>c.brandId===S.brand&&c.jobKind!=='task'&&c.postingDate)
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:8px">
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
       <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option>
@@ -3920,7 +3920,7 @@ function renderBrandPage(){
       return `<button onclick="S.brandTeamMonth='${key}';renderPage()" style="padding:4px 12px;border-radius:20px;border:1px solid ${active?'var(--ac)':'var(--b2)'};background:${active?'var(--ac)22':'transparent'};color:${active?'var(--ac)':'var(--t2)'};font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;font-weight:${active?700:500}">${lbl}</button>`;
     }).join('');
 
-    const brandContents=data.contents.filter(c=>c.brandId===S.brand);
+        const brandContents=data.contents.filter(c=>c.brandId===S.brand&&c.jobKind!=='task');
     const monthItems=brandContents.filter(c=>c.postingDate&&c.postingDate.startsWith(selMonth));
 
     // Everyone connected to something due this month (assignee OR PIC on any stage)
@@ -4015,7 +4015,7 @@ function renderBrandMiniCalendar(b,data){
   const daysInMonth=new Date(yr,mo,0).getDate();
   const firstDow=new Date(yr,mo-1,1).getDay(); // 0=Sun
   const today=localISO(new Date());
-  const items=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(month));
+    const items=data.contents.filter(c=>c.brandId===b.id&&c.jobKind!=='task'&&c.postingDate&&c.postingDate.startsWith(month));
   const byDay={};
   items.forEach(c=>{const d=Number(c.postingDate.slice(8,10));(byDay[d]=byDay[d]||[]).push(c);});
   const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
