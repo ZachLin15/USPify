@@ -10110,14 +10110,25 @@ function wfSubmitScript(id){
 // VIDEO: Leonard submits ideation/script for senior review
 async function wfSubmitIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const versions=getIdeationVersions(c);
+  const verIdx=Math.min(getIdeaVerIndex(id), versions.length-1);
+  _saveIdeaTextFields(c,versions,verIdx);
+  if(!versions[verIdx].paragraph&&!versions[verIdx].videoScript){
+    alert('Please add some content before submitting for approval.');return;
+  }
   const today=localISO(new Date());
+  versions[verIdx].approval={
+    status:'pending',submittedBy:S.user.name,submittedByInit:S.user.init,
+    submittedByColor:S.user.color,submittedAt:today,note:''
+  };
+  c.ideationVersions=versions;
   c.ideationPendingApproval=true;
+  c.seniorNotifDismissed={};
   const senior=getSenior(data,c);
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,
-    text:`💡 Ideation/script submitted for senior review by ${S.user.name}`,
+    text:`💡 ${versions[verIdx].label} submitted for senior review by ${S.user.name}`,
     type:'general',createdAt:today});
-  // Move to senior_approval stage, add task for senior
   if(!c.workflowTasks)c.workflowTasks=[];
   c.statusId='senior_approval_ideation';
   c.statusHistory.push({statusId:'senior_approval_ideation',changedBy:S.user.id,changedAt:today});
@@ -10176,6 +10187,11 @@ async function wfApproveIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getPIC(data,'shoot',c);
   const today=localISO(new Date());
+  const versions=getIdeationVersions(c);
+  const pendingIdx=versions.findIndex(v=>v.approval&&v.approval.status==='pending');
+  const verIdx=pendingIdx>=0?pendingIdx:versions.length-1;
+  versions[verIdx].approval={status:'approved',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note:document.getElementById('wf-review-note-'+id)?.value||''};
+  c.ideationVersions=versions;
   c.ideationPendingApproval=false;
   c.seniorNotifDismissed={...(c.seniorNotifDismissed||{}),[S.user.id]:true};
   (c.workflowTasks||[]).filter(t=>(t.statusId==='senior_approval'||t.statusId==='senior_approval_ideation')&&t.status==='open').forEach(t=>t.status='done');
@@ -10198,15 +10214,23 @@ async function wfAmendIdeationForVideo(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const creator=getContentCreator(data,c);
   const today=localISO(new Date());
+  const versions=getIdeationVersions(c);
+  const pendingIdx=versions.findIndex(v=>v.approval&&v.approval.status==='pending');
+  const verIdx=pendingIdx>=0?pendingIdx:versions.length-1;
+  versions[verIdx].approval={status:'amendment',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
+  const nextN=versions.length+1;
+  versions.push({label:'V'+nextN,paragraph:'',videoScript:'',refImages:[],mgmtComments:[]});
+  c.ideationVersions=versions;
+  if(!window._ideaVer)window._ideaVer={};
+  window._ideaVer[id]=versions.length-1;
   c.ideationPendingApproval=false;
-  // Close Jack's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
   notifyRejected(c,creator,'Ideation needs changes',S.user.name,note);
   c.statusId='ideation';
   c.statusHistory.push({statusId:'ideation',changedBy:S.user.id,changedAt:today});
   c.assignees=[creator.id];
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`🔄 Amendment — ${creator.name} notified`);
+  showAIToast(`🔄 Amendment — ${creator.name} notified — ${versions[verIdx].label} locked, ${versions[verIdx+1]?versions[verIdx+1].label:'a new version'} started`);
 }
 
 function markTaskDone(id){
