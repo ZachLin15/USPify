@@ -12838,6 +12838,7 @@ function _refreshIdeaPanel(id){
 async function submitIdeaForApproval(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
+  verIdx=Math.min(getIdeaVerIndex(id), versions.length-1);
   _saveIdeaTextFields(c,versions,verIdx);
   if(!versions[verIdx].paragraph&&!versions[verIdx].videoScript){
     alert('Please add some content before submitting for approval.');return;
@@ -12870,6 +12871,8 @@ async function approveIdeation(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(usesShootFlow(c)){wfApproveIdeationForVideo(id);return;}
   const versions=getIdeationVersions(c);
+  const pendingIdx0=versions.findIndex(v=>v.approval&&v.approval.status==='pending');
+  verIdx=pendingIdx0>=0?pendingIdx0:Math.min(getIdeaVerIndex(id),versions.length-1);
   const note=document.getElementById('wf-review-note-'+id)?.value||'';
   const today=localISO(new Date());
   versions[verIdx].approval={status:'approved',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
@@ -12899,9 +12902,15 @@ async function requestIdeaAmendment(id, verIdx){
   saveWfReviewComment(id,'Senior Amendment — Ideation');
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
+  const pendingIdx0=versions.findIndex(v=>v.approval&&v.approval.status==='pending');
+  verIdx=pendingIdx0>=0?pendingIdx0:Math.min(getIdeaVerIndex(id),versions.length-1);
   const today=localISO(new Date());
   versions[verIdx].approval={status:'amendment',submittedBy:versions[verIdx].approval?.submittedBy||'',reviewedBy:S.user.name,reviewedByInit:S.user.init,reviewedAt:today,note};
+  const nextN=versions.length+1;
+  versions.push({label:'V'+nextN,paragraph:'',videoScript:'',refImages:[],mgmtComments:[]});
   c.ideationVersions=versions;
+  if(!window._ideaVer)window._ideaVer={};
+  window._ideaVer[id]=versions.length-1;
   c.ideationPendingApproval=false;
   // Close reviewer's open tasks
   (c.workflowTasks||[]).filter(t=>t.assigneeId===S.user.id&&t.status==='open').forEach(t=>{t.status='done';t.closedAt=today;});
@@ -12911,7 +12920,7 @@ async function requestIdeaAmendment(id, verIdx){
   notifyRejected(c,creator,`Ideation ${versions[verIdx].label} needs changes`,S.user.name,note);
   c.assignees=[creator.id];
   await saveNow(data, c.id);renderDetailPage(id);renderSidebar();renderTopbar();
-  showAIToast(`🔄 Amendment requested — ${creator.name} notified`);
+  showAIToast(`🔄 Amendment requested — ${creator.name} notified — ${versions[verIdx].label} locked, ${versions[verIdx+1]?versions[verIdx+1].label:'a new version'} started`);
 }
 
 function resetIdeaApproval(id, verIdx){
