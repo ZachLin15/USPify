@@ -3652,9 +3652,8 @@ function renderBrandPage(){
   let contents=data.contents.filter(c=>c.brandId===S.brand);
   // Freelancers only see content assigned to them
   if(S.user.role==='freelancer'){
-    contents=contents.filter(c=>
+        contents=contents.filter(c=>
       c.assignees.includes(S.user.id)||
-      (c.pic&&Object.values(c.pic).includes(S.user.id))||
       getPIC(data,c.statusId,c).id===S.user.id
     );
   }
@@ -3925,7 +3924,7 @@ function renderBrandPage(){
     const monthItems=brandContents.filter(c=>c.postingDate&&c.postingDate.startsWith(selMonth));
 
     // Everyone connected to something due this month (assignee OR PIC on any stage)
-    const uids=[...new Set(monthItems.flatMap(c=>[...c.assignees,...(c.pic?Object.values(c.pic):[]),getPIC(data,c.statusId,c).id]))].filter(Boolean);
+            const uids=[...new Set(monthItems.flatMap(c=>[...c.assignees,getPIC(data,c.statusId,c).id]))].filter(Boolean);
 
     const panelHead=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap">
         <div style="display:flex;align-items:baseline;gap:8px">
@@ -3957,7 +3956,7 @@ function renderBrandPage(){
     const rowsHtml=uids.map(uid=>{
       const u=data.users.find(x=>x.id===uid);
       if(!u) return '';
-      const items=monthItems.filter(c=>c.assignees.includes(uid)||(c.pic&&Object.values(c.pic).includes(uid))||getPIC(data,c.statusId,c).id===uid);
+            const items=monthItems.filter(c=>c.assignees.includes(uid)||getPIC(data,c.statusId,c).id===uid);
       const completedItems=items.filter(c=>c.statusId==='posted');
       const overdueItems=items.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted');
       const activeItems=items.filter(c=>c.statusId!=='posted'&&!isLate(c.postingDate));
@@ -6559,10 +6558,7 @@ function renderResponsibilities(){
         const isOverridden=!!picId;
         const opts=`<option value="">Default</option>`+staff.map(u=>`<option value="${u.id}" ${u.id===picId?'selected':''}>${u.init} ${u.name}</option>`).join('');
         return `<td style="padding:6px 8px;border-bottom:1px solid var(--b1);border-right:1px solid var(--b1);min-width:110px">
-          <select class="filter-select" style="width:100%;font-size:13px;padding:4px 6px;background:${isOverridden?picUser.color+'18':'var(--s2)'};"
-            onchange="saveContentPIC('${c.id}','${st.id}',this.value)"
-            title="${st.name} PIC">${opts}</select>
-          ${!isOverridden?`<div style="font-size:11px;color:${picUser.color};font-family:'DM Mono',monospace;margin-top:2px">↳ ${picUser.name}</div>`:''}
+                    <div style="font-size:13px;color:${picUser.color};font-family:'DM Mono',monospace;padding:4px 6px">${picUser.name}</div>
         </td>`;
       }).join('');
       const st=getStatus(data,c.statusId);
@@ -7688,7 +7684,7 @@ function renderDetailPage(id, forceTab){
       <button class="btn btn-danger btn-sm" onclick="openReverseFlowConfirm('${id}')">⬅ Reverse to Previous Stage</button>
     </div>
 
-    <div class="side-section" style="border-top:2px solid var(--acd)">
+        <div class="side-section" style="border-top:2px solid var(--acd);display:none">
       <div class="side-label" style="color:var(--ac)">🎯 PIC per Stage</div>
       <div style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:10px">Override who is responsible for each stage of this content piece.</div>
       ${(()=>{
@@ -9557,12 +9553,9 @@ function canActOnStage(data, c, statusId, user){
 // getPIC: looks up per-content pic map first, then falls back to role defaults
 // contentObj is optional — if passed, uses c.pic[statusId] first
 function getPIC(data, statusId, contentObj){
-  // 1. Per-content override
-  if(contentObj){
-    const picMap=contentObj.pic||{};
-    const uid=picMap[statusId];
-    if(uid){const u=data.users.find(x=>x.id===uid);if(u)return u;}
-  }
+  // Per-content overrides are disabled — Responsibilities (brand-level) is the single
+  // source of truth, so a change there takes effect everywhere immediately and can
+  // never be silently shadowed by a stale override on an individual piece of content.
   // 2. Per-brand assignment from Responsibilities table (type-aware)
   const brandId=contentObj?.brandId;
   if(brandId){
