@@ -2822,7 +2822,7 @@ function getActiveJobsForUser(data, userId){
   // (getPIC, not just a raw c.pic override — it also covers brand Responsibilities config
   // and role fallback, the same resolution the workflow-flow diagram's initials use, so
   // someone can't be the shown owner of a stage there and invisible here).
-  const isResponsible=c=>c.assignees.includes(userId)||getPIC(data,c.statusId,c).id===userId;
+    const isResponsible=c=>getPIC(data,c.statusId,c).id===userId||(!!(c.copyStatusId&&c.copyStatusId!=='approved')&&getPIC(data,'copywriting',c).id===userId);
   // Standalone "Task" jobs (jobKind==='task', from Add Job → Task) are lightweight
   // to-dos with no brand workflow — but they ARE meant to show up here: the Team page
   // renders a dedicated "TASK" badge for them (isTaskKind) and the detail page has a
