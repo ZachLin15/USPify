@@ -7786,6 +7786,7 @@ function openContentDetail(id, forceTab){
     c.designNotifDismissed[uid]=true;
     save(data);renderTopbar();
   }
+    if(_getMentionAlerts(data).some(a=>a.c.id===id)){_getMentionAlerts(data).filter(a=>a.c.id===id).forEach(a=>{(a.cm.mentionDismissed=a.cm.mentionDismissed||{})[uid]=true;});save(data,id);renderTopbar();}
   renderDetailPage(id, forceTab);
 }
 
@@ -10812,7 +10813,7 @@ function renderCommentItem(cm, contentId){
           <button onclick="deleteCommentConfirm('${contentId}','${cm.id}')" style="background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:12px" title="Delete">🗑</button>
         `:''}
       </div>
-      <div class="comment-text" id="cm-text-${cm.id}">${cm.text}</div>
+            <div class="comment-text" id="cm-text-${cm.id}">${_mnHtml(cm)}</div>
     </div>
   </div>`;
 }
@@ -10834,7 +10835,7 @@ function saveEditComment(contentId, commentId){
   if(!canEditComment(cm)){showAIToast('⏰ Edit window has expired');renderDetailPage(contentId);return;}
   const inp=document.getElementById('cm-edit-input-'+commentId);if(!inp)return;
   const newText=inp.value.trim();if(!newText)return;
-  cm.text=newText;cm.edited=true;cm.editedAt=Date.now();
+    cm.text=newText;cm.mentions=_extractMentions(newText);cm.edited=true;cm.editedAt=Date.now();
   save(data,contentId);renderDetailPage(contentId);
   showAIToast('✓ Comment updated');
 }
@@ -10848,13 +10849,98 @@ function deleteCommentConfirm(contentId, commentId){
   showAIToast('🗑 Comment deleted');
 }
 
+// ── @MENTIONS ──────────────────────────────────────────────────────────────
+function _mentionUsers(){return D().users.filter(u=>u.role!=='client'&&u.name&&(!S.user||u.id!==S.user.id));}
+function _extractMentions(text){
+  const low=(text||'').toLowerCase();
+  return _mentionUsers().filter(u=>low.includes('@'+u.name.toLowerCase())).map(u=>u.id);
+}
+function _mnHtml(cm){
+  let t=cm.text||'';
+  const D0=D();
+  (cm.mentions||[]).forEach(id=>{
+    const u=D0.users.find(x=>x.id===id);if(!u)return;
+    const re=new RegExp('@'+u.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig');
+    t=t.replace(re,m=>`<span style="background:${u.color||'#888'}33;color:${u.color||'var(--ac)'};font-weight:700;padding:0 4px;border-radius:4px">${m}</span>`);
+  });
+  return t;
+}
+function _getMentionAlerts(data){
+  const uid=S.user?.id;if(!uid)return [];
+  const cutoff=Date.now()-14*24*60*60*1000;
+  const out=[];
+  (data.contents||[]).forEach(c=>(c.comments||[]).forEach(cm=>{
+    if((cm.mentions||[]).includes(uid)&&cm.userId!==uid&&!(cm.mentionDismissed||{})[uid]&&(cm.ts||0)>=cutoff)out.push({c,cm});
+  }));
+  return out;
+}
+function dismissMention(contentId,cmId,open){
+  const data=D();const c=data.contents.find(x=>x.id===contentId);
+  const cm=c&&(c.comments||[]).find(x=>x.id===cmId);
+  if(cm){(cm.mentionDismissed=cm.mentionDismissed||{})[S.user.id]=true;save(data,contentId);}
+  closeNotifPanel();renderTopbar();
+  if(open)openContentDetail(contentId,'dp-comments');
+}
+function renderMentionSections(data){
+  const al=_getMentionAlerts(data);if(!al.length)return [];
+  return [`<div class="np-section-header" style="background:var(--acd,rgba(255,255,255,0.06));color:var(--ac)">💬 MENTIONED YOU (${al.length})</div>`
+    +al.map(({c,cm})=>{
+      const b=getBrand(data,c.brandId);const u=getUser(data,cm.userId);
+      const snip=(cm.text||'').slice(0,110).replace(/</g,'&lt;');
+      return `<div class="np-item" style="border-left:3px solid var(--ac)">
+        <div class="np-icon" style="background:${u.color}22;color:${u.color};font-size:13px;font-weight:700;cursor:pointer" onclick="dismissMention('${c.id}','${cm.id}',true)">${u.init}</div>
+        <div class="np-info" style="cursor:pointer;flex:1" onclick="dismissMention('${c.id}','${cm.id}',true)">
+          <div class="np-name">${c.title}</div>
+          <div class="np-meta"><span style="color:${b.color};font-weight:700">${b.name}</span> · <strong>${u.name}</strong> tagged you<br><span style="color:var(--t2);font-style:italic">"${snip}"</span></div>
+        </div>
+        <button onclick="dismissMention('${c.id}','${cm.id}',false)" title="Dismiss" style="background:transparent;border:none;color:var(--t4);cursor:pointer;font-size:16px;padding:4px 6px;flex-shrink:0">×</button>
+      </div>`;}).join('')];
+}
+const _mn={el:null,start:0,items:[],idx:0};
+function _mnClose(){const d=document.getElementById('mn-dd');if(d)d.remove();_mn.items=[];_mn.el=null;}
+function _mnDraw(){
+  let d=document.getElementById('mn-dd');
+  if(!_mn.items.length||!_mn.el){if(d)d.remove();return;}
+  if(!d){d=document.createElement('div');d.id='mn-dd';document.body.appendChild(d);}
+  const r=_mn.el.getBoundingClientRect();
+  d.style.cssText=`position:fixed;z-index:99999;left:${r.left}px;top:${Math.min(r.bottom+4,window.innerHeight-220)}px;width:${Math.min(r.width,280)}px;max-height:210px;overflow:auto;background:var(--s2,#1c1c24);border:1px solid var(--b2,#333);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45)`;
+  d.innerHTML=_mn.items.map((u,i)=>`<div onmousedown="event.preventDefault();_mnPick(${i})" style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;font-size:14px;color:var(--t1);${i===_mn.idx?'background:var(--s3,#2a2a35)':''}"><span style="width:22px;height:22px;border-radius:50%;background:${u.color}33;color:${u.color};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${u.init||''}</span>${u.name}<span style="margin-left:auto;font-size:11px;color:var(--t3)">${u.title||''}</span></div>`).join('');
+}
+function _mnPick(i){
+  const u=_mn.items[i],el=_mn.el;if(!u||!el)return;
+  const pos=el.selectionStart;
+  const ins='@'+u.name+' ';
+  el.value=el.value.slice(0,_mn.start)+ins+el.value.slice(pos);
+  const np=_mn.start+ins.length;el.setSelectionRange(np,np);el.focus();
+  _mnClose();
+}
+document.addEventListener('input',function(e){
+  const el=e.target;
+  if(!el||el.tagName!=='TEXTAREA'||!/^(comment-input-|copy-comment-input-|cm-edit-input-)/.test(el.id)){return;}
+  const pos=el.selectionStart;
+  const m=/(^|\s)@([^@\n]{0,24})$/.exec(el.value.slice(0,pos));
+  if(!m){_mnClose();return;}
+  const q=m[2].toLowerCase();
+  const items=_mentionUsers().filter(u=>u.name.toLowerCase().includes(q)).slice(0,8);
+  if(!items.length){_mnClose();return;}
+  _mn.el=el;_mn.start=pos-m[2].length-1;_mn.items=items;_mn.idx=0;_mnDraw();
+});
+document.addEventListener('keydown',function(e){
+  if(!_mn.items.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();_mn.idx=(_mn.idx+1)%_mn.items.length;_mnDraw();}
+  else if(e.key==='ArrowUp'){e.preventDefault();_mn.idx=(_mn.idx-1+_mn.items.length)%_mn.items.length;_mnDraw();}
+  else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();_mnPick(_mn.idx);}
+  else if(e.key==='Escape'){e.preventDefault();_mnClose();}
+},true);
+document.addEventListener('click',function(e){if(!e.target.closest||!e.target.closest('#mn-dd'))_mnClose();});
+
 function saveComment(id){
   const text=document.getElementById('comment-input-'+id).value.trim();if(!text)return;
   const typeEl=document.getElementById('comment-type-'+id);
   const type=typeEl?typeEl.value:'general';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:localISO(new Date()),ts:Date.now()});
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,mentions:_extractMentions(text),createdAt:localISO(new Date()),ts:Date.now()});
   save(data,id);renderDetailPage(id);
 }
 function saveCopyComment(id){
@@ -10862,7 +10948,7 @@ function saveCopyComment(id){
   const type=document.getElementById('copy-comment-type-'+id)?.value||'copy';
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   if(!c.comments)c.comments=[];
-  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:localISO(new Date()),ts:Date.now()});
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,mentions:_extractMentions(text),createdAt:localISO(new Date()),ts:Date.now()});
   save(data,id);renderDetailPage(id);
 }
 function changeStatus(id,statusId){
@@ -13089,7 +13175,7 @@ function getNotifCount(data){
     e.movedBy!==uid&&
     (e.movedAt||'')>=_7dAgoRs
   ).length;
-    return seen.size+delCount+rsCount;
+        return seen.size+delCount+rsCount+_getMentionAlerts(data).length;
 }
 function promptReschedule(onConfirm){
   openModal(`<div class="modal-title">📅 Reschedule — Reason Required<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -13411,6 +13497,7 @@ function renderNotifPanel(){
     }
   }
 
+    sections.push(...renderMentionSections(data));
   if(!sections.length){
     body.innerHTML=`<div class="np-empty">✅ All good! No pending reviews or alerts.</div>`;
     return;
