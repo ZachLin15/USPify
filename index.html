@@ -6001,7 +6001,15 @@ async function saveWfReviewerSettings(){
       });
     });
   });
-  data.wfReviewers=r;
+    data.wfReviewers=r;
+  Object.entries(r).forEach(([k,uid])=>{
+    const bId=k.split(':')[0];
+    const au=data.users.find(x=>x.id===uid);
+    if(au&&au.role==='freelancer'&&data.brands.some(b=>b.id===bId)){
+      if(!Array.isArray(au.brandAccess)) au.brandAccess=[];
+      if(!au.brandAccess.includes(bId)) au.brandAccess.push(bId);
+    }
+  });
   localStorage.setItem('uspify_wf_reviewers',JSON.stringify(r));
   await saveNow(data);
   showAIToast(`✅ ${activeTab.toUpperCase()} settings saved — syncing to all users`);
