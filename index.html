@@ -3348,8 +3348,10 @@ function renderTracker(){
     </select>
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
       <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option>
-      <option value="Video" ${S.trackerFilterType==='Video'?'selected':''}>Video</option>
+            <option value="Video" ${S.trackerFilterType==='Video'?'selected':''}>Video</option>
       <option value="Carousel" ${S.trackerFilterType==='Carousel'?'selected':''}>Carousel</option>
+      <option value="Reels" ${S.trackerFilterType==='Reels'?'selected':''}>Reels</option>
+      <option value="Single Image" ${S.trackerFilterType==='Single Image'?'selected':''}>🖼 Single Image</option>
     </select>
     <select class="filter-select" onchange="S.trackerFilterStatus=this.value;renderPage()">
       <option value="all" ${S.trackerFilterStatus==='all'?'selected':''}>All statuses</option>
@@ -3661,8 +3663,10 @@ function renderBrandPage(){
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:8px">
     <select class="filter-select" onchange="S.trackerFilterType=this.value;renderPage()">
       <option value="all" ${S.trackerFilterType==='all'?'selected':''}>All types</option>
-      <option value="Carousel" ${S.trackerFilterType==='Carousel'?'selected':''}>Carousel</option>
+            <option value="Carousel" ${S.trackerFilterType==='Carousel'?'selected':''}>Carousel</option>
       <option value="Video" ${S.trackerFilterType==='Video'?'selected':''}>Video</option>
+      <option value="Reels" ${S.trackerFilterType==='Reels'?'selected':''}>Reels</option>
+      <option value="Single Image" ${S.trackerFilterType==='Single Image'?'selected':''}>🖼 Single Image</option>
       <option value="tiktok" ${S.trackerFilterType==='tiktok'?'selected':''}>🎵 TikTok</option>
     </select>
     <select class="filter-select" onchange="S.trackerFilterStatus=this.value;renderPage()">
