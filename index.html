@@ -8154,7 +8154,7 @@ function renderCopywritingPanel(c,id){
   // (the old "Submit Copy" button lives in the top workflow box, but that one only
   // appears once the OVERALL content stage reaches 'copywriting', which — by design —
   // doesn't happen until design/video finishes if copy is still running concurrently).
-  const submitBtnHTML=(isCreator&&!isLocked&&ver.text&&ver.text.trim())?`
+    const submitBtnHTML=(isCreator&&!isLocked)?`
     <div style="margin-top:14px">
       <button class="btn btn-ac" style="width:100%;padding:12px;font-size:15px" onclick="submitCopyForReview('${id}',${verIdx})">📤 Submit ${ver.label} for Review</button>
     </div>`:'';
