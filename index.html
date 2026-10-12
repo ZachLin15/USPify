@@ -7368,7 +7368,8 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     'posted':'dp-history',
   };
   const NON_CLICKABLE=new Set(['design','senior_approval','design_amendment','copy_amendment']);
-  const isConcurrentLayout = flow.some(s=>s.id==='shoot');
+  const isConcurrentLayout = flow.some(s=>s.id==='copywriting');
+  const hasShoot = flow.some(s=>s.id==='shoot');
 
   const renderNode=(step,i)=>{
     let isDone = i < activeIdx;
@@ -7436,11 +7437,12 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     client_approval:13, posted:15,
     copywriting:6, copy_amendment:9, senior_approval_copy:11,
   };
-  const TOTAL_COLS=15;
+    const TOTAL_COLS=hasShoot?15:13;
+  if(!hasShoot) Object.assign(COL,{design:6,senior_approval_video:9,client_approval:11,posted:13,copywriting:6,senior_approval_copy:9});
     const gridItem=(colStart,colEnd,inner)=>`<div style="grid-column:${colStart}/${colEnd||colStart+1};grid-row:1">${inner}</div>`;
 
   let mainHtml=`<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
-    const mainOrder=['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','senior_approval_video','client_approval','posted'];
+        const mainOrder=hasShoot?['ideation','ideation_amendment','senior_approval_ideation','shoot','video_editing','senior_approval_video','client_approval','posted']:['ideation','ideation_amendment','senior_approval_ideation','design','senior_approval_video','client_approval','posted'];
   let prevCol=null;
   mainOrder.forEach(sid=>{
     const step=flow.find(s=>s.id===sid); if(!step) return;
@@ -7455,7 +7457,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
   });
   mainHtml+='</div>';
 
-  let copyHtml=`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">✍️ Copywriting — runs concurrently with Shooting / Video Editing</div>`+
+  let copyHtml=`<div style="font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 2px">✍️ Copywriting — runs concurrently with ${hasShoot?'Shooting / Video Editing':'Design'}</div>`+
     `<div class="flow-pipeline" style="display:grid;grid-template-columns:repeat(${TOTAL_COLS},minmax(0,1fr));align-items:start">`;
     const copyOrder=['copywriting','senior_approval_copy'];
   prevCol=null;
