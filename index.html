@@ -7105,6 +7105,7 @@ function renderClientApprovals(){
         ${copyPreview}
         <div class="cmc-actions">
           <button class="btn-approve" onclick="clientApprove('${c.id}')">✓ Approve</button>
+                    <button class="btn-revise" onclick="openClientAmendModal('${c.id}')">Request Amendment</button>
           <button class="btn-revise" onclick="openClientReviseModal('${c.id}')">Comment</button>
         </div>
         ${socialBtns}
@@ -7253,6 +7254,54 @@ function saveClientComment(id){
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text,type,createdAt:localISO(new Date()),ts:Date.now()});
   save(data);closeModal();renderPage();alert('Comment sent!');
 }
+function clientAmendParts(c){
+  const shoot=usesShootFlow(c);
+  const p=[{k:'ideation',label:shoot?'Script / Ideation':'Idea / Concept',stage:'ideation',main:1}];
+  if(shoot){
+    p.push({k:'shoot',label:'Shooting (reshoot)',stage:'shoot',main:2});
+    p.push({k:'video_editing',label:'Video Editing',stage:'video_editing',main:3});
+  } else p.push({k:'design',label:'Design',stage:'design',main:3});
+  p.push({k:'copy',label:'Caption / Copywriting',stage:'copywriting',main:0});
+  return p;
+}
+function openClientAmendModal(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const rows=clientAmendParts(c).map(p=>`<div style="border:1px solid var(--b1);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:15px;font-weight:600"><input type="checkbox" id="ca-chk-${p.k}" onchange="document.getElementById('ca-note-${p.k}').style.display=this.checked?'block':'none'" style="width:18px;height:18px"> ${p.label}</label>
+      <textarea class="form-textarea" id="ca-note-${p.k}" placeholder="What should we change in this part?" style="display:none;margin-top:8px;min-height:60px;font-size:14px"></textarea>
+    </div>`).join('');
+  openModal(`<div class="modal-title">Request amendment<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div style="font-size:14px;color:var(--t2);margin-bottom:12px;line-height:1.6">Tick the part(s) of <strong>${c.title}</strong> you'd like us to amend, and tell us what to change.</div>
+    ${rows}
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ac" onclick="submitClientAmend('${id}')">Send to team</button></div>`);
+}
+function submitClientAmend(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const picked=clientAmendParts(c).filter(p=>document.getElementById('ca-chk-'+p.k)?.checked)
+    .map(p=>({...p,note:(document.getElementById('ca-note-'+p.k)?.value||'').trim()}));
+  if(!picked.length){alert('Please tick at least one part to amend.');return;}
+  if(picked.some(p=>!p.note)){alert('Please add a short note for each ticked part.');return;}
+  const today=localISO(new Date());
+  const mainPicked=picked.filter(p=>p.main).sort((a,b)=>a.main-b.main);
+  if(mainPicked.length){c.statusId=mainPicked[0].stage;c.designVideoDone=false;}
+  else c.statusId='copywriting';
+  c.statusHistory.push({statusId:c.statusId,changedBy:S.user.id,changedAt:today});
+  if(picked.some(p=>p.k==='copy')){c.copyStatusId='copywriting';c.copyPendingReview=false;}
+  if(!c.workflowTasks)c.workflowTasks=[];
+  const byPic={};
+  picked.forEach(p=>{
+    const pic=getPIC(data,p.stage,c);
+    (byPic[pic.id]=byPic[pic.id]||{pic,parts:[]}).parts.push(p);
+  });
+  Object.values(byPic).forEach(g=>{
+    notifyRejected(c,g.pic,'Client amendment — '+g.parts.map(p=>p.label).join(' + '),S.user.name+' (client)',g.parts.map(p=>p.label+': '+p.note).join(' | '));
+    const t=c.workflowTasks[c.workflowTasks.length-1];
+    if(t)t.statusId=g.parts[0].stage;
+  });
+  c.assignees=Object.keys(byPic);
+  save(data,id);closeModal();renderPage();
+  alert('Amendment request sent to the team.');
+}
 function openClientContentDetail(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const st=getStatus(data,c.statusId);
@@ -7263,7 +7312,7 @@ function openClientContentDetail(id){
     </div>
     ${c.driveLink?`<div style="margin-bottom:14px"><a href="${c.driveLink}" target="_blank" class="btn btn-info">\uD83D\uDCC1 View Files on Drive</a></div>`:''}
     ${c.copywriting?`<div style="margin-bottom:14px"><div style="font-size:13px;color:var(--t3);margin-bottom:6px">Copywriting</div><div style="background:var(--s2);border-radius:var(--r);padding:12px;font-size:15px;line-height:1.7;white-space:pre-wrap">${c.copywriting}</div></div>`:''}
-    ${c.statusId==='client_approval'?`<div class="modal-actions" style="margin-top:0;padding-top:14px;border-top:1px solid var(--b1)"><button class="btn btn-ghost" onclick="openClientReviseModal('${id}')">Comment</button><button class="btn btn-ac" onclick="clientApprove('${id}')">✓ Approve</button></div>`:''}`
+        ${c.statusId==='client_approval'?`<div class="modal-actions" style="margin-top:0;padding-top:14px;border-top:1px solid var(--b1)"><button class="btn btn-ghost" onclick="openClientReviseModal('${id}')">Comment</button><button class="btn btn-danger" onclick="openClientAmendModal('${id}')">Request Amendment</button><button class="btn btn-ac" onclick="clientApprove('${id}')">✓ Approve</button></div>`:''}`
     ,null,'wide');
 }
 
