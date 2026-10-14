@@ -3406,7 +3406,7 @@ function renderTracker(){
       <td>${statusBadge(st)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
-      <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">Drive ↗</a>`:`<span style="color:var(--t4)">—</span>`}</td>
+            ${dateCell}
       ${canDelete?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--red);opacity:0.7;transition:all .15s" onmouseenter="this.style.opacity=1;this.style.borderColor='var(--red)'" onmouseleave="this.style.opacity=0.7;this.style.borderColor='var(--b2)'" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
   }
@@ -3771,7 +3771,6 @@ function renderBrandPage(){
     <th class="${sortClass('statusId')}" onclick="sortBy('statusId')">Status</th>
     <th class="${sortClass('progress')}" onclick="sortBy('progress')">Progress</th>
     <th class="${sortClass('postingDate')}" onclick="sortBy('postingDate')">Posting date</th>
-    <th>Drive</th>
   <th></th></tr></thead>`;
 
   // Apply sort to contents
@@ -3830,7 +3829,7 @@ function renderBrandPage(){
       <td>${statusBadge(st)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
-      <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
+            ${dateCell}
       ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
   }
