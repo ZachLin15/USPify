@@ -3882,9 +3882,7 @@ function renderBrandPage(){
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${color}11;border-top:2px solid ${color}44;border-bottom:1px solid var(--b1)">
       <span style="font-size:16px">${icon}</span>
       <span style="font-size:13px;font-weight:700;color:${color};font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em">${label}</span>
-            <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${items.length} piece${items.length!==1?'s':''}${quotaN>0?` · quota ${quotaN}`:''}</span>
-    </div>
-    <table class="ctable">${thead}
+      <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${items.length} piece${items.length!==1?'s':''}${quotaN>0?' · quota '+quotaN:''}</span>
     </div>
     <table class="ctable">${thead}<tbody>${sorted.map(c=>makeRowWithType(c)).join('')}</tbody></table>`;
   }
