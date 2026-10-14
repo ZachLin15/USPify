@@ -2751,7 +2751,7 @@ function renderTopbar(){
   }else if(S.page==='tracker'){
     title='Content Tracker';sub='';
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
-  }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).lengthroval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
+    }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).length} items waiting`;}
   else if(S.page==='calendar'){title='My Calendar';sub='Schedule, blocks & tasks';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button>`;}
   else if(S.page==='brand_calendar'){title='Brand Calendar';sub='Content schedule by brand — monthly view';}
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
