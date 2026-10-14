@@ -2420,14 +2420,40 @@ function getStepNumber(data,statusId){
 }
 function getProgress(data,statusId){return getStepNumber(data,statusId);}
 
+function getContentStageIds(c){
+  const copyLane=(c.copyStatusId==='copywriting')?(c.copyPendingReview?'senior_approval_copy':'copywriting'):null;
+  if(c.statusId==='copywriting'||c.statusId==='senior_approval_copy') return [copyLane||c.statusId];
+  const ids=[c.statusId];
+  if(copyLane&&c.statusId!=='client_approval'&&c.statusId!=='posted') ids.push(copyLane);
+  return ids;
+}
+function statusBadges(data,c){
+  if(c.statusId==='client_approval'&&c.clientApproved) return statusBadge({name:'Ready for Posting',color:'#3acca0'});
+  const ids=getContentStageIds(c);
+  if(ids.length<2) return statusBadge(getStatus(data,ids[0]));
+  return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">${ids.map(id=>statusBadge(getStatus(data,id))).join('')}</div>`;
+}
 function getProgressForContent(c){
   if(!c) return 0;
   if(c.statusId==='posted') return 100;
-  const idx=MAIN_STATUS_ORDER.indexOf(c.statusId);
-  if(idx>=0) return Math.round((idx/MAIN_STATUS_ORDER.length)*100);
-  const amendMap={ideation_amendment:0,copy_amendment:56,design_amendment:33};
-  if(amendMap[c.statusId]!==undefined) return amendMap[c.statusId];
-  return 0;
+  const shoot=usesShootFlow(c);
+  const mainStages=shoot?['ideation','senior_approval_ideation','shoot','video_editing','senior_approval_video']:['ideation','senior_approval_ideation','design','senior_approval_video'];
+  const alias={ideation_amendment:'ideation',design_amendment:shoot?'video_editing':'design',senior_approval_design:'senior_approval_video',senior_approval:'senior_approval_video',script:'ideation'};
+  let sid=alias[c.statusId]||c.statusId;
+  if(sid==='copy_amendment') sid='copywriting';
+  const total=mainStages.length+2+1;
+  let main,copy;
+  if(sid==='client_approval'){main=mainStages.length;copy=2;}
+  else if(sid==='copywriting'||sid==='senior_approval_copy'){
+    main=mainStages.length;
+    copy=c.copyStatusId==='approved'?2:(c.copyStatusId==='copywriting'?(c.copyPendingReview?1:0):(sid==='senior_approval_copy'?1:0));
+  } else {
+    main=Math.max(0,mainStages.indexOf(sid));
+    copy=c.copyStatusId==='approved'?2:(c.copyStatusId==='copywriting'?(c.copyPendingReview?1:0):0);
+  }
+  let done=main+copy;
+  if(sid==='client_approval'&&c.clientApproved) done+=0.5;
+  return Math.min(99,Math.round(done/total*100));
 }
 function needsReminder(c){if(c.statusId==='posted')return false;const days=daysUntil(c.postingDate);const prog=getProgressForContent(c);return days<=2&&days>=0&&prog<60;}
 function getProgressFromId(statusId){
@@ -3341,7 +3367,7 @@ function renderTracker(){
   // Always filter by selected month
   contents=contents.filter(c=>c.postingDate&&c.postingDate.startsWith(S.trackerMonth));
   if(S.trackerFilterType!=='all') contents=contents.filter(c=>c.type===S.trackerFilterType);
-  if(S.trackerFilterStatus!=='all') contents=contents.filter(c=>c.statusId===S.trackerFilterStatus);
+    if(S.trackerFilterStatus!=='all') contents=contents.filter(c=>getContentStageIds(c).includes(S.trackerFilterStatus));
 
   const filterRow=`<div class="filter-row" style="flex-wrap:wrap;gap:6px">
     <label style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace">Filter:</label>
@@ -3388,7 +3414,7 @@ function renderTracker(){
   function makeRow(c){
     const st=getStatus(data,c.statusId);
     const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
-    const prog=getProgress(data,c.statusId);
+    const prog=getProgressForContent(c);
     const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
     const dateCell=isSeniorOrAdmin
@@ -3403,7 +3429,7 @@ function renderTracker(){
     return `<tr class="clickable" onclick="openContentDetail('${c.id}')">
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠ 2d</span>`:''}</td>
       <td><div class="av-row">${avs}</div></td>
-      <td>${statusBadge(st)}</td>
+      <td>${statusBadges(data,c)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
       ${canDelete?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:13px;color:var(--red);opacity:0.7;transition:all .15s" onmouseenter="this.style.opacity=1;this.style.borderColor='var(--red)'" onmouseleave="this.style.opacity=0.7;this.style.borderColor='var(--b2)'" title="Delete content">🗑</button></td>`:'<td></td>'}
@@ -3681,7 +3707,7 @@ function renderBrandPage(){
   </div>`;
   if(S.trackerFilterType==='tiktok') contents=contents.filter(c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/tiktok/i)||c.title.match(/^TikTok#/i))));
   else if(S.trackerFilterType!=='all') contents=contents.filter(c=>c.type===S.trackerFilterType);
-  if(S.trackerFilterStatus!=='all')contents=contents.filter(c=>c.statusId===S.trackerFilterStatus);
+    if(S.trackerFilterStatus!=='all')contents=contents.filter(c=>getContentStageIds(c).includes(S.trackerFilterStatus));
   // Always filter by selected month
   const _curM=localYM(new Date());
   if(!S.brandMonthFilter||S.brandMonthFilter==='all') S.brandMonthFilter=_curM;
@@ -3692,7 +3718,7 @@ function renderBrandPage(){
   }else if(S.brandSort==='status'){
     contents=[...contents].sort((a,c2)=>getStepNumber(data,a.statusId)-getStepNumber(data,c2.statusId));
   }else if(S.brandSort==='progress'){
-    contents=[...contents].sort((a,c2)=>getProgress(data,c2.statusId)-getProgress(data,a.statusId));
+        contents=[...contents].sort((a,c2)=>getProgressForContent(c2)-getProgressForContent(a));
   }else if(S.brandSort==='title'){
     contents=[...contents].sort((a,c2)=>naturalCompare(a.title,c2.title)*dir);
   }else{
@@ -3718,7 +3744,7 @@ function renderBrandPage(){
 
   function makeRow(c){
     const st=getStatus(data,c.statusId);const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
-    const prog=getProgress(data,c.statusId);const hasReminder=needsReminder(c);
+        const prog=getProgressForContent(c);const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
     const dateCell=isAdmin
       ?`<td class="due-date${lateClass}" onclick="event.stopPropagation()" style="white-space:nowrap">
@@ -3751,7 +3777,7 @@ function renderBrandPage(){
     return `<tr class="clickable" data-cid="${c.id}" onclick="openContentDetail('${c.id}')">
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠</span>`:''}</td>
       <td><div class="av-row">${avs}</div></td>
-      <td>${statusBadge(st)}</td>
+      <td>${statusBadges(data,c)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
@@ -3786,7 +3812,7 @@ function renderBrandPage(){
   // makeRow with inline type toggle for admin
   function makeRowWithType(c){
     const st=getStatus(data,c.statusId);const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
-    const prog=getProgress(data,c.statusId);const hasReminder=needsReminder(c);
+        const prog=getProgressForContent(c);const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
     const dateCell=isAdmin
       ?`<td class="due-date${lateClass}" onclick="event.stopPropagation()" style="white-space:nowrap">
@@ -3825,7 +3851,7 @@ function renderBrandPage(){
       <td class="piece-name">${c.title}${hasReminder?` <span class="reminder">⚠</span>`:''}</td>
       ${typeCell}
       <td><div class="av-row">${avs}</div></td>
-      <td>${statusBadge(st)}</td>
+      <td>${statusBadges(data,c)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
       ${dateCell}
       ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
