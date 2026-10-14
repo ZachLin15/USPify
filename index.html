@@ -3615,7 +3615,7 @@ function setShootDate(brandId,ym,val){
 function renderShootPlanner(b,data){
   const ym=S.brandMonthFilter||localYM(new Date());
   const vids=data.contents.filter(c=>c.brandId===b.id&&c.jobKind!=='task'&&c.postingDate&&c.postingDate.startsWith(ym)&&usesShootFlow(c))
-    .sort((a,z)=>(a.postingDate||'').localeCompare(z.postingDate||''));
+        .sort((a,z)=>(a.title||'').localeCompare(z.title||'',undefined,{numeric:true,sensitivity:'base'}));
   const PRE=['ideation','script','ideation_amendment','senior_approval_ideation'];
   const isReady=c=>!PRE.includes(c.statusId);
   const ready=vids.filter(isReady).length;
