@@ -3681,13 +3681,6 @@ function renderBrandPage(){
     <select class="filter-select" onchange="S.brandMonthFilter=this.value;renderPage()">
       ${brandAllMonths.map(m=>{const d=new Date(m+'-01');return`<option value="${m}" ${S.brandMonthFilter===m?'selected':''}>${d.toLocaleDateString('en-GB',{month:'short',year:'numeric'})}</option>`;}).join('')}
     </select>
-    <select class="filter-select" onchange="S.brandSort=this.value;renderPage()">
-      <option value="date" ${S.brandSort==='date'?'selected':''}>Sort: Date ↑</option>
-      <option value="date_desc" ${S.brandSort==='date_desc'?'selected':''}>Sort: Date ↓</option>
-      <option value="status" ${S.brandSort==='status'?'selected':''}>Sort: Status</option>
-      <option value="progress" ${S.brandSort==='progress'?'selected':''}>Sort: Progress</option>
-      <option value="title" ${S.brandSort==='title'?'selected':''}>Sort: Title A–Z</option>
-    </select>
     <span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${contents.length} items</span>
   </div>`;
   if(S.trackerFilterType==='tiktok') contents=contents.filter(c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/tiktok/i)||c.title.match(/^TikTok#/i))));
@@ -3764,7 +3757,7 @@ function renderBrandPage(){
       <td><div class="av-row">${avs}</div></td>
       <td>${statusBadge(st)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
-      ${dateCell}${hualuCell}${leonardCell}
+      ${dateCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
       ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
@@ -3781,8 +3774,6 @@ function renderBrandPage(){
     <th class="${sortClass('statusId')}" onclick="sortBy('statusId')">Status</th>
     <th class="${sortClass('progress')}" onclick="sortBy('progress')">Progress</th>
     <th class="${sortClass('postingDate')}" onclick="sortBy('postingDate')">Posting date</th>
-    <th class="${sortClass('hualu')}" onclick="sortBy('hualu')">Design/Edit due</th>
-    <th class="${sortClass('leonard')}" onclick="sortBy('leonard')">Copy/Script due</th>
     <th>Drive</th>
   <th></th></tr></thead>`;
 
@@ -3841,7 +3832,7 @@ function renderBrandPage(){
       <td><div class="av-row">${avs}</div></td>
       <td>${statusBadge(st)}</td>
       <td>${progressBar(prog,st.color,90)}</td>
-      ${dateCell}${hualuCell}${leonardCell}
+      ${dateCell}
       <td>${c.driveLink?`<a href="${c.driveLink}" target="_blank" style="font-size:13px;color:var(--blu)" onclick="event.stopPropagation()">↗</a>`:'—'}</td>
       ${(isAdmin||S.user.role==='senior'||S.user.role==='content_creator')?`<td onclick="event.stopPropagation()"><button onclick="confirmDeleteContent('${c.id}')" style="background:transparent;border:1px solid var(--b2);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:12px;color:var(--red);opacity:0.7" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7" title="Delete content">🗑</button></td>`:'<td></td>'}
     </tr>`;
