@@ -3882,7 +3882,8 @@ function renderBrandPage(){
       const items=brandAll.filter(c=>c.postingDate&&c.postingDate.startsWith(key));
       const total=items.length;
       const posted=items.filter(c=>c.statusId==='posted').length;
-      const inProgress=total-posted;
+      const ready=items.filter(c=>c.statusId==='client_approval'&&c.clientApproved).length;
+      const inProgress=total-posted-ready;
       const overdue=items.filter(c=>isLate(c.postingDate)&&c.statusId!=='posted').length;
       const pct=total?Math.round(posted/total*100):0;
       const label=new Date(key+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
@@ -3894,6 +3895,7 @@ function renderBrandPage(){
         <div class="wl-bar-bg"><div class="wl-bar" style="width:${pct}%;background:var(--ac)"></div></div>
         <div style="display:flex;gap:14px;margin-top:9px;font-size:12px;font-family:'DM Mono',monospace">
           <span style="color:var(--ac)">✓ ${posted} posted</span>
+                    <span style="color:var(--tel)">📮 ${ready} ready for posting</span>
           <span style="color:var(--blu)">${inProgress} in progress</span>
           ${overdue?`<span style="color:var(--red)">⚠ ${overdue} overdue</span>`:''}
           <span style="margin-left:auto;color:var(--t3)">${pct}%</span>
@@ -4000,7 +4002,7 @@ function renderBrandPage(){
 
 
 
-  return sidebarBtn+monthSummary+teamSummary+stats+socialLinks+infoBar+`<div style="overflow-x:auto">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
+    return monthSummary+socialLinks+infoBar+`<div style="overflow-x:auto">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
@@ -7045,7 +7047,7 @@ function renderClientExtras(b,data){
 
 function renderClientApprovals(){
   const data=D();const brandId=S.user.brandId;
-  const pending=data.contents.filter(c=>c.brandId===brandId&&c.statusId==='client_approval');
+    const pending=data.contents.filter(c=>c.brandId===brandId&&c.statusId==='client_approval'&&!c.clientApproved);
   const b=getBrand(data,brandId);
   if(!pending.length){
     return renderClientExtras(b,data)+`<div class="ca-empty">
@@ -7240,8 +7242,18 @@ async function executeSocialPost(){
 }
 function clientApprove(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  c.statusId='posted';c.statusHistory.push({statusId:'posted',changedBy:S.user.id,changedAt:localISO(new Date())});
-  save(data);alert('Content approved! Status updated to Posted.');renderPage();
+  c.clientApproved=true;c.clientApprovedAt=localISO(new Date());
+  if(!c.comments)c.comments=[];
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text:'✅ Client approved — ready for posting',type:'general',createdAt:localISO(new Date()),ts:Date.now()});
+  save(data,id);alert('Content approved! The team will post it.');renderPage();
+}
+async function wfClientApproved(id){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  c.clientApproved=true;c.clientApprovedAt=localISO(new Date());
+  if(!c.comments)c.comments=[];
+  c.comments.push({id:'cm'+uid(),userId:S.user.id,text:'✅ Client approved — ready for posting (marked by '+S.user.name+')',type:'general',createdAt:localISO(new Date()),ts:Date.now()});
+  await saveNow(data,id);renderDetailPage(id);renderSidebar();renderTopbar();
+  showAIToast('📮 Ready for posting');
 }
 function openClientReviseModal(id){
   openModal(`<div class="modal-title">Leave a comment<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -7291,6 +7303,7 @@ function submitClientAmend(id){
   if(mainPicked.length){c.statusId=mainPicked[0].stage;c.designVideoDone=false;}
   else c.statusId='copywriting';
   c.statusHistory.push({statusId:c.statusId,changedBy:S.user.id,changedAt:today});
+  c.clientApproved=false;
   if(picked.some(p=>p.k==='copy')){c.copyStatusId='copywriting';c.copyPendingReview=false;}
   if(!c.workflowTasks)c.workflowTasks=[];
   const byPic={};
@@ -10150,10 +10163,11 @@ function renderWorkflowActionBox(data, c){
   if(st==='client_approval'){
     if(isSenior){
       return withHistory(`<div class="wf-action-box review">
-        <div class="wf-action-title">🤝 Awaiting Client Approval</div>
-        <div class="wf-action-sub">Content sent to client. Add a note below if needed, then mark posted or handle amendment.</div>
+                <div class="wf-action-title">${c.clientApproved?'📮 Ready for Posting':'🤝 Awaiting Client Approval'}</div>
+        <div class="wf-action-sub">${c.clientApproved?'Client has approved. Post it, then mark as posted.':'Content sent to client. Add a note below if needed, then mark posted or handle amendment.'}</div>
         ${reviewCommentBox('Client feedback or internal note…')}
         <div class="wf-action-row" style="margin-top:12px">
+                    ${c.clientApproved?'':`<button class="wf-btn wf-btn-green" onclick="wfClientApproved('${id}')">✅ Client Approved — Ready for Posting</button>`}
           <button class="wf-btn wf-btn-green" onclick="wfMarkPosted('${id}')">🚀 Mark as Posted</button>
                     <button class="wf-btn wf-btn-red" onclick="openClientAmendModal('${id}')">🔄 Client Requested Changes</button>
         </div>
