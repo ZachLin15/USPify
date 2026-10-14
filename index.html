@@ -3876,20 +3876,26 @@ function renderBrandPage(){
     </tr>`;
   }
 
-  function categorySection(label, icon, color, items){
+    function categorySection(label, icon, color, items, quotaN){
     if(!items.length) return '';
     const sorted=sortContents(items);
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${color}11;border-top:2px solid ${color}44;border-bottom:1px solid var(--b1)">
       <span style="font-size:16px">${icon}</span>
       <span style="font-size:13px;font-weight:700;color:${color};font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em">${label}</span>
-      <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${items.length} piece${items.length!==1?'s':''}</span>
+            <span style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${items.length} piece${items.length!==1?'s':''}${quotaN>0?` · quota ${quotaN}`:''}</span>
+    </div>
+    <table class="ctable">${thead}
     </div>
     <table class="ctable">${thead}<tbody>${sorted.map(c=>makeRowWithType(c)).join('')}</tbody></table>`;
   }
 
   // Group by category: Wall Posts, Video Ads, TikTok Content, Other
   const isTiktok=c=>c.cat==='tiktok'||((!c.cat)&&(c.title.match(/^TikTok#/i)||c.title.match(/tiktok/i)));
-  const wallPosts=contents.filter(c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i)));
+    // Quota in Brand Settings decides which groups exist: a piece tagged Video Ads / TikTok
+  // when that quota is 0 is shown under Wall Posts — unless someone added it manually.
+  const _qb=b.quotaBreakdown||{};const _hasQ=Object.values(_qb).some(v=>v>0);
+  const _quotaOff=k=>_hasQ&&!(_qb[k]>0);
+  const wallPosts=contents.filter(c=>c.cat==='wallPost'||((!c.cat)&&c.title.match(/^WP#/i))||(!c.addedManually&&((c.cat==='videoAds'&&_quotaOff('videoAds'))||(c.cat==='tiktok'&&_quotaOff('tiktok')))));
   const videoAds=contents.filter(c=>!wallPosts.includes(c)&&(c.cat==='videoAds'||((!c.cat)&&c.title.match(/^Ad#/i))));
   const tiktokContent=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&isTiktok(c));
   const other=contents.filter(c=>!wallPosts.includes(c)&&!videoAds.includes(c)&&!tiktokContent.includes(c));
@@ -4037,11 +4043,11 @@ function renderBrandPage(){
 
 
       return monthSummary+socialLinks+infoBar+`<div class="hscroll">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
-    ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts)}
+    ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts,_qb.wallPost)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
-    ${categorySection('Video Ads','📢','#ff9f43',videoAds)}
+    ${categorySection('Video Ads','📢','#ff9f43',videoAds,_qb.videoAds)}
     ${hasSep(videoAds,tiktokContent)||hasSep(videoAds,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
-    ${categorySection('TikTok Content','🎵','#3acca0',tiktokContent)}
+    ${categorySection('TikTok Content','🎵','#3acca0',tiktokContent,_qb.tiktok)}
     ${hasSep(tiktokContent,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Other','🎬','var(--amb)',other)}
     ${!contents.length?`<div class="empty-msg" style="padding:20px">No content for this month</div>`:''}
@@ -11336,7 +11342,7 @@ function saveNewContent(){
     statusId,label:getStatus(data,statusId).name,openedAt:today
   }));
   data.contents.push({
-    id:newId,brandId,title,type,cat,assignees,statusId,postingDate,driveLink,
+        id:newId,brandId,title,type,cat,addedManually:true,assignees,statusId,postingDate,driveLink,
     copywriting:'',comments:[],
     statusHistory:[{statusId,changedBy:S.user.id,changedAt:today}],
     dueDates:{
