@@ -2433,6 +2433,24 @@ function statusBadges(data,c){
   if(ids.length<2) return statusBadge(getStatus(data,ids[0]));
   return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">${ids.map(id=>statusBadge(getStatus(data,id))).join('')}</div>`;
 }
+function needsSeniorApproval(c){
+  return ['senior_approval','senior_approval_ideation','senior_approval_video','senior_approval_copy'].includes(c.statusId)||getContentStageIds(c).includes('senior_approval_copy');
+}
+function getDisplayStatus(data,c){
+  if(c.statusId==='client_approval'&&c.clientApproved) return {...getStatus(data, c.statusId),name:'Ready for Posting',color:'#3acca0'};
+  const ids=getContentStageIds(c);
+  const base=getStatus(data, c.statusId);
+  if(ids.length<2&&ids[0]===c.statusId) return base;
+  return {...base,name:ids.map(id=>getStatus(data,id).name).join(' + '),color:getStatus(data,ids[0]).color};
+}
+function getLiveAssigneeIds(data,c){
+  if(c.jobKind==='task') return c.assignees||[];
+  if(c.statusId==='posted') return [];
+  const shoot=usesShootFlow(c);
+  const alias={ideation_amendment:'ideation',design_amendment:shoot?'video_editing':'design',copy_amendment:'copywriting'};
+  const ids=getContentStageIds(c).map(sid=>(getPIC(data,alias[sid]||sid,c)||{}).id).filter(Boolean);
+  return [...new Set(ids)];
+}
 function getProgressForContent(c){
   if(!c) return 0;
   if(c.statusId==='posted') return 100;
@@ -2630,9 +2648,9 @@ function renderSidebar(){
       <div class="sb-footer"><div class="user-chip"><div class="uav" style="background:${(S.user.color||'#ff5a5a')}22;color:${S.user.color||'#ff5a5a'}">${S.user.init||S.user.name?.slice(0,2)||'C'}</div><div class="u-info"><div class="u-name">${S.user.name}</div><div class="u-role">Client</div></div><button class="logout-btn" onclick="doLogout()">out</button></div></div>`;
     return;
   }
-  const apprCount=data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length;
+  const apprCount=data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).length;
   const remind=data.contents.filter(c=>needsReminder(c)).length;
-  const clientPostCount=data.contents.filter(c=>c.statusId==='client_approval').length;
+    const clientPostCount=data.contents.filter(c=>c.statusId==='client_approval'&&c.clientApproved).length;
     const isFreelancer=S.user.role==='freelancer';
   const pages=[
     {id:'dashboard',label:'Dashboard',icon:'<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>'},
@@ -2733,7 +2751,7 @@ function renderTopbar(){
   }else if(S.page==='tracker'){
     title='Content Tracker';sub='';
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
-  }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>c.statusId==='senior_approval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
+  }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).lengthroval'||c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='client_approval').length} items waiting`;}
   else if(S.page==='calendar'){title='My Calendar';sub='Schedule, blocks & tasks';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button>`;}
   else if(S.page==='brand_calendar'){title='Brand Calendar';sub='Content schedule by brand — monthly view';}
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
@@ -2989,7 +3007,7 @@ function renderJobTodoList(){
       </div>
       ${allJobs.map(({c,type})=>{
         const b=getBrand(data,c.brandId);
-        const st=getStatus(data,c.statusId);
+        const st=getDisplayStatus(data,c);
         const dueDate=getTaskDueDate(c,uid,data);
         const isLate=dueDate&&dueDate<today;
         const daysLeft=dueDate?Math.round((new Date(dueDate)-new Date(today))/(1000*60*60*24)):null;
@@ -3138,7 +3156,7 @@ function renderDashboard(){
   const remHTML=reminders.length?`<div class="panel" style="border-color:var(--red)">
     <div class="ph"><div class="ph-title" style="color:var(--red)">⏰ Deadline Alerts</div><div class="ph-sub">${reminders.length} item${reminders.length!==1?'s':''} due within 5 days</div></div>
     <div class="pb">${reminders.map(c=>{
-      const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);const days=daysUntil(c.postingDate);
+      const b=getBrand(data,c.brandId);const st=getDisplayStatus(data,c);const days=daysUntil(c.postingDate);
       const prog=getProgressForContent(c);
       const urgColor=days===0?'var(--red)':days<=2?'var(--red)':days<=4?'var(--amb)':'var(--blu)';
       const countdownLabel=days===0?'TODAY!':days===1?'Tomorrow':days+'d left';
@@ -3254,7 +3272,7 @@ function renderDashboard(){
   // ── Deadline alerts column content ──────────────────────────────────────
   const deadlineColContent=reminders.length
     ? reminders.map(c=>{
-        const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+        const b=getBrand(data,c.brandId);const st=getDisplayStatus(data,c);
         const days=daysUntil(c.postingDate);const prog=getProgressForContent(c);
         const urgColor=days===0?'var(--red)':days<=2?'var(--red)':days<=4?'var(--amb)':'var(--blu)';
         return `<div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--b1)">
@@ -3400,7 +3418,7 @@ function renderTracker(){
   const tsort=S.trackerSort||'brand';
   if(tsort==='date') contents=[...contents].sort((a,b)=>(!a.postingDate?1:!b.postingDate?-1:a.postingDate.localeCompare(b.postingDate)));
   else if(tsort==='date_desc') contents=[...contents].sort((a,b)=>(!a.postingDate?1:!b.postingDate?-1:b.postingDate.localeCompare(a.postingDate)));
-  else if(tsort==='status') contents=[...contents].sort((a,b)=>getStepNumber(data,a.statusId)-getStepNumber(data,b.statusId));
+  else if(tsort==='status') contents=[...contents].sort((a,b)=>getProgressForContent(a)-getProgressForContent(b));
   else if(tsort==='title') contents=[...contents].sort((a,b)=>naturalCompare(a.title,b.title));
   else contents=[...contents].sort((a,b)=>{// brand → type → date
     const ba=getBrand(data,a.brandId).name;const bb=getBrand(data,b.brandId).name;
@@ -3412,8 +3430,8 @@ function renderTracker(){
   // Build table row for a single content piece (no Type column)
   const isSeniorOrAdmin=isAdminUser(S.user)||S.user.role==='senior';
   function makeRow(c){
-    const st=getStatus(data,c.statusId);
-    const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
+    const st=getDisplayStatus(data,c);
+    const avs=getLiveAssigneeIds(data,c).map(uid=>userAvatar(getUser(data,uid))).join('');
     const prog=getProgressForContent(c);
     const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
@@ -3716,7 +3734,7 @@ function renderBrandPage(){
   if(S.brandSort==='date'||S.brandSort==='date_desc'){
     contents=[...contents].sort((a,c2)=>(!a.postingDate?1:!c2.postingDate?-1:a.postingDate.localeCompare(c2.postingDate)*dir));
   }else if(S.brandSort==='status'){
-    contents=[...contents].sort((a,c2)=>getStepNumber(data,a.statusId)-getStepNumber(data,c2.statusId));
+    contents=[...contents].sort((a,c2)=>getProgressForContent(a)-getProgressForContent(c2));
   }else if(S.brandSort==='progress'){
         contents=[...contents].sort((a,c2)=>getProgressForContent(c2)-getProgressForContent(a));
   }else if(S.brandSort==='title'){
@@ -3743,7 +3761,7 @@ function renderBrandPage(){
   const isAdmin=isAdminUser(S.user)||S.user.role==='developer';
 
   function makeRow(c){
-    const st=getStatus(data,c.statusId);const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
+    const st=getDisplayStatus(data,c);const avs=getLiveAssigneeIds(data,c).map(uid=>userAvatar(getUser(data,uid))).join('');
         const prog=getProgressForContent(c);const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
     const dateCell=isAdmin
@@ -3802,8 +3820,8 @@ function renderBrandPage(){
   const sortContents=(arr)=>{
     const {col,dir}=S.brandTableSort;const m=dir==='asc'?1:-1;
     return [...arr].sort((a,b)=>{
-      const va=col==='title'?a.title:col==='type'?a.type:col==='statusId'?MAIN_STATUS_ORDER.indexOf(a.statusId):col==='progress'?getProgressForContent(a):col==='postingDate'?a.postingDate||'':col==='hualu'?a.dueDates?.hualu||'':col==='leonard'?a.dueDates?.leonard||'':'';
-      const vb=col==='title'?b.title:col==='type'?b.type:col==='statusId'?MAIN_STATUS_ORDER.indexOf(b.statusId):col==='progress'?getProgressForContent(b):col==='postingDate'?b.postingDate||'':col==='hualu'?b.dueDates?.hualu||'':col==='leonard'?b.dueDates?.leonard||'':'';
+      const va=col==='title'?a.title:col==='type'?a.type:col==='statusId'?getProgressForContent(a):col==='progress'?getProgressForContent(a):col==='postingDate'?a.postingDate||'':col==='hualu'?a.dueDates?.hualu||'':col==='leonard'?a.dueDates?.leonard||'':'';
+      const vb=col==='title'?b.title:col==='type'?b.type:col==='statusId'?getProgressForContent(b):col==='progress'?getProgressForContent(b):col==='postingDate'?b.postingDate||'':col==='hualu'?b.dueDates?.hualu||'':col==='leonard'?b.dueDates?.leonard||'':'';
       if(typeof va==='number') return (va-vb)*m;
       return va.localeCompare(vb)*m;
     });
@@ -3811,7 +3829,7 @@ function renderBrandPage(){
 
   // makeRow with inline type toggle for admin
   function makeRowWithType(c){
-    const st=getStatus(data,c.statusId);const avs=c.assignees.map(uid=>userAvatar(getUser(data,uid))).join('');
+    const st=getDisplayStatus(data,c);const avs=getLiveAssigneeIds(data,c).map(uid=>userAvatar(getUser(data,uid))).join('');
         const prog=getProgressForContent(c);const hasReminder=needsReminder(c);
     const lateClass=isLate(c.postingDate)&&c.statusId!=='posted'?' late':'';
     const dateCell=isAdmin
@@ -3958,7 +3976,7 @@ function renderBrandPage(){
     if(!uids.length) return `<div class="panel" style="padding:14px 16px;margin-bottom:16px">${panelHead}<div class="empty-msg" style="padding:10px 0">Nothing due ${monthLabel} yet</div></div>`;
 
     const chipsFor=(items)=>items.length?items.map(c=>{
-      const st=getStatus(data,c.statusId);
+      const st=getDisplayStatus(data,c);
       return `<span onclick="openContentDetail('${c.id}')" title="${st.name} · due ${fmt(c.postingDate)}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:var(--s2);border:1px solid var(--b2);font-size:12px;font-family:'DM Mono',monospace;color:var(--t1)">
         <span style="width:7px;height:7px;border-radius:50%;background:${st.color};flex-shrink:0"></span>${c.title}
       </span>`;
@@ -4050,7 +4068,7 @@ function renderBrandMiniCalendar(b,data){
     cells+=`<div style="min-height:64px;border:1px solid var(--b1);border-radius:6px;padding:4px;${isToday?'border-color:var(--ac);background:var(--acd,rgba(200,240,74,0.06));':''}">
       <div style="font-size:11px;color:${isToday?'var(--ac)':'var(--t3)'};font-family:'DM Mono',monospace;font-weight:${isToday?'700':'400'}">${d}</div>
       ${dayItems.slice(0,3).map(c=>{
-        const st=getStatus(data,c.statusId);
+        const st=getDisplayStatus(data,c);
                 return `<div onclick="openContentDetail('${c.id}')" title="${c.title} — ${st.name}" style="font-size:12px;background:${st.color}22;color:${st.color};border-left:2px solid ${st.color};padding:1px 4px;margin-top:2px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4">${c.title}</div>`;
       }).join('')}
       ${dayItems.length>3?`<div style="font-size:9px;color:var(--t4);margin-top:1px">+${dayItems.length-3} more</div>`:''}
@@ -4129,17 +4147,13 @@ function renderApprovals(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
   // Catch ALL senior approval statuses
-  const sa=data.contents.filter(c=>
-    c.statusId==='senior_approval'||
-    c.statusId==='senior_approval_ideation'||
-    c.statusId==='senior_approval_video'||
-    c.statusId==='senior_approval_copy'
-  );
-  const ca=data.contents.filter(c=>c.statusId==='client_approval');
+    const sa=data.contents.filter(c=>needsSeniorApproval(c));
+  const ca=data.contents.filter(c=>c.statusId==='client_approval'&&!c.clientApproved);
+  const isCopyLane=c=>c.statusId!=='senior_approval_copy'&&getContentStageIds(c).includes('senior_approval_copy');
   function apprItem(c,nextId,label){
     const b=getBrand(data,c.brandId);const last=c.statusHistory[c.statusHistory.length-1];
     const submitter=last?getUser(data,last.changedBy):{name:'?'};
-    const stLabel=c.statusId==='senior_approval_ideation'?'Ideation':
+    const stLabel=isCopyLane(c)?'Copy':c.statusId==='senior_approval_ideation'?'Ideation':
                   c.statusId==='senior_approval_video'?'Video/Design':
                   c.statusId==='senior_approval_copy'?'Copy':
                   c.statusId==='senior_approval'?'Design':'';
@@ -4157,9 +4171,9 @@ function renderApprovals(){
         <textarea id="appr-note-${c.id}" placeholder="Leave a review note (optional)..." style="width:100%;min-height:56px;font-size:13px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);padding:8px 10px;color:var(--t1);font-family:'DM Mono',monospace;resize:vertical;box-sizing:border-box" onfocus="this.style.borderColor='var(--ac)'" onblur="this.style.borderColor='var(--b2)'"></textarea>
       </div>
       <div class="appr-actions" style="justify-content:flex-end">
-        <button class="btn-approve" onclick="approveWithNote('${c.id}','${nextId}')">${label}</button>
+                <button class="btn-approve" onclick="${nextId==='copylane'?`openContentDetail('${c.id}','dp-copy')`:nextId==='ready'?`wfClientApproved('${c.id}')`:`approveWithNote('${c.id}','${nextId}')`}">${label}</button>
         ${c.statusId==='client_approval'?`<button class="btn btn-info btn-sm" onclick="postToFacebook('${c.id}')" title="Post via FB Graph API">📘 Post to FB</button>`:''}
-        <button class="btn-revise" onclick="reviseWithNote('${c.id}')">Request Revision</button>
+                ${nextId==='copylane'?'':`<button class="btn-revise" onclick="reviseWithNote('${c.id}')">Request Revision</button>`}
         <button class="btn btn-ghost btn-sm" onclick="openContentDetail('${c.id}')">Open →</button>
       </div>
     </div>`;
@@ -4167,10 +4181,10 @@ function renderApprovals(){
   return `<div class="two-col">
     <div class="panel"><div class="ph"><div class="ph-title" style="color:var(--amb)">Senior Approval</div><div class="ph-sub">${sa.length} pending</div></div>
     <div class="pb">${sa.length?sa.map(c=>{
-      const nextId=c.statusId==='senior_approval_ideation'?'design':
+      const nextId=isCopyLane(c)?'copylane':c.statusId==='senior_approval_ideation'?'design':
                    c.statusId==='senior_approval_video'?'copywriting':
                    'client_approval';
-      const label=c.statusId==='senior_approval_ideation'?'Approve Ideation →':
+      const label=isCopyLane(c)?'Review Copy →':c.statusId==='senior_approval_ideation'?'Approve Ideation →':
                   c.statusId==='senior_approval_video'?'Approve Design →':
                   c.statusId==='senior_approval_copy'?'Approve Copy →':
                   'Approve →';
@@ -4180,7 +4194,7 @@ function renderApprovals(){
     <div class="pb">${ca.length?ca.map(c=>{
       const clientEntry=c.statusHistory.slice().reverse().find(h=>h.statusId==='client_approval');
       const mover=clientEntry?getUser(data,clientEntry.changedBy):{name:'?'};
-      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c,'posted','Mark Posted')}</div>`;
+      return `<div style="margin-bottom:6px"><div class="client-appr-banner">Sent to client by <strong>${mover.name}</strong> on ${clientEntry?fmt(clientEntry.changedAt):''}</div>${apprItem(c,'ready','✅ Client Approved')}</div>`;
     }).join(''):`<div class="empty-msg">All clear</div>`}</div></div>
     </div>`;
 }
@@ -4188,7 +4202,7 @@ function renderApprovals(){
 function renderClientPost(){
   if(S.user.role!=='admin'&&S.user.role!=='senior')return'<div class="empty-msg">Admin only.</div>';
   const data=D();
-  const items=data.contents.filter(c=>c.statusId==='client_approval');
+    const items=data.contents.filter(c=>c.statusId==='client_approval'&&c.clientApproved);
   if(!items.length){
     return `<div style="text-align:center;padding:64px 24px">
       <div style="font-size:52px;margin-bottom:16px">📭</div>
@@ -4682,7 +4696,7 @@ function renderCalTodoLayout(data,mainGrid,todayStr){
     .slice(0,30);
   const todoListHTML=todoItems.length?todoItems.map(c=>{
     const b=getBrand(data,c.brandId);
-    const st=getStatus(data,c.statusId);
+    const st=getDisplayStatus(data,c);
     const isLate=c.postingDate&&c.postingDate<todayStr;
     return `<div class="cal-todo-item" draggable="true"
       ondragstart="calTodoDragStart(event,'${c.id}')"
@@ -4801,7 +4815,7 @@ function calDropTodoMonth(e,dateStr){
   const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c) return;
   const dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
   if(dueDate&&dateStr>dueDate){alert('Cannot schedule after the due date ('+dueDate+').');return;}
-  const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+  const b=getBrand(data,c.brandId);const st=getDisplayStatus(data,c);
   openModal(`<div class="modal-title">📌 Schedule on ${dateStr}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="padding:10px 14px;background:${st.color}18;border-radius:var(--r);margin-bottom:14px;border-left:3px solid ${st.color}">
       <div style="font-size:15px;font-weight:700">${c.title}</div>
@@ -4919,7 +4933,7 @@ function renderBrandCalendar(){
           <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:5px;${isT?'background:var(--ac);color:#0f0f11':'color:var(--t2)'}">${d.getDate()}</div>
           ${shown.map(c=>{
             const b=getBrand(data,c.brandId);
-            const st=getStatus(data,c.statusId);
+            const st=getDisplayStatus(data,c);
             return `<div onclick="openContentDetail('${c.id}')" style="font-size:11px;padding:2px 4px 2px 5px;border-radius:4px;background:${b.color}18;color:${b.color};border-left:3px solid ${b.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;cursor:pointer;font-weight:600;line-height:1.5;display:flex;align-items:center;gap:4px" title="${c.title} — ${b.name} [${st.name}]" draggable="true" ondragstart="calDragStart(event,'${c.id}')"><span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:${st.color};display:inline-block"></span><span style="overflow:hidden;text-overflow:ellipsis">${c.title}</span></div>`;
           }).join('')}
           ${more>0?`<div style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;cursor:pointer" onclick="S.brandCalDate='${ds}';renderPage()">+${more} more</div>`:''}
@@ -5123,7 +5137,7 @@ function calDropTodo(e, dateStr, hour, slotEl){
   const _dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
   if(_dueDate&&dateStr>_dueDate){alert('Cannot schedule after the due date ('+_dueDate+').');return;}
   const b=getBrand(data,c.brandId);
-  const st=getStatus(data,c.statusId);
+  const st=getDisplayStatus(data,c);
   const endHour=Math.min(hour+2, HOURS_RANGE_END);
   const hourFmt=h=>h<12?`${h}:00 AM`:h===12?'12:00 PM':`${h-12}:00 PM`;
   const hourOpts=Array.from({length:HOURS_RANGE_END-HOURS_RANGE_START},(_,i)=>{const h=HOURS_RANGE_START+i;return`<option value="${h}" ${h===hour?'selected':''}>${hourFmt(h)}</option>`;}).join('');
@@ -5157,7 +5171,7 @@ function calDropConfirm(contentId, dateStr){
     const dueDate=c.dueDates?.[S.user.id]||c.postingDate||'';
   if(dueDate&&dateStr>dueDate){alert('Cannot schedule after the due date ('+dueDate+').');return;}
   const b=getBrand(data,c.brandId);
-  const st=getStatus(data,c.statusId);
+  const st=getDisplayStatus(data,c);
   // Create a schedule block for this time slot — the deadline itself is never touched
   if(!Array.isArray(data.scheduleBlocks)) data.scheduleBlocks=[];
   data.scheduleBlocks.push({
@@ -6595,7 +6609,7 @@ function renderResponsibilities(){
                     <div style="font-size:13px;color:${picUser.color};font-family:'DM Mono',monospace;padding:4px 6px">${picUser.name}</div>
         </td>`;
       }).join('');
-      const st=getStatus(data,c.statusId);
+      const st=getDisplayStatus(data,c);
       return `<tr>
         <td style="padding:7px 10px;border-bottom:1px solid var(--b1);min-width:180px;max-width:220px">
           <div style="font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openContentDetail('${c.id}')" title="${c.title}">${c.title}</div>
@@ -7386,7 +7400,7 @@ async function submitClientAmend(id){
 }
 function openClientContentDetail(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const st=getStatus(data,c.statusId);
+  const st=getDisplayStatus(data,c);
   openModal(`<div class="modal-title">${c.title}<button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div><div style="font-size:13px;color:var(--t3);margin-bottom:5px">Status</div>${statusBadge(st)}</div>
@@ -7618,7 +7632,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
 }
 function renderDetailPage(id, forceTab){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const b=getBrand(data,c.brandId);const st=getStatus(data,c.statusId);
+  const b=getBrand(data,c.brandId);const st=getDisplayStatus(data,c);
   const isAdmin=isAdminUser(S.user);
   const prog=getProgressForContent(c);
   const days=daysUntil(c.postingDate);
@@ -7755,7 +7769,7 @@ function renderDetailPage(id, forceTab){
   } // end else (not task kind)
 
   // --- SIDE PANEL (right) ---
-  const avs=c.assignees.map(uid=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1)">${userAvatar(getUser(data,uid),26)}<span style="font-size:15px;font-weight:600">${getUser(data,uid).name}</span><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${getUser(data,uid).title||getUser(data,uid).role}</span></div>`).join('');
+  const avs=getLiveAssigneeIds(data,c).map(uid=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1)">${userAvatar(getUser(data,uid),26)}<span style="font-size:15px;font-weight:600">${getUser(data,uid).name}</span><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${getUser(data,uid).title||getUser(data,uid).role}</span></div>`).join('');
   const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
   const wfActionBox=renderWorkflowActionBox(data,c);
   document.getElementById('detail-side').innerHTML=`
@@ -7964,7 +7978,7 @@ function openReverseFlowConfirm(id){
   }
   // Developer account: skip confirmation, reverse instantly
   if(S.user.id==='developer'){
-    const cur=getStatus(data,c.statusId);const prev=getStatus(data,prevStatusId);
+    const cur=getDisplayStatus(data,c);const prev=getStatus(data,prevStatusId);
     const today=localISO(new Date());
     const picUser=getPIC(data,prevStatusId,c);
     c.statusId=prevStatusId;
@@ -7976,7 +7990,7 @@ function openReverseFlowConfirm(id){
     showAIToast(`⬅ [DEV] Reversed to ${prev.name}`);
     return;
   }
-  const cur=getStatus(data,c.statusId);
+  const cur=getDisplayStatus(data,c);
   const prev=getStatus(data,prevStatusId);
   openModal(`
     <div class="modal-title" style="color:var(--red)">⬅ Reverse Flow — Confirm<button class="modal-close" onclick="closeModal()">×</button></div>
@@ -8000,7 +8014,7 @@ function executeReverseFlow(id, prevStatusId){
   const reason=document.getElementById('reverse-reason')?.value.trim();
   if(!reason){alert('Please enter a reason for reversing the flow.');return;}
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
-  const cur=getStatus(data,c.statusId);
+  const cur=getDisplayStatus(data,c);
   const prev=getStatus(data,prevStatusId);
   const today=localISO(new Date());
   // Determine PIC of the previous status to re-assign
@@ -8102,7 +8116,7 @@ function submitCopyForReview(id,verIdx){
   v[verIdx].pendingReview=true;v[verIdx].submittedBy=S.user.name;v[verIdx].submittedAt=localISO(new Date());
   if(!v[verIdx].approvals)v[verIdx].approvals=[];
   v[verIdx].approvals.push({userId:S.user.id,status:'pending',note:`${v[verIdx].label} submitted by ${S.user.name}`,date:localISO(new Date())});
-  c.copyVersions=v;c.copyPendingReview=true;
+  c.copyVersions=v;c.copyPendingReview=true;c.seniorNotifDismissed={};
   if(!c.comments)c.comments=[];
   c.comments.push({id:'cm'+uid(),userId:S.user.id,text:`✍️ Copy ${v[verIdx].label} submitted for senior review by ${S.user.name}`,type:'copy',createdAt:localISO(new Date())});
   save(data);const panel=document.getElementById('dp-copy');if(panel)panel.innerHTML=renderCopywritingPanel(c,id);renderTopbar();
@@ -13251,7 +13265,7 @@ function getAlertItems(data){
   // All senior approval notifications for Jack (senior)
   if(role==='senior'||role==='admin'){
     data.contents.filter(c=>
-      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')
+      needsSeniorApproval(c)
       &&!(c.seniorNotifDismissed||{})[uid]
     ).forEach(c=>{if(!items.find(x=>x.id===c.id))items.push(c);});
   }
@@ -13291,7 +13305,7 @@ function getNotifCount(data){
   }
   // Senior approval
   if(role==='senior'||role==='admin')
-    data.contents.filter(c=>(c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')&&!(c.seniorNotifDismissed||{})[uid]).forEach(add);
+    data.contents.filter(c=>needsSeniorApproval(c)&&!(c.seniorNotifDismissed||{})[uid]).forEach(add);
   // Amendment workflowTasks — only count if NOT already counted above
   data.contents.filter(c=>!(c.amendNotifDismissed||{})[uid]&&(c.workflowTasks||[]).some(t=>t.assigneeId===uid&&t.status==='open'&&(t.label||'').toLowerCase().includes('amendment'))).forEach(add);
   // Deletions (each entry counts separately, not a content item)
@@ -13506,7 +13520,7 @@ function renderNotifPanel(){
   // ── 3. SENIOR REVIEW NOTIFICATIONS for Jack/senior ──────────────────────
   if(role==='senior'||role==='admin'){
     const reviewItems=data.contents.filter(c=>
-      (c.statusId==='senior_approval_ideation'||c.statusId==='senior_approval_video'||c.statusId==='senior_approval_copy'||c.statusId==='senior_approval')&&
+      needsSeniorApproval(c)&&
       !(c.seniorNotifDismissed||{})[uid]
     );
     // Icons only — names come from data.statuses so this can't go stale like the
@@ -13710,7 +13724,7 @@ function sendSingleReminder(contentId){
   const b=getBrand(data,c.brandId);
   const prog=getProgressForContent(c);
   const days=daysUntil(c.postingDate);
-  const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
+  const assigneeNames=getLiveAssigneeIds(data,c).map(uid=>getUser(data,uid).name).join(', ');
   const msg=encodeURIComponent(
     `\uD83D\uDD14 *USPify Reminder*\n\n`+
     `\uD83D\uDCCC *${c.title}*\n`+
@@ -13732,7 +13746,7 @@ function sendAllReminders(){
     const b=getBrand(data,c.brandId);
     const prog=getProgressForContent(c);
     const days=daysUntil(c.postingDate);
-    const assigneeNames=c.assignees.map(uid=>getUser(data,uid).name).join(', ');
+    const assigneeNames=getLiveAssigneeIds(data,c).map(uid=>getUser(data,uid).name).join(', ');
     return `\u2022 ${c.title} (${b.name}) \u2014 ${prog}% \u2014 ${days<0?Math.abs(days)+'d overdue':days+'d left'} \u2014 Team: ${assigneeNames}`;
   }).join('\n');
   const msg=encodeURIComponent(
