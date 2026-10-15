@@ -6710,12 +6710,7 @@ function renderResponsibilities(){
     let wfSettingsHTML='';
   try{wfSettingsHTML=renderWfReviewerSettings(data);}catch(e){console.error('renderWfReviewerSettings error:',e);wfSettingsHTML='';}
   return `<div style="max-width:1200px">
-    ${wfSettingsHTML}
-    <div style="margin-bottom:14px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac);border-radius:var(--r);font-size:14px;color:var(--ac);font-family:'DM Mono',monospace">
-      🎯 Assign a PIC (Person In Charge) per stage per content piece. Leave as "Default" to use the role-based fallback.
-    </div>
-    ${brandFilter}
-    ${brandSections||`<div class="empty-msg">No active content for this brand.</div>`}
+        ${wfSettingsHTML}
   </div>`;
 }
 
