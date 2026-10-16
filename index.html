@@ -7522,6 +7522,76 @@ function getFlowCurrentIndex(flow, statusHistory, currentStatusId){
   }
   return lastMatched;
 }
+// ===== Shoot readiness + video-editor WhatsApp brief =====
+function getShootStats(data,c){
+  const ym=(c.postingDate||'').slice(0,7);
+  const PRE=['ideation','script','ideation_amendment','senior_approval_ideation'];
+  const vids=data.contents.filter(x=>x.brandId===c.brandId&&x.jobKind!=='task'&&x.postingDate&&x.postingDate.startsWith(ym)&&usesShootFlow(x));
+  const ready=vids.filter(x=>!PRE.includes(x.statusId)).length;
+  return {ready,total:vids.length};
+}
+function _wEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function buildEditorMsg(data,c,editorName){
+  const b=getBrand(data,c.brandId);
+  const vers=getIdeationVersions(c);
+  const ver=[...vers].reverse().find(v=>v.approval&&v.approval.status==='approved')||vers[vers.length-1]||{};
+  const m1=((ver.paragraph||'')+' '+(ver.videoScript||'')).match(/https?:\/\/docs\.google\.com\/document\/[^\s]+/);
+    const scriptLink=c.scriptDocUrl||(m1?m1[0]:'(script link not added yet)');
+  const list=(arr,none)=>arr.length?arr.join('\n'):none;
+  const footage=list((getFootageItems(c)||[]).map(it=>it.url).filter(Boolean),'(footage link not added yet)');
+  const broll=list((c.brollItems||[]).map(it=>it.url).filter(Boolean),'(no B-roll)');
+    const ref=[(ver.refVideoNote||'').trim(),c.refDocUrl].filter(Boolean).join('\n')||'(no reference added)';
+    const upload=c.editFolderUrl||c.driveLink||'(upload link not added yet)';
+  const due=c.dueDates&&c.dueDates.hualu?fmtFull(c.dueDates.hualu):'TBC';
+  return `Hi ${editorName||'there'}, 👋\n\nNew video to edit for *${b.name}*:\n\n`+
+    `🎬 *Title:* ${c.title}\n\n`+
+    `📝 *Script:*\n${scriptLink}\n\n`+
+    `🎥 *Footage:*\n${footage}\n\n`+
+    `🎞 *B-roll:*\n${broll}\n\n`+
+    `💡 *Editing reference:*\n${ref}\n\n`+
+    `📤 *Upload the edited video here:*\n${upload}\n\n`+
+    `⏰ *Deadline:* ${due}\n\n`+
+    `Thank you! 🙏\n— ${S.user.name}`;
+}
+function renderEditorBriefBox(data,c,id){
+  if(!usesShootFlow(c)||c.statusId!=='video_editing')return '';
+  if(S.user.role==='client'||S.user.role==='freelancer')return '';
+  const eds=data.users.filter(u=>u.role==='freelancer');
+  const ed=eds.find(u=>u.id===c.editorFreelancerId)||null;
+  const phone=(ed&&ed.whatsapp)||c.editorPhone||'';
+  const msg=(c.editorMsg!=null&&c.editorMsg!=='')?c.editorMsg:buildEditorMsg(data,c,ed?ed.name:'');
+  return `<div class="side-section">
+    <div class="side-label">✂️ Brief video editor</div>
+    <select class="form-select" style="font-size:14px;margin-bottom:8px" onchange="setEditorFreelancer('${id}',this.value)">
+      <option value="">— Select freelance editor —</option>
+      ${eds.map(u=>`<option value="${u.id}" ${ed&&ed.id===u.id?'selected':''}>${_wEsc(u.name)}</option>`).join('')}
+    </select>
+    <input class="form-input" id="ed-phone-${id}" type="tel" placeholder="WhatsApp number e.g. 60123456789" value="${_wEsc(phone)}" onchange="saveEditorPhone('${id}',this.value)" style="font-size:14px;padding:6px 10px;margin-bottom:8px">
+    <textarea class="form-textarea" id="ed-msg-${id}" onchange="saveEditorMsg('${id}',this.value)" style="min-height:230px;font-size:13px;line-height:1.5">${_wEsc(msg)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="resetEditorMsg('${id}')">↺ Reset</button>
+      <button class="whatsapp-btn" style="flex:1;justify-content:center" onclick="sendEditorWhatsApp('${id}')">📱 Send on WhatsApp</button>
+    </div>
+    ${c.editorBriefSentAt?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:6px">Last opened in WhatsApp: ${_wEsc(c.editorBriefSentAt)}</div>`:''}
+  </div>`;
+}
+function _edC(id){const data=D();return {data,c:data.contents.find(x=>x.id===id)};}
+function setEditorFreelancer(id,val){const {data,c}=_edC(id);if(!c)return;c.editorFreelancerId=val||'';c.editorMsg='';save(data,id);renderDetailPage(id);}
+function saveEditorPhone(id,val){const {data,c}=_edC(id);if(!c)return;c.editorPhone=val.trim();const u=data.users.find(x=>x.id===c.editorFreelancerId);if(u)u.whatsapp=val.trim();save(data,id);}
+function saveEditorMsg(id,val){const {data,c}=_edC(id);if(!c)return;c.editorMsg=val;save(data,id);}
+function resetEditorMsg(id){const {data,c}=_edC(id);if(!c)return;c.editorMsg='';save(data,id);renderDetailPage(id);}
+function sendEditorWhatsApp(id){
+  const {data,c}=_edC(id);if(!c)return;
+  const msg=document.getElementById('ed-msg-'+id).value;
+  let num=(document.getElementById('ed-phone-'+id).value||'').replace(/[^\d]/g,'');
+  if(num.startsWith('0'))num='60'+num.slice(1);
+  c.editorMsg=msg;c.editorPhone=num;
+  const u=data.users.find(x=>x.id===c.editorFreelancerId);if(u&&num)u.whatsapp=num;
+  c.editorBriefSentAt=new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  save(data,id);
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`,'_blank');
+  renderDetailPage(id);
+}
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
   const data=D();
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
@@ -7564,6 +7634,7 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
       isActive = copyState==='pending_review';
     }
     const color = step.color;
+        const shootSt=(step.id==='shoot'&&contentObj&&usesShootFlow(contentObj))?getShootStats(data,contentObj):null;
     const stateClass = isDone?'done':isActive?'active':'pending';
     const labelClass = isDone?'done':isActive?'active':'';
 
@@ -7586,10 +7657,11 @@ function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, con
     return `
       <div class="flow-step" ${clickAttr} title="${isClickable?'Click to open tab':''}">
         <div class="flow-step-inner">
-          <div class="flow-node ${stateClass}" style="color:${color};${isActive?`box-shadow:0 0 0 4px ${color}44`:''}${isClickable?' transition:transform .12s;':''}" ${isClickable?`onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'"`:''}">
-            ${isDone?`<span class="flow-check" style="color:#0c0c0e;font-size:17px">✓</span>`:isActive?`<span style="font-size:18px">${step.icon}</span>`:`<span style="font-size:16px;opacity:0.3">${step.icon}</span>`}
+                    <div class="flow-node ${stateClass}" style="color:${color};${isActive?`box-shadow:0 0 0 4px ${color}44`:''}${isClickable?' transition:transform .12s;':''}${shootSt?`;background:conic-gradient(${color} ${shootSt.total?Math.round(shootSt.ready/shootSt.total*100):0}%,var(--b2) 0);border-color:transparent`:''}" ${isClickable?`onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'"`:''}">
+                        ${shootSt?`<span style="width:28px;height:28px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--t1);font-family:'DM Mono',monospace">${shootSt.ready}/${shootSt.total}</span>`:isDone?`<span class="flow-check" style="color:#0c0c0e;font-size:17px">✓</span>`:isActive?`<span style="font-size:18px">${step.icon}</span>`:`<span style="font-size:16px;opacity:0.3">${step.icon}</span>`}
           </div>
-          <div class="flow-node-label ${labelClass}" style="${isActive?`color:${color};font-weight:700`:isDone?'color:var(--t3)':'color:var(--t4)'}${isClickable?';text-decoration:underline dotted;text-underline-offset:2px':''}">${(step.flowLabel||step.label).replace('\n','<br>')}</div>
+                    <div class="flow-node-label ${labelClass}" style="${isActive?`color:${color};font-weight:700`:isDone?'color:var(--t3)':'color:var(--t4)'}${isClickable?';text-decoration:underline dotted;text-underline-offset:2px':''}">${(step.flowLabel||step.label).replace('\n','<br>')}</div>
+            ${shootSt?`<div style="font-size:10px;color:var(--t3);font-family:'DM Mono',monospace;letter-spacing:.06em">READY</div>`:''}
             ${(()=>{const pic=getPIC(data,step.id,contentObj);return pic?`<div style="font-size:11px;color:${pic.color};font-family:'DM Mono',monospace;font-weight:700;margin-top:1px;text-align:center;white-space:nowrap">${pic.init}</div>`:''})()}
         </div>
       </div>`;
@@ -7810,7 +7882,8 @@ function renderDetailPage(id, forceTab){
   const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
   const wfActionBox=renderWorkflowActionBox(data,c);
   document.getElementById('detail-side').innerHTML=`
-    ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
+        ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
+    ${renderEditorBriefBox(data,c,id)}
 
     <div class="side-section">
       <div class="side-label">Progress</div>
@@ -8346,6 +8419,7 @@ function renderCopywritingPanel(c,id){
 }
 
 // ===================== SHOOTING PANEL =====================
+function driveMonth(c){return c&&c.postingDate?new Date(c.postingDate+'T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'}):'No Posting Date';}
 function getFootageItems(c){
   if(!Array.isArray(c.footageItems)){
     c.footageItems = c.footageLink ? [{id:'fi'+uid(), url:c.footageLink, name:c.footageFileName||'Footage', driveFileId:c.footageDriveFileId||null, addedAt:''}] : [];
@@ -8372,7 +8446,7 @@ async function addFootageItem(id){
     const res=await fetch(DRIVE_UPLOAD_URL,{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,folderType:'Raw Footage'})
+            body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:'Raw Footage'})
     });
     const result=await res.json();
     if(result.error){alert(result.error);if(statusEl)statusEl.textContent='';return;}
@@ -8402,13 +8476,58 @@ function removeFootageItem(id, itemId){
   renderDetailPage(id,'dp-shoot');
 }
 
+async function addBrollItem(id){
+  const inp=document.getElementById('broll-link-input-'+id);
+  if(!inp)return;
+  const rawLink=inp.value.trim();
+  if(!rawLink)return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  if(!Array.isArray(c.brollItems))c.brollItems=[];
+  const statusEl=document.getElementById('broll-add-status-'+id);
+  if(statusEl)statusEl.textContent='Copying to Drive…';
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  const DRIVE_UPLOAD_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+  let url=rawLink,fileId=null,copied=false;
+  try{
+    const res=await fetch(DRIVE_UPLOAD_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:'B-roll'})
+    });
+    const result=await res.json();
+    console.log('B-roll copy result:',result);
+    if(result.error){
+      if(!confirm('Could not copy into the content Drive folder:\n'+result.error+'\n\nSave the original link instead?')){if(statusEl)statusEl.textContent='';return;}
+    }else{
+      url=result.url||rawLink;fileId=result.fileId||null;copied=true;
+    }
+  }catch(err){
+    console.error('B-roll copy failed:',err);
+    if(!confirm('Could not copy into the content Drive folder. Save the original link instead?')){if(statusEl)statusEl.textContent='';return;}
+  }
+  c.brollItems.push({id:'br'+uid(),url:url,driveFileId:fileId,copied:copied,name:'B-roll folder '+(c.brollItems.length+1),addedAt:localISO(new Date())});
+  save(data,id);
+  inp.value='';
+  if(statusEl)statusEl.textContent='';
+  renderDetailPage(id,'dp-shoot');
+  showAIToast(copied?'✅ B-roll saved to the content Drive folder':'✅ B-roll link saved (not copied)');
+}
+function removeBrollItem(id,itemId){
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  c.brollItems=(c.brollItems||[]).filter(it=>it.id!==itemId);
+  save(data,id);
+  renderDetailPage(id,'dp-shoot');
+}
 function renderShootingPanel(c, id){
   const data=D();
   const isCreator=c.statusId==='shoot'&&canActOnStage(data,c,'shoot',S.user);
   const designer=getDesigner(data,c);
   const footageItems=getFootageItems(c);
+  const brollItems=Array.isArray(c.brollItems)?c.brollItems:[];
 
-  return `
+  return ` `
     ${c.shootNotified?`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(154,122,255,0.12);border:1px solid rgba(154,122,255,0.4);border-radius:var(--r);margin-bottom:16px">
       <span style="font-size:26px">🎬</span>
       <div>
@@ -8442,6 +8561,32 @@ function renderShootingPanel(c, id){
       </div>
       <div id="footage-add-status-${id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
       <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Add one link per clip — share each as "Anyone with link" before pasting. Repeat for multiple footage files.</div>
+      `:''}
+    </div>
+      <div class="idea-section">
+      <div class="idea-section-header">
+        <div class="idea-section-title"><span class="idea-section-icon">🎞️</span> B-roll Footages</div>
+        <span class="idea-section-hint">Paste the Drive folder link containing all the B-rolls</span>
+      </div>
+      ${brollItems.length?brollItems.map(it=>`
+      <div style="margin-bottom:8px;padding:10px 14px;background:var(--acd);border:1px solid var(--ac)44;border-radius:var(--r);display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">🎞️</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;color:var(--ac);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.name||'B-roll folder'}</div>
+          ${it.addedAt?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">added ${it.addedAt}</div>`:''}
+        </div>
+        <a href="${it.url}" target="_blank" style="padding:7px 14px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--t1);text-decoration:none;flex-shrink:0">📁 Open ↗</a>
+        ${isCreator?`<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="removeBrollItem('${id}','${it.id}')">✕</button>`:''}
+      </div>`).join(''):
+      `<div style="padding:20px;background:var(--s2);border-radius:var(--r);text-align:center;color:var(--t3);font-family:'DM Mono',monospace;font-size:14px;margin-bottom:12px">No B-roll uploaded yet</div>`}
+
+      ${isCreator?`
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="form-input" id="broll-link-input-${id}" type="url" placeholder="Paste Google Drive folder link for the B-rolls" style="font-size:14px;padding:9px 12px;flex:1">
+        <button class="btn btn-ac btn-sm" onclick="addBrollItem('${id}')">+ Add</button>
+      </div>
+            <div id="broll-add-status-${id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Share the folder as "Anyone with link" before pasting.</div>
       `:''}
     </div>
     <div class="idea-section">
@@ -8516,7 +8661,7 @@ async function saveVideoEditLink(id){
     const res=await fetch(DRIVE_UPLOAD_URL,{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,folderType:'Edited Video'})
+            body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:'Edited Video'})
     });
     const result=await res.json();
     if(result.error){alert(result.error);setAutosaveStatus('idle','auto-save on');return;}
@@ -8604,30 +8749,7 @@ function renderVideoEditingPanel(c, id){
   }
 
   return `
-    <!-- DOWNLOAD RAW FOOTAGE — prominent at the very top for designer -->
-    <div class="idea-section">
-      <div class="idea-section-header">
-        <div class="idea-section-title"><span class="idea-section-icon">📥</span> Download Raw Footage</div>
-        <span class="idea-section-hint">Uploaded by Leonard from the Shooting tab</span>
-      </div>
-      ${getFootageItems(c).length?getFootageItems(c).map(it=>`
-      <a href="${it.url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--acd);border:2px solid var(--ac)66;border-radius:var(--r2);text-decoration:none;transition:all .15s;margin-top:8px"
-          onmouseenter="this.style.borderColor='var(--ac)'" onmouseleave="this.style.borderColor='var(--ac)66'">
-          <div style="width:44px;height:44px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0c0c0e" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:15px;font-weight:700;color:var(--ac)">${it.name||'Footage'}</div>
-            <div style="font-size:13px;color:var(--t2);font-family:'DM Mono',monospace;margin-top:2px">Click to open in Google Drive</div>
-          </div>
-          <span style="font-size:13px;font-weight:700;color:var(--ac)">Open ↗</span>
-        </a>`).join(''):
-        `<div style="padding:18px;background:var(--s2);border:1px dashed var(--b2);border-radius:var(--r2);text-align:center;margin-top:8px">
-            <div style="font-size:22px;margin-bottom:6px">⏳</div>
-            <div style="font-size:14px;color:var(--t3);font-family:'DM Mono',monospace">No footage yet — waiting for Leonard to shoot and upload</div>
-          </div>`}
-    </div>
-
+    
         <!-- EDITED VIDEO -->
     <div class="idea-section">
       <div class="idea-section-header">
@@ -9049,6 +9171,7 @@ async function saveDesignLink(id, verIdx){
         driveLink:rawLink,
         brandName:brandName,
         contentName:contentName,
+                monthName:driveMonth(c),
         folderType:'Design Draft'
       })
     });
@@ -9224,6 +9347,54 @@ function getIdeaVerIndex(id){
 // Palette for version tab colors cycling
 const VER_COLORS=['#5a9fff','#9a7aff','#3acca0','#f0a030','#e06aaa','#ff9f43','#c8f04a','#ff5a5a'];
 
+// ===== Auto-created Google Docs (Script / Reference) + Edited Video folder =====
+const _DOC_PENDING={}, _DOC_TRIED={};
+const _DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzBk0SDu8TVSH3dPnytfSJSM7kQyCEGO4hJzFSPvKb2I6orWX7zSYS9FrnAMxHDAknjmg/exec';
+function renderDocBtn(c,id,kind){
+  if(!usesShootFlow(c)||S.user.role==='client')return '';
+  const url=kind==='script'?c.scriptDocUrl:c.refDocUrl;
+  const label=kind==='script'?'script':'reference';
+  let inner;
+  if(url){
+    inner=`<a href="${url}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">📄 Open ${label} doc ↗</a>`;
+  }else if(S.user.role==='freelancer'){
+    inner='';
+  }else{
+    inner=`<button class="btn btn-ghost btn-sm" onclick="createContentDocs('${id}',true)">📄 Create ${label} doc</button>`;
+    if(!_DOC_TRIED[id]&&!_DOC_PENDING[id]&&['ideation','script','ideation_amendment'].includes(c.statusId)){
+      setTimeout(()=>createContentDocs(id,false),0);
+    }
+  }
+  return `<span id="doc-btn-${kind}-${id}">${inner}</span>`;
+}
+async function createContentDocs(id,manual){
+  if(_DOC_PENDING[id])return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c||!usesShootFlow(c))return;
+  if(c.scriptDocUrl&&c.refDocUrl&&c.editFolderUrl)return;
+  _DOC_PENDING[id]=true;_DOC_TRIED[id]=true;
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  const steps=[];
+  if(!c.scriptDocUrl)steps.push({k:'scriptDocUrl',btn:'script',p:{mode:'createDoc',folderType:'Script',docName:'Script – '+contentName}});
+  if(!c.refDocUrl)steps.push({k:'refDocUrl',btn:'ref',p:{mode:'createDoc',folderType:'Reference',docName:'Reference – '+contentName}});
+  if(!c.editFolderUrl)steps.push({k:'editFolderUrl',btn:null,p:{mode:'getFolder',folderType:'Edited Video'}});
+  try{
+    for(const st of steps){
+            const res=await fetch(_DRIVE_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...st.p,brandName,contentName,monthName:driveMonth(c)})});
+      const r=await res.json();
+      if(r.error){console.error('Drive step failed:',st.k,r.error);if(manual)alert(r.error);break;}
+      const d2=D();const c2=d2.contents.find(x=>x.id===id);if(!c2)break;
+      c2[st.k]=st.k==='editFolderUrl'?(r.folderUrl||''):(r.url||'');
+      save(d2,id);
+      if(st.btn){const el=document.getElementById('doc-btn-'+st.btn+'-'+id);if(el)el.outerHTML=renderDocBtn(c2,id,st.btn);}
+    }
+  }catch(err){
+    console.error('createContentDocs failed:',err);
+    if(manual)alert('Could not create the Google Docs. Please try again.');
+  }
+  delete _DOC_PENDING[id];
+}
 function renderIdeationPanel(c, id){
   const versions=getIdeationVersions(c);
   const verIdx=Math.min(getIdeaVerIndex(id), versions.length-1);
@@ -9276,7 +9447,7 @@ function renderIdeationPanel(c, id){
   // Version tabs
   const tabsHTML=versions.map((v,i)=>{
     const tc=VER_COLORS[i%VER_COLORS.length];
-    const hasContent=!!(v.paragraph||v.videoScript||(v.refImages||[]).length);
+    const hasContent=!!(v.paragraph||v.videoScript||v.refVideoNote);
     return `<button class="iv-tab${i===verIdx?' active':''}" style="${i===verIdx?`background:var(--s1);color:${tc};box-shadow:0 0 0 1px ${tc}44`:''}" onclick="switchIdeaVer('${id}',${i})">
       ${v.label}${hasContent?`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${tc};margin-left:5px;vertical-align:middle"></span>`:''}
     </button>`;
@@ -9352,41 +9523,29 @@ function renderIdeationPanel(c, id){
 
     <div class="idea-section">
       <div class="idea-section-header">
-        <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Brief / Concept Paragraph</div>
+                <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDCDD</span> Ideation</div>
         <span class="idea-section-hint">Describe the idea, angle, target audience</span>
       </div>
       <textarea class="form-textarea" id="idea-para-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="line-height:1.8;font-size:15px;border-color:${color}44;resize:vertical;min-height:120px;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" rows="${Math.max(4,((idea.paragraph||'').split('\n').length)+2)}" placeholder="E.g. This carousel targets working adults aged 25\u201340 who struggle with back pain...">${idea.paragraph||''}</textarea>
     </div>
-
     <div class="idea-section">
       <div class="idea-section-header">
-        <div class="idea-section-title"><span class="idea-section-icon">\uD83D\uDDBC\uFE0F</span> Reference Images</div>
-        <span class="idea-section-hint">Drag & drop or browse to upload</span>
-      </div>
-      <input type="file" id="ref-file-${id}" accept="image/*" multiple style="display:none" onchange="handleRefFileSelect('${id}',${verIdx},this)">
-      <input type="file" id="ref-folder-${id}" webkitdirectory directory multiple style="display:none" onchange="handleRefFileSelect('${id}',${verIdx},this)">
-      <div class="ref-images-grid" id="ref-grid-${id}"
-        ondragover="event.preventDefault();this.classList.add('drag-over')"
-        ondragleave="this.classList.remove('drag-over')"
-        ondrop="handleRefFileDrop('${id}',${verIdx},event)">
-        ${refImagesHTML}
-        ${!isReadOnly?`<div class="ref-img-add" onclick="document.getElementById('ref-folder-${id}').click()" title="Upload an entire folder of images">
-          <span style="font-size:20px">📁</span><span>Folder</span>
-        </div>
-        <div class="ref-img-add" onclick="document.getElementById('ref-file-${id}').click()">
-          <span style="font-size:22px">+</span><span>Add reference</span>
-        </div>`:''}
-      </div>
-    </div>
-
-    <div class="idea-section">
-      <div class="idea-section-header">
-        <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Video Script / Storyboard</div>
-        <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
+        <div class="idea-section-title"><span class="idea-section-icon">\uD83C\uDFAC</span> Script</div>
+                <span class="idea-section-hint">Scene-by-scene breakdown, hooks, transitions</span>
+        ${renderDocBtn(c,id,'script')}
       </div>
       <textarea class="form-textarea" id="idea-script-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="line-height:1.8;font-size:15px;font-family:'DM Mono',monospace;border-color:${color}44;resize:vertical;min-height:180px;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" rows="${Math.max(6,((idea.videoScript||'').split('\n').length)+2)}" placeholder="[HOOK - 0:00\u20130:03]\nOpen with close-up...\n\n[SCENE 1 - 0:03\u20130:08]\nText overlay: ...\n\n[CTA - 0:25\u20130:30]\nSwipe up / Link in bio...">${idea.videoScript||''}</textarea>
     </div>
 
+    <div class="idea-section">
+      <div class="idea-section-header">
+        <div class="idea-section-title"><span class="idea-section-icon">🎥</span> Reference video</div>
+                <span class="idea-section-hint">Note down the reference video(s) — link, style, hook, pacing</span>
+        ${renderDocBtn(c,id,'ref')}
+      </div>
+      <textarea class="form-textarea" id="idea-refvid-${id}" ${isReadOnly?'readonly':''} oninput="autosaveIdeation('${id}');this.style.height='auto';this.style.height=this.scrollHeight+'px'" style="line-height:1.8;font-size:15px;border-color:${color}44;resize:vertical;min-height:100px;${isReadOnly?'opacity:.65;cursor:not-allowed':''}" rows="${Math.max(3,((idea.refVideoNote||'').split('\n').length)+2)}" placeholder="E.g. Reference: [link or name of video] — copy the hook in the first 3 seconds, fast cuts, trending audio...">${idea.refVideoNote||''}</textarea>
+    </div>
+    
     ${submitBtnHTML}
     ${renderReviewHistory(c)}
   `;
@@ -9436,9 +9595,11 @@ function _saveIdeaTextFields(c, versions, idx){
   if(!versions[idx])return;
   const id=c.id;
   const paraEl=document.getElementById('idea-para-'+id);
-  const scriptEl=document.getElementById('idea-script-'+id);
+    const scriptEl=document.getElementById('idea-script-'+id);
+  const refVidEl=document.getElementById('idea-refvid-'+id);
   if(paraEl) versions[idx].paragraph=paraEl.value;
   if(scriptEl) versions[idx].videoScript=scriptEl.value;
+  if(refVidEl) versions[idx].refVideoNote=refVidEl.value;
 }
 
 function saveIdeation(id, verIdx){
