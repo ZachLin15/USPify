@@ -8743,6 +8743,71 @@ function removeVideoVersion(id){
   renderDetailPage(id,'dp-video');
   showAIToast('✓ Video removed — upload a new one');
 }
+function videoReadyToSubmit(c){return !!((c.videoEditLink||c.editedFileName)&&c.coverFileId);}
+function renderCoverBlock(c,id,canEdit){
+  const has=!!c.coverFileId;
+  const thumb=has?'https://drive.google.com/thumbnail?id='+c.coverFileId+'&sz=w400':'';
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:14px;font-weight:700;color:var(--t1)">\uD83D\uDDBC\uFE0F Cover Photo</span>
+      <span style="font-size:12px;font-family:'DM Mono',monospace;color:${has?'var(--grn,#3acca0)':'var(--red)'}">${has?'uploaded':'required before review'}</span>
+    </div>
+    ${has?`<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
+      <img src="${thumb}" style="width:110px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s3)" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.coverName||'Cover'}</div>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <a href="${c.coverLink}" target="_blank" class="btn btn-ghost btn-sm">Open in Drive \u2197</a>
+          ${canEdit?`<button class="btn btn-danger btn-sm" onclick="removeCover('${id}')">\uD83D\uDDD1 Remove</button>`:''}
+        </div>
+      </div>
+    </div>`:''}
+    ${canEdit?`<div class="design-link-row">
+      <input class="form-input" id="cover-link-input-${id}" type="url" placeholder="Paste Google Drive link to the cover photo (image file)">
+      <button class="btn btn-ac btn-sm" onclick="saveCoverLink('${id}')">${has?'Replace':'Save'}</button>
+    </div>
+    <div id="cover-status-${id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
+    <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Share as "Anyone with link" \u2192 paste the image file link. It is saved in the content's Edited Video folder.</div>`:''}
+  </div>`;
+}
+async function saveCoverLink(id){
+  const inp=document.getElementById('cover-link-input-'+id);
+  if(!inp)return;
+  const rawLink=inp.value.trim();
+  if(!rawLink)return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const statusEl=document.getElementById('cover-status-'+id);
+  if(statusEl)statusEl.textContent='Copying to Drive\u2026';
+  const brand=data.brands.find(b=>b.id===c.brandId);
+  const brandName=brand?.name||c.brandId||'Unknown Brand';
+  const contentName=c.title||id;
+  try{
+    const res=await fetch(_DRIVE_SCRIPT_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:'Edited Video'})
+    });
+    const r=await res.json();
+    if(r.error){alert(r.error);if(statusEl)statusEl.textContent='';return;}
+    if(r.detectedType==='folder'){alert('Please paste the link to the cover image file, not a folder.');if(statusEl)statusEl.textContent='';return;}
+    c.coverLink=r.url;c.coverFileId=r.fileId;c.coverName=r.name||'Cover';
+    if(r.folderUrl)c.editFolderUrl=r.folderUrl;
+    save(data,id);
+    renderDetailPage(id,'dp-video');
+    showAIToast('\u2705 Cover photo saved');
+  }catch(err){
+    console.error('Cover copy failed:',err);
+    alert('Failed to copy the cover into the Drive folder. Make sure the link is shared as "Anyone with the link" and try again.');
+    if(statusEl)statusEl.textContent='';
+  }
+}
+function removeCover(id){
+  if(!confirm('Remove the cover photo? You can upload a new one after.'))return;
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  c.coverLink='';c.coverFileId='';c.coverName='';
+  save(data,id);
+  renderDetailPage(id,'dp-video');
+}
 function renderVideoEditingPanel(c, id){
   const data=D();
   const isSeniorOrAdmin=S.user.role==='senior'||isAdminUser(S.user);
@@ -8833,7 +8898,7 @@ function renderVideoEditingPanel(c, id){
 
         const lockedMsg=isDesigner&&isVideoLocked?`<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">🔒 Awaiting senior review — you'll be notified when feedback arrives.</div>`:'';
 
-        return verTabs+verPreview+uploadUI+lockedMsg;
+                return verTabs+verPreview+uploadUI+lockedMsg+renderCoverBlock(c,id,isDesigner&&!isVideoLocked);
       })()}
     </div>
 
@@ -10318,9 +10383,9 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-title">✂️ Video Editing Phase${isDesigner?' — Your Turn':''}</div>
       <div class="wf-action-sub">${isDesigner?`Upload your edited video and submit for senior review — all inside the <strong>Video Editing tab</strong>.`:isSenior&&c.videoReviewPending?`The edited video has been submitted for your review.`:`Video is currently being edited.`}</div>
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
-        ${isDesigner?`<button class="wf-btn wf-btn-${(c.videoEditLink||c.editedFileName)?'green':'ghost'}" style="${!(c.videoEditLink||c.editedFileName)?'opacity:.5;cursor:not-allowed':''}" onclick="${(c.videoEditLink||c.editedFileName)?`wfVideoDone('${id}')`:``}">📤 Submit for Senior Review</button>`:''}
+                ${isDesigner?`<button class="wf-btn wf-btn-${videoReadyToSubmit(c)?'green':'ghost'}" style="${!videoReadyToSubmit(c)?'opacity:.5;cursor:not-allowed':''}" onclick="${videoReadyToSubmit(c)?`wfVideoDone('${id}')`:``}">📤 Submit for Senior Review</button>`:''}
       </div>
-      ${isDesigner&&!(c.videoEditLink||c.editedFileName)?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload your edited video in the tab above first</div>`:''}
+            ${isDesigner&&!videoReadyToSubmit(c)?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload the edited video and the cover photo in the tab above first</div>`:''}
     </div>`);
   }
 
@@ -11133,7 +11198,8 @@ function wfVideoDone(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const linkInp=document.getElementById('wf-video-link-'+id)||document.getElementById('video-edit-input-'+id);
   if(linkInp&&linkInp.value.trim()) c.videoEditLink=linkInp.value.trim();
-  if(!c.videoEditLink&&!c.editedFileName){showAIToast('⚠ Upload your edited video first');return;}
+    if(!c.videoEditLink&&!c.editedFileName){showAIToast('⚠ Upload your edited video first');return;}
+  if(!c.coverFileId){showAIToast('⚠ Upload the cover photo first');return;}
   c.videoReviewPending=true;
   c.seniorNotifDismissed={}; // reset so Jack sees the notification fresh
   const senior=getSenior(data,c);
