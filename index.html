@@ -3632,14 +3632,15 @@ function _deckHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCode
 function buildDeckPayload(data,b,ym){
   const cs=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(ym)&&deckEligible(c));
     const items=cs.map(c=>{
-    const dv=usesShootFlow(c)?{}:deckDesignVer(c);
+        const dv=usesShootFlow(c)?{}:deckDesignVer(c);
+    const rl=c.type==='Reels'&&!usesShootFlow(c);
     const it={
       id:c.id,title:c.title||'',date:c.postingDate,
             dateLabel:'Posting date: '+c.postingDate.slice(8,10)+'/'+c.postingDate.slice(5,7)+'/'+c.postingDate.slice(2,4),
       status:c.statusId==='posted'?'Posted':(c.clientApproved?'Approved':'Awaiting approval'),
       coverFileId:c.coverFileId||'',coverUrl:c.coverLink||'',
-            videoFileId:c.videoEditDriveFileId||'',folderUrl:(usesShootFlow(c)?c.editFolderUrl:(dv.type==='folder'?dv.link:''))||'',
-      kind:usesShootFlow(c)?'shoot':'design',designType:dv.type||'',designFileId:dv.driveFileId||'',designLink:dv.link||'',
+                  videoFileId:(rl?(dv.driveFileId||''):c.videoEditDriveFileId)||'',folderUrl:((usesShootFlow(c)||rl)?c.editFolderUrl:(dv.type==='folder'?dv.link:''))||'',
+            kind:(usesShootFlow(c)||rl)?'shoot':'design',designType:dv.type||'',designFileId:dv.driveFileId||'',designLink:dv.link||'',
       caption:deckCaption(c)
     };
     it.h=_deckHash(JSON.stringify(it));
@@ -8858,9 +8859,10 @@ function renderCoverBlock(c,id,canEdit){
       <button class="btn btn-ac btn-sm" onclick="saveCoverLink('${id}')">${has?'Replace':'Save'}</button>
     </div>
     <div id="cover-status-${id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px"></div>
-    <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Share as "Anyone with link" \u2192 paste the image file link. It is saved in the content's Edited Video folder.</div>`:''}
+    <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:4px">Share as "Anyone with link" \u2192 paste the image file link. It is saved in the content's folder next to the video.</div>`:''}
   </div>`;
 }
+function needsDesignCover(c){return c.type==='Reels'&&!usesShootFlow(c);}
 async function saveCoverLink(id){
   const inp=document.getElementById('cover-link-input-'+id);
   if(!inp)return;
@@ -8872,11 +8874,12 @@ async function saveCoverLink(id){
   const brand=data.brands.find(b=>b.id===c.brandId);
   const brandName=brand?.name||c.brandId||'Unknown Brand';
   const contentName=c.title||id;
+  const designFlow=needsDesignCover(c);
   try{
     const res=await fetch(_DRIVE_SCRIPT_URL,{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:'Edited Video'})
+      body:new URLSearchParams({mode:'copyLink',driveLink:rawLink,brandName,contentName,monthName:driveMonth(c),folderType:designFlow?'Design Draft':'Edited Video'})
     });
     const r=await res.json();
     if(r.error){alert(r.error);if(statusEl)statusEl.textContent='';return;}
@@ -8884,7 +8887,7 @@ async function saveCoverLink(id){
     c.coverLink=r.url;c.coverFileId=r.fileId;c.coverName=r.name||'Cover';
     if(r.folderUrl)c.editFolderUrl=r.folderUrl;
     save(data,id);
-    renderDetailPage(id,'dp-video');
+    renderDetailPage(id,designFlow?'dp-design':'dp-video');
     showAIToast('\u2705 Cover photo saved');
   }catch(err){
     console.error('Cover copy failed:',err);
@@ -8897,7 +8900,7 @@ function removeCover(id){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   c.coverLink='';c.coverFileId='';c.coverName='';
   save(data,id);
-  renderDetailPage(id,'dp-video');
+  renderDetailPage(id,needsDesignCover(c)?'dp-design':'dp-video');
 }
 function renderVideoEditingPanel(c, id){
   const data=D();
@@ -9275,6 +9278,7 @@ function renderDesignPanel(c, id){
     </div>
 
    ${uploaderHTML}
+        ${needsDesignCover(c)?renderCoverBlock(c,id,isDesigner):''}
     ${designerActionsHTML}
     ${notesHTML}
 
@@ -9468,7 +9472,8 @@ async function amendDesign(id, verIdx){
 function designerSubmitForReview(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
-  if(!versions[verIdx].link){alert('Please upload a design file first.');return;}
+    if(!versions[verIdx].link){alert('Please upload a design file first.');return;}
+  if(needsDesignCover(c)&&!c.coverFileId){alert('Please upload the cover photo first.');return;}
   versions[verIdx].pendingReview=true;
   versions[verIdx].submittedBy=S.user.name;
   versions[verIdx].submittedAt=localISO(new Date());
