@@ -3613,23 +3613,31 @@ function setShootDate(brandId,ym,val){
   save(data);renderPage();
 }
 const _DECK_TIMERS={}, _DECK_BUSY={};
-function deckEligible(c){return !!c&&usesShootFlow(c)&&c.jobKind!=='task'&&c.postingDate&&['client_approval','posted'].includes(c.statusId);}
+function deckEligible(c){return !!c&&c.jobKind!=='task'&&c.postingDate&&['client_approval','posted'].includes(c.statusId);}
 function deckCaption(c){
   const vs=getCopyVersions(c);
   const ap=vs.filter(v=>(v.approvals||[]).some(a=>a.status==='approved'));
   const v=ap.length?ap[ap.length-1]:vs[vs.length-1];
   return ((v&&v.text)||'').trim();
 }
+function deckDesignVer(c){
+  const vs=(c.designVersions||[]).filter(v=>v&&v.link);
+  const ap=vs.filter(v=>(v.approvals||[]).some(a=>a.status==='approved'));
+  const v=ap.length?ap[ap.length-1]:vs[vs.length-1];
+  return v||{};
+}
 function _deckHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return String(h);}
 function buildDeckPayload(data,b,ym){
   const cs=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(ym)&&deckEligible(c));
-  const items=cs.map(c=>{
+    const items=cs.map(c=>{
+    const dv=usesShootFlow(c)?{}:deckDesignVer(c);
     const it={
       id:c.id,title:c.title||'',date:c.postingDate,
             dateLabel:'Posting date: '+c.postingDate.slice(8,10)+'/'+c.postingDate.slice(5,7)+'/'+c.postingDate.slice(2,4),
       status:c.statusId==='posted'?'Posted':(c.clientApproved?'Approved':'Awaiting approval'),
       coverFileId:c.coverFileId||'',coverUrl:c.coverLink||'',
-      videoFileId:c.videoEditDriveFileId||'',folderUrl:c.editFolderUrl||'',
+            videoFileId:c.videoEditDriveFileId||'',folderUrl:(usesShootFlow(c)?c.editFolderUrl:(dv.type==='folder'?dv.link:''))||'',
+      kind:usesShootFlow(c)?'shoot':'design',designType:dv.type||'',designFileId:dv.driveFileId||'',designLink:dv.link||'',
       caption:deckCaption(c)
     };
     it.h=_deckHash(JSON.stringify(it));
@@ -3669,7 +3677,7 @@ async function syncDeck(brandId,ym,full,manual){
 function queueDeckSync(contentId){
   try{
     if(!S||!S.user||S.user.role==='client')return;
-    const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c||!c.postingDate||!usesShootFlow(c))return;
+        const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c||!c.postingDate||c.jobKind==='task')return;
     const ym=c.postingDate.slice(0,7);
     const has=!!((data.brands.find(x=>x.id===c.brandId)||{}).decks||{})[ym];
     if(!has&&!deckEligible(c))return;
