@@ -7648,7 +7648,7 @@ function buildEditorMsg(data,c,editorName){
 }
 window._edEdit=window._edEdit||{};
 function renderEditorBriefBox(data,c,id){
-  if(!usesShootFlow(c)||c.statusId!=='video_editing')return '';
+    if(!usesShootFlow(c)||c.statusId!=='video_editing'||!canActOnStage(data,c,'video_editing',S.user))return '';
   if(S.user.role==='client'||S.user.role==='freelancer')return '';
   const eds=data.users.filter(u=>u.role==='freelancer');
   const ed=eds.find(u=>u.id===c.editorFreelancerId)||null;
@@ -8004,7 +8004,7 @@ function renderDetailPage(id, forceTab){
   const wfActionBox=renderWorkflowActionBox(data,c);
   document.getElementById('detail-side').innerHTML=`
         ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
-    ${renderEditorBriefBox(data,c,id)}
+        <div id="ed-brief-wrap-${id}" style="${defaultTab==='dp-video'?'':'display:none'}">${renderEditorBriefBox(data,c,id)}</div>
 
     <div class="side-section">
       <div class="side-label">Progress</div>
@@ -9504,6 +9504,7 @@ function designerSubmitForReview(id, verIdx){
 }
 
 function switchDTab(el, showId){
+  { const w=document.querySelector('[id^="ed-brief-wrap-"]'); if(w) w.style.display=showId==='dp-video'?'':'none'; }
   document.querySelectorAll('.detail-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   ['dp-ideation','dp-shoot','dp-design','dp-video','dp-copy','dp-comments','dp-history','dp-status'].forEach(id=>{
