@@ -6240,6 +6240,7 @@ const REVIEWER_STAGES_BY_TYPE={
   ],
 };
 
+REVIEWER_STAGES_BY_TYPE.reels.splice(3,0,{id:'design',label:'\uD83C\uDFA8 Design (Reels not shot)',hint:'Makes the reel when it is not a shoot',isWorker:true,defaultRole:'designer'});
 // Keep REVIEWER_STAGES as a flat list for backward compat with saveWfReviewerSettings
 const REVIEWER_STAGES=[
   ...new Map([
