@@ -2331,7 +2331,7 @@ function save(data, dirtyContentId){
       }
     } else { throw e; }
   }
-  if(dirtyContentId) markDirty(dirtyContentId);
+    if(dirtyContentId){ markDirty(dirtyContentId); queueDeckSync(dirtyContentId); }
   clearTimeout(_saveDebounceTimer);
   _saveDebounceTimer=setTimeout(()=>cloudSave(data), 150);
 }
@@ -2348,7 +2348,7 @@ async function saveNow(data, dirtyContentId){
     // If quota exceeded just skip localStorage — Supabase is the source of truth
     console.warn('saveNow: localStorage failed, continuing with Supabase only');
   }
-  if(dirtyContentId) markDirty(dirtyContentId);
+    if(dirtyContentId){ markDirty(dirtyContentId); queueDeckSync(dirtyContentId); }
   clearTimeout(_saveDebounceTimer);
   await cloudSave(data); // cloudSave handles broadcastPing internally
 }
@@ -3612,6 +3612,87 @@ function setShootDate(brandId,ym,val){
   if(val)b.shootDates[ym]=val;else delete b.shootDates[ym];
   save(data);renderPage();
 }
+const _DECK_TIMERS={}, _DECK_BUSY={};
+function deckEligible(c){return !!c&&usesShootFlow(c)&&c.jobKind!=='task'&&c.postingDate&&['client_approval','posted'].includes(c.statusId);}
+function deckCaption(c){
+  const vs=getCopyVersions(c);
+  const ap=vs.filter(v=>(v.approvals||[]).some(a=>a.status==='approved'));
+  const v=ap.length?ap[ap.length-1]:vs[vs.length-1];
+  return ((v&&v.text)||'').trim();
+}
+function _deckHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return String(h);}
+function buildDeckPayload(data,b,ym){
+  const cs=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(ym)&&deckEligible(c));
+  const items=cs.map(c=>{
+    const it={
+      id:c.id,title:c.title||'',date:c.postingDate,
+      dateLabel:new Date(c.postingDate+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}),
+      status:c.statusId==='posted'?'Posted':(c.clientApproved?'Approved':'Awaiting approval'),
+      coverFileId:c.coverFileId||'',coverUrl:c.coverLink||'',
+      videoFileId:c.videoEditDriveFileId||'',folderUrl:c.editFolderUrl||'',
+      caption:deckCaption(c)
+    };
+    it.h=_deckHash(JSON.stringify(it));
+    return it;
+  });
+  return {year:ym.slice(0,4),monthLabel:new Date(ym+'-01T00:00:00').toLocaleDateString('en-GB',{month:'long'}),items};
+}
+async function syncDeck(brandId,ym,full,manual){
+  const key=brandId+'|'+ym;
+  if(_DECK_BUSY[key]){_DECK_TIMERS[key]=setTimeout(()=>syncDeck(brandId,ym,full,manual),5000);return;}
+  const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
+  const payload=buildDeckPayload(data,b,ym);
+  if(!payload.items.length&&!full&&!(b.decks||{})[ym])return;
+  _DECK_BUSY[key]=true;
+  const bar=document.getElementById('deck-status-'+brandId);
+  if(bar)bar.textContent='Syncing deck\u2026';
+  try{
+    const monthName=new Date(ym+'-01T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+    const res=await fetch(_DRIVE_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'syncDeck',brandName:b.name||b.id,monthName,deckId:((b.decks||{})[ym]||{}).id||'',full:full?'1':'',payload:JSON.stringify(payload)})});
+    const r=await res.json();
+    if(r.error){console.error('Deck sync failed:',r.error);if(manual)alert(r.error);if(bar)bar.textContent='Sync failed';return;}
+    const d2=D();const b2=d2.brands.find(x=>x.id===brandId);
+    if(b2){
+      b2.decks=b2.decks||{};
+      const old=b2.decks[ym]||{};
+      if(old.id!==r.deckId){b2.decks[ym]={id:r.deckId,url:r.deckUrl};save(d2);}
+    }
+    if(manual)showAIToast('\u2705 Deck synced ('+r.updated+' slide'+(r.updated===1?'':'s')+' updated)');
+    if(document.getElementById('deck-bar-'+brandId))renderPage();
+  }catch(err){
+    console.error('Deck sync error:',err);
+    if(manual)alert('Could not sync the deck. Please try again.');
+    if(bar)bar.textContent='Sync failed';
+  }finally{delete _DECK_BUSY[key];}
+}
+function queueDeckSync(contentId){
+  try{
+    if(!S||!S.user||S.user.role==='client')return;
+    const data=D();const c=data.contents.find(x=>x.id===contentId);if(!c||!c.postingDate||!usesShootFlow(c))return;
+    const ym=c.postingDate.slice(0,7);
+    const has=!!((data.brands.find(x=>x.id===c.brandId)||{}).decks||{})[ym];
+    if(!has&&!deckEligible(c))return;
+    const key=c.brandId+'|'+ym;
+    clearTimeout(_DECK_TIMERS[key]);
+    _DECK_TIMERS[key]=setTimeout(()=>syncDeck(c.brandId,ym,false,false),20000);
+  }catch(e){console.warn('queueDeckSync',e);}
+}
+function renderDeckBar(b,data){
+  if(S.user.role==='client')return '';
+  const ym=S.brandMonthFilter||localYM(new Date());
+  const dk=(b.decks||{})[ym];
+  const n=data.contents.filter(c=>c.brandId===b.id&&c.postingDate&&c.postingDate.startsWith(ym)&&deckEligible(c)).length;
+  const label=new Date(ym+'-01T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  return `<div id="deck-bar-${b.id}" class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:16px">
+    <span style="font-size:15px;font-weight:700">\uD83D\uDCCA Client Approval Deck \u00B7 ${label}</span>
+    <span id="deck-status-${b.id}" style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace">${n} content${n===1?'':'s'} in deck</span>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      ${dk?`<a href="${dk.url}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Open deck \u2197</a>`:''}
+      <button class="btn btn-ac btn-sm" onclick="syncDeck('${b.id}','${ym}',true,true)">${dk?'Sync deck now':'Create deck'}</button>
+    </span>
+  </div>`;
+}
 function renderShootPlanner(b,data){
   const ym=S.brandMonthFilter||localYM(new Date());
   const vids=data.contents.filter(c=>c.brandId===b.id&&c.jobKind!=='task'&&c.postingDate&&c.postingDate.startsWith(ym)&&usesShootFlow(c))
@@ -4078,7 +4159,7 @@ function renderBrandPage(){
 
 
 
-      return monthSummary+renderShootPlanner(b,data)+socialLinks+infoBar+`<div class="hscroll">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
+      return monthSummary+renderDeckBar(b,data)+renderShootPlanner(b,data)+socialLinks+infoBar+`<div class="hscroll">${renderBrandMiniCalendar(b,data)}</div>`+filterRow+renderBulkBar()+`<div class="panel" style="overflow:hidden">
     ${categorySection('Wall Posts','🖼','#5a9fff',wallPosts,_qb.wallPost)}
     ${hasSep(wallPosts,videoAds)||hasSep(wallPosts,tiktokContent)||hasSep(wallPosts,other)?'<div style="height:1px;background:var(--b1)"></div>':''}
     ${categorySection('Video Ads','📢','#ff9f43',videoAds,_qb.videoAds)}
