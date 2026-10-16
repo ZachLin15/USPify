@@ -3626,7 +3626,7 @@ function buildDeckPayload(data,b,ym){
   const items=cs.map(c=>{
     const it={
       id:c.id,title:c.title||'',date:c.postingDate,
-      dateLabel:new Date(c.postingDate+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}),
+            dateLabel:'Posting date: '+c.postingDate.slice(8,10)+'/'+c.postingDate.slice(5,7)+'/'+c.postingDate.slice(2,4),
       status:c.statusId==='posted'?'Posted':(c.clientApproved?'Approved':'Awaiting approval'),
       coverFileId:c.coverFileId||'',coverUrl:c.coverLink||'',
       videoFileId:c.videoEditDriveFileId||'',folderUrl:c.editFolderUrl||'',
