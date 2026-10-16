@@ -7553,6 +7553,7 @@ function buildEditorMsg(data,c,editorName){
     `\u23F0 *Deadline:* ${due}\n\n`+
     `Thank you! \uD83D\uDE4F\n\u2014 ${S.user.name}`;
 }
+window._edEdit=window._edEdit||{};
 function renderEditorBriefBox(data,c,id){
   if(!usesShootFlow(c)||c.statusId!=='video_editing')return '';
   if(S.user.role==='client'||S.user.role==='freelancer')return '';
@@ -7560,19 +7561,31 @@ function renderEditorBriefBox(data,c,id){
   const ed=eds.find(u=>u.id===c.editorFreelancerId)||null;
   const phone=(ed&&ed.whatsapp)||c.editorPhone||'';
   const msg=(c.editorMsg!=null&&c.editorMsg!=='')?c.editorMsg:buildEditorMsg(data,c,ed?ed.name:'');
+  if(c.editorBriefSentAt&&!window._edEdit[id]){
+    return `<div class="side-section">
+    <div class="side-label">\u2702\uFE0F Brief video editor</div>
+    <div style="padding:12px 14px;background:var(--acd);border:1px solid var(--ac)66;border-radius:var(--r)">
+      <div style="font-size:15px;font-weight:700;color:var(--ac)">\u2705 Sent${c.editorSentTo?' to '+_wEsc(c.editorSentTo):''}</div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:3px">${_wEsc(c.editorBriefSentAt)}${c.editorBriefSentBy?' \u00B7 by '+_wEsc(c.editorBriefSentBy):''}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="editEditorBrief('${id}')">\u270F\uFE0F Edit message</button>
+      <button class="whatsapp-btn" style="flex:1;justify-content:center" onclick="resendEditorWhatsApp('${id}')">\u21BB Resend</button>
+    </div>
+  </div>`;
+  }
   return `<div class="side-section">
-    <div class="side-label">✂️ Brief video editor</div>
+    <div class="side-label">\u2702\uFE0F Brief video editor</div>
     <select class="form-select" style="font-size:14px;margin-bottom:8px" onchange="setEditorFreelancer('${id}',this.value)">
-      <option value="">— Select freelance editor —</option>
+      <option value="">\u2014 Select freelance editor \u2014</option>
       ${eds.map(u=>`<option value="${u.id}" ${ed&&ed.id===u.id?'selected':''}>${_wEsc(u.name)}</option>`).join('')}
     </select>
     <input class="form-input" id="ed-phone-${id}" type="tel" placeholder="WhatsApp number e.g. 60123456789" value="${_wEsc(phone)}" onchange="saveEditorPhone('${id}',this.value)" style="font-size:14px;padding:6px 10px;margin-bottom:8px">
     <textarea class="form-textarea" id="ed-msg-${id}" onchange="saveEditorMsg('${id}',this.value)" style="min-height:230px;font-size:13px;line-height:1.5">${_wEsc(msg)}</textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-ghost btn-sm" onclick="resetEditorMsg('${id}')">↺ Reset</button>
-      <button class="whatsapp-btn" style="flex:1;justify-content:center" onclick="sendEditorWhatsApp('${id}')">📱 Send on WhatsApp</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetEditorMsg('${id}')">\u21BA Reset</button>
+      <button class="whatsapp-btn" style="flex:1;justify-content:center" onclick="sendEditorWhatsApp('${id}')">\uD83D\uDCF1 ${c.editorBriefSentAt?'Send again on WhatsApp':'Send on WhatsApp'}</button>
     </div>
-    ${c.editorBriefSentAt?`<div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:6px">Last opened in WhatsApp: ${_wEsc(c.editorBriefSentAt)}</div>`:''}
   </div>`;
 }
 function _edC(id){const data=D();return {data,c:data.contents.find(x=>x.id===id)};}
@@ -7587,11 +7600,26 @@ function sendEditorWhatsApp(id){
   if(num.startsWith('0'))num='60'+num.slice(1);
   c.editorMsg=msg;c.editorPhone=num;
   const u=data.users.find(x=>x.id===c.editorFreelancerId);if(u&&num)u.whatsapp=num;
+  c.editorSentTo=u?u.name:'';
+  c.editorBriefSentBy=S.user.name;
   c.editorBriefSentAt=new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  window._edEdit[id]=false;
   save(data,id);
-  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`,'_blank');
+  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg),'_blank');
   renderDetailPage(id);
 }
+function resendEditorWhatsApp(id){
+  const {data,c}=_edC(id);if(!c)return;
+  const u=data.users.find(x=>x.id===c.editorFreelancerId);
+  const msg=(c.editorMsg!=null&&c.editorMsg!=='')?c.editorMsg:buildEditorMsg(data,c,u?u.name:'');
+  const num=(c.editorPhone||'').replace(/[^\d]/g,'');
+  c.editorBriefSentBy=S.user.name;
+  c.editorBriefSentAt=new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  save(data,id);
+  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg),'_blank');
+  renderDetailPage(id);
+}
+function editEditorBrief(id){window._edEdit[id]=true;renderDetailPage(id);}
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
   const data=D();
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
