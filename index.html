@@ -788,6 +788,8 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
 .wf-action-title{font-size:15px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
 .wf-action-sub{font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-bottom:12px;line-height:1.5}
 .wf-action-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.wf-action-row:has(.wf-btn-green):has(.wf-btn-red){flex-direction:column;align-items:stretch}
+.wf-action-row:has(.wf-btn-green):has(.wf-btn-red) .wf-btn{width:100%;box-sizing:border-box;justify-content:center;text-align:center}
 .wf-link-row{display:flex;gap:8px;margin-bottom:12px}
 .wf-link-row input{flex:1;font-size:14px;padding:7px 10px}
 .wf-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;border:none;font-family:'Syne',sans-serif;transition:all .14s}
@@ -10399,7 +10401,7 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-sub">Submitted for review. Review the design in the Design tab, add your comment, then decide:</div>
       ${reviewCommentBox('Your feedback on the design…')}
       <div class="wf-action-row" style="margin-top:12px">
-        <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve → ✍️ Copywriting</button>
+                <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve</button>
         <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed</button>
       </div>
     </div>`);
@@ -10540,7 +10542,7 @@ function renderWorkflowActionBox(data, c){
         ${c.videoEditLink?`<div style="margin:8px 0"><a href="${c.videoEditLink}" target="_blank" style="font-size:14px;color:var(--blu);font-family:'DM Mono',monospace">📁 Watch edited video ↗</a></div>`:''}
         ${reviewCommentBox('Your feedback on the edited video…')}
         <div class="wf-action-row" style="margin-top:12px">
-          <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approved → ✍️ Copywriting</button>
+                    <button class="wf-btn wf-btn-green" onclick="wfApproveVideo('${id}')">✅ Approve</button>
           <button class="wf-btn wf-btn-red" onclick="wfAmendVideo('${id}')">🔄 Amendment Needed</button>
         </div>
       </div>`);
@@ -10552,7 +10554,7 @@ function renderWorkflowActionBox(data, c){
         <div class="wf-action-sub">Submitted for review. Review the design in the <strong>Design tab</strong>, add your comment, then decide:</div>
         ${reviewCommentBox('Your feedback on the design…')}
         <div class="wf-action-row" style="margin-top:12px">
-          <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve Design → ✍️ Copywriting</button>
+                    <button class="wf-btn wf-btn-green" onclick="approveDesign('${id}',0)">✅ Approve</button>
           <button class="wf-btn wf-btn-red" onclick="amendDesign('${id}',0)">🔄 Amendment Needed</button>
         </div>
       </div>`);
