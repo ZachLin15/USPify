@@ -964,6 +964,7 @@ a{color:var(--blu);text-decoration:none}a:hover{text-decoration:underline}
     var pass=passEl.value.trim();
     var users=miniGetUsers();
     var user=users.find(function(u){return u.name.toLowerCase()===name||u.id===name;});
+        if(user&&user.left){if(errEl){errEl.textContent='This account is no longer active.';}return;}
     if(user&&user.pass===pass){
       sessionStorage.setItem('uspify_uid',user.id);
       if(typeof S!=='undefined'&&S!==null){
@@ -2536,6 +2537,7 @@ async function doLogin(){
   ];
   const hc=HARDCODED.find(u=>u.name.toLowerCase()===name||u.id===name);
   let data=D();
+    {const _lu=data.users.find(u=>u.id===(hc?hc.id:name)||u.name.toLowerCase()===name);if(_lu&&_lu.left){if(errEl){errEl.style.color='var(--red)';errEl.textContent='This account is no longer active.';}return;}}
   let dynamicUser=!hc?data.users.find(u=>(u.name.toLowerCase()===name||u.id===name)&&u.pass===pass):null;
 
   // Fresh device with no local cache yet (e.g. a freelancer logging in for the first time) —
@@ -6253,7 +6255,7 @@ function renderWfReviewerSettings(data){
   const activeType=CONTENT_TYPES.find(t=>t.id===S.respTab)||CONTENT_TYPES[0];
   const stages=REVIEWER_STAGES_BY_TYPE[S.respTab]||REVIEWER_STAGES_BY_TYPE.video;
   const r=getWfReviewers();
-  const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='developer');
+    const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='developer'&&!u.left);
   const brands=data.brands;
   if(!brands.length) return '';
 
@@ -6504,7 +6506,7 @@ function renderTeam(){
   const data=D();
   const isAdmin=isAdminUser(S.user);
   const todayStrForTeam=localISO(new Date());
-      const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer');
+            const staff=data.users.filter(u=>u.role!=='client'&&u.id!=='caleb'&&u.id!=='carmen'&&u.id!=='developer'&&!u.left);
 
   // Icon only — the name always comes from data.statuses (see getJobStageLabel),
   // so this list can't drift out of sync with the real status names again.
@@ -6699,7 +6701,7 @@ function renderResponsibilities(){
   const canEdit=isAdminUser(S.user)||S.user.role==='senior';
   if(!canEdit)return'<div class="empty-msg">Admin / Senior only.</div>';
 
-  const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
+  const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client'&&!u.left);
   const STAGE_META=[
     {id:'ideation',name:'Ideation',icon:'💡',color:'#888780'},
     {id:'script',name:'Script',icon:'✍️',color:'#3acca0'},
@@ -8089,7 +8091,7 @@ function renderDetailPage(id, forceTab){
           {id:'client_approval',name:'Client Appr.',icon:'🤝'},
         ];
         const picMap=c.pic||{};
-        const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client');
+        const staff=data.users.filter(u=>u.role!=='admin'&&u.role!=='client'&&!u.left);
         return STAGES.map(st=>{
           const picId=picMap[st.id]||'';
           const defUser=getPIC(data,st.id,null);
@@ -13213,7 +13215,7 @@ async function sendAIMessage(){
     const brandNames=data.brands.map(b=>b.name).join(', ');
     const staffInfo=data.users.filter(u=>u.role!=='admin'&&u.role!=='client').map(u=>`- ${u.name} (id: "${u.id}", role: ${u.role}): handles ${u.assignedStatuses?.join(', ')||'general tasks'}`).join('\n');
     const todayStr=localISO(new Date());
-    const ccUser=data.users.find(u=>u.role==='content_creator');
+    const ccUser=data.users.find(u=>u.role==='content_creator'&&!u.left);
     const desUser=data.users.find(u=>u.role==='designer');
     const senUser=data.users.find(u=>u.role==='senior');
     const ccId=ccUser?ccUser.id:'(no content_creator on team)';
@@ -13408,7 +13410,7 @@ function insertWorkflow(msgIdx){
   const todayStr=localISO(new Date());
   // Current role-holders \u2014 resolved fresh each insert so this stays correct
   // even after people are reassigned (do not hardcode names here).
-  const ccUser=data.users.find(u=>u.role==='content_creator');
+  const ccUser=data.users.find(u=>u.role==='content_creator'&&!u.left);
   const desUser=data.users.find(u=>u.role==='designer');
   const senUser=data.users.find(u=>u.role==='senior');
   const ccUid=ccUser?ccUser.id:'leonard';
@@ -14170,7 +14172,7 @@ window.onload=function(){
     const data=D();
     const stored=data.users.find(u=>u.id===savedId);
     const user=stored?{...stored,pass:(hc||{}).pass||stored.pass,role:(hc||stored).role}:hc;
-    if(user){
+        if(user&&!user.left){
       S.user=user;
       // Restore last page/brand
       const _pg=sessionStorage.getItem('uspify_page');
