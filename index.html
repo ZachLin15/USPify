@@ -6415,7 +6415,7 @@ function renderAnalytics(){
       <div class="ph"><div class="ph-title">📅 How Due Dates Are Calculated</div></div>
       <div class="pb">
         <table class="ctable">
-          <thead><tr><th>Content Type</th><th>Hualu Due</th><th>Leonard Due</th><th>Rationale</th></tr></thead>
+          <thead><tr><th>Content Type</th><th>Hualu Due</th><th>Creator Due</th><th>Rationale</th></tr></thead>
           <tbody>
             <tr><td>🎬 Video</td><td style="color:var(--ora)">-4 working days</td><td style="color:var(--tel)">-7 working days</td><td style="color:var(--t3);font-family:'DM Mono',monospace;font-size:12px">Video editing ~2.88h + review buffer</td></tr>
             <tr><td>🃏 Carousel</td><td style="color:var(--ora)">-3 working days</td><td style="color:var(--tel)">-5 working days</td><td style="color:var(--t3);font-family:'DM Mono',monospace;font-size:12px">Design ~1.88h, faster turnaround</td></tr>
@@ -9687,7 +9687,7 @@ function renderIdeationPanel(c, id){
       <div class="senior-review-sub">Submitted by ${approval.submittedBy||'team'} on ${approval.submittedAt||'?'}. Review the content above then decide:</div>
       <div class="senior-review-actions">
         ${c.type==='Video'
-          ?`<button class="btn-approve-idea" onclick="wfApproveIdeationForVideo('${id}')">✅ Approve → 🎬 Notify Leonard to Shoot</button>`
+                    ?`<button class="btn-approve-idea" onclick="wfApproveIdeationForVideo('${id}')">\u2705 Approve \u2192 \uD83C\uDFAC Notify ${(getPIC(D(),'shoot',c)||{}).name||'the creator'} to Shoot</button>`
           :`<button class="btn-approve-idea" onclick="approveIdeation('${id}',${verIdx})">✅ Approve → Assign to Designer</button>`
         }
         <button class="btn-amend-idea" onclick="requestIdeaAmendment('${id}',${verIdx})">🔄 Amendment Needed → Back to Creator</button>
@@ -11679,7 +11679,7 @@ function updateAutoDate(){
   const el=document.getElementById('af-date-preview');
   const wrap=document.getElementById('af-date-preview-wrap');
   if(wrap)wrap.style.display='block';
-  if(el)el.innerHTML=`Hualu due: <strong style="color:var(--ora)">${fmt(hDate)}</strong> · Leonard due: <strong style="color:var(--tel)">${fmt(lDate)}</strong>`;
+  if(el)el.innerHTML=`Hualu due: <strong style="color:var(--ora)">${fmt(hDate)}</strong> · Creator due: <strong style="color:var(--tel)">${fmt(lDate)}</strong>`;
 }
 function toggleAC(uid,prefix){const el=document.getElementById(prefix+uid);if(el){el.classList.toggle('selected');el.querySelector('input').checked=el.classList.contains('selected');}}
 function saveNewContent(){
