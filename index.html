@@ -2423,10 +2423,20 @@ function getStepNumber(data,statusId){
 }
 function getProgress(data,statusId){return getStepNumber(data,statusId);}
 
+function effMainStage(c){
+  const s=c.statusId;
+  if(c.jobKind!=='task'&&['design','shoot','video_editing'].includes(s)){
+    let dp=false;
+    try{dp=getDesignVersions(c).some(v=>v.pendingReview);}catch(e){}
+    if(dp) return 'senior_approval_video';
+    if(c.ideationPendingApproval) return 'senior_approval_ideation';
+  }
+  return s;
+}
 function getContentStageIds(c){
   const copyLane=(c.copyStatusId==='copywriting')?(c.copyPendingReview?'senior_approval_copy':'copywriting'):null;
   if(c.statusId==='copywriting'||c.statusId==='senior_approval_copy') return [copyLane||c.statusId];
-  const ids=[(c.ideationPendingApproval&&['ideation','design','shoot','video_editing'].includes(c.statusId))?'senior_approval_ideation':c.statusId];
+    const ids=[effMainStage(c)];
   if(copyLane&&c.statusId!=='client_approval'&&c.statusId!=='posted') ids.push(copyLane);
   return ids;
 }
@@ -2862,8 +2872,9 @@ function tryJoinCopyAndDesignTracks(data, c){
 function healContentStages(data){
   let n=0;
   data.contents.forEach(c=>{
-    if(c.jobKind!=='task'&&c.ideationPendingApproval&&['design','shoot','video_editing'].includes(c.statusId)){
-      c.statusId='senior_approval_ideation';
+        const _es=effMainStage(c);
+    if(_es!==c.statusId){
+      c.statusId=_es;
       (c.workflowTasks||[]).filter(t=>t.status==='open'&&['design','shoot','video_editing'].includes(t.statusId)).forEach(t=>{t.status='done';t.closedAt=localISO(new Date());});
       markDirty(c.id);n++;
     }
