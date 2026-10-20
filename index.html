@@ -7720,11 +7720,11 @@ function editEditorBrief(id){window._edEdit[id]=true;renderDetailPage(id);}
 window._ebSel=window._ebSel||{};window._ebMsg=window._ebMsg||{};
 function ebCanSee(){return !!S.user&&(isManagerUser(S.user)||S.user.role==='designer');}
 function ebContents(data){
-  return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&(!S.ebBrand||c.brandId===S.ebBrand))
+  return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&(getFootageItems(c)||[]).some(it=>it.url)&&(!S.ebBrand||c.brandId===S.ebBrand))
     .sort((a,z)=>((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999'));
 }
 function ebGroup(data,fid){
-  return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&c.editorFreelancerId===fid&&!c.editorBriefSentAt)
+    return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&(getFootageItems(c)||[]).some(it=>it.url)&&c.editorFreelancerId===fid&&!c.editorBriefSentAt)
     .sort((a,z)=>((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999'));
 }
 function ebItemText(data,c,n){
