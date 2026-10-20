@@ -2873,7 +2873,7 @@ function getActiveJobsForUser(data, userId){
   // and role fallback, the same resolution the workflow-flow diagram's initials use, so
   // someone can't be the shown owner of a stage there and invisible here).
         const reviewedStages=c=>({senior_approval_ideation:['ideation'],senior_approval_video:usesShootFlow(c)?['video_editing']:['design'],senior_approval:usesShootFlow(c)?['video_editing']:['design'],senior_approval_copy:['copywriting']})[c.statusId]||[];
-    const isResponsible=c=>getPIC(data,c.statusId,c).id===userId||(!!(c.copyStatusId&&c.copyStatusId!=='approved')&&getPIC(data,'copywriting',c).id===userId)||reviewedStages(c).some(s=>getPIC(data,s,c).id===userId);
+       const isResponsible=c=>getContentStageIds(c).some(sid=>getPIC(data,({ideation_amendment:'ideation',copy_amendment:'copywriting',design_amendment:usesShootFlow(c)?'video_editing':'design'})[sid]||sid,c).id===userId);
   // Standalone "Task" jobs (jobKind==='task', from Add Job → Task) are lightweight
   // to-dos with no brand workflow — but they ARE meant to show up here: the Team page
   // renders a dedicated "TASK" badge for them (isTaskKind) and the detail page has a
