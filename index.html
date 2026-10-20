@@ -7844,7 +7844,41 @@ function renderEditorBriefsPage(){
       </tr></thead><tbody>${tr}</tbody></table></div>`:'<div class="empty-msg" style="padding:24px">No videos are in the Video Editing stage right now.</div>'}
   </div>
   ${eds.length?'':'<div class="empty-msg" style="margin-top:14px">No freelance editors found. Add them under Team first.</div>'}
-  ${groups}`;
+  ${groups}
+  ${ebAllocatedSection()}`;
+}
+function ebAllocatedSection(){
+  const data=D();
+  const nm=id=>((data.users.find(u=>u.id===id)||{}).name||'');
+  const today=localISO(new Date());
+  const list=data.contents.filter(c=>c.jobKind!=='task'&&c.editorFreelancerId)
+    .sort((a,z)=>nm(a.editorFreelancerId).localeCompare(nm(z.editorFreelancerId))||(((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999')));
+  const tr=list.map(c=>{
+    const b=getBrand(data,c.brandId)||{name:'',color:'#888'};
+    const due=c.dueDates&&c.dueDates.hualu;
+    const inEdit=c.statusId==='video_editing';
+    const late=due&&due<today&&inEdit;
+    const st=c.editorBriefSentAt?`<span style="color:var(--ac);font-weight:700">\u2705 Sent</span> <span style="color:var(--t3)">${_wEsc(c.editorBriefSentAt)}</span>`:'<span style="color:var(--amb)">Assigned \u2014 not sent</span>';
+    const stage=inEdit?'<span style="color:var(--amb)">Editing</span>':'<span style="color:var(--t3)">'+_wEsc(getStatus(data,c.statusId).name||c.statusId)+'</span>';
+    return `<tr style="border-top:1px solid var(--b1)">
+      <td style="padding:8px 10px;font-weight:700;white-space:nowrap">${_wEsc(nm(c.editorFreelancerId))}</td>
+      <td style="padding:8px 10px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin-right:6px"></span>${_wEsc(b.name)}</td>
+      <td style="padding:8px 10px;cursor:pointer;font-weight:700" onclick="openContentDetail('${c.id}')">${_wEsc(c.title)}</td>
+      <td style="padding:8px 10px;white-space:nowrap;${late?'color:var(--red);font-weight:700':''}">${due?fmt(due):'\u2014'}${late?' \u26A0':''}</td>
+      <td style="padding:8px 10px">${st}</td>
+      <td style="padding:8px 10px;white-space:nowrap">${stage}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="panel" style="padding:0;overflow:hidden;margin-top:14px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px">
+      <span style="font-size:15px;font-weight:700">\uD83D\uDCCB Allocated to freelancers (${list.length})</span>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="ebSyncSheet(true)">\uD83D\uDCCA Open Google Sheet</button>
+    </div>
+    ${list.length?`<div class="hscroll"><table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead><tr style="text-align:left;font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">
+        <th style="padding:6px 10px">Freelancer</th><th style="padding:6px 10px">Brand</th><th style="padding:6px 10px">Video</th><th style="padding:6px 10px">Edit due</th><th style="padding:6px 10px">Status</th><th style="padding:6px 10px">Stage</th>
+      </tr></thead><tbody>${tr}</tbody></table></div>`:'<div class="empty-msg" style="padding:24px">No videos have been allocated to freelancers yet.</div>'}
+  </div>`;
 }
 function ebToggle(id){window._ebSel[id]=!window._ebSel[id];renderPage();}
 function ebToggleAll(on){const data=D();ebContents(data).forEach(c=>{window._ebSel[c.id]=!!on;});renderPage();}
