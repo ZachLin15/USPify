@@ -3730,6 +3730,41 @@ function renderDeckBar(b,data){
     </span>
   </div>`;
 }
+async function compileShootScripts(brandId,ym){
+  const data=D();const b=data.brands.find(x=>x.id===brandId);if(!b)return;
+  const PRE=['ideation','script','ideation_amendment','senior_approval_ideation'];
+  const vids=data.contents.filter(c=>c.brandId===brandId&&c.jobKind!=='task'&&c.postingDate&&c.postingDate.startsWith(ym)&&usesShootFlow(c)&&!PRE.includes(c.statusId))
+    .sort((a,z)=>(a.postingDate||'').localeCompare(z.postingDate||''));
+  if(!vids.length){alert('No video contents have passed script approval this month yet.');return;}
+  const btn=document.getElementById('shoot-doc-btn-'+brandId);
+  if(btn){btn.disabled=true;btn.textContent='Compiling\u2026';}
+  const docIdOf=u=>{const m=String(u||'').match(/\/d\/([\w-]+)/);return m?m[1]:'';};
+  const items=vids.map(c=>{
+    const vs=(typeof getIdeationVersions==='function'?getIdeationVersions(c):[])||[];
+    const v=[...vs].reverse().find(x=>x.approval&&x.approval.status==='approved')||vs[vs.length-1]||{};
+    let docId=docIdOf(c.scriptDocUrl);
+    if(!docId){const m=((v.paragraph||'')+' '+(v.videoScript||'')).match(/https?:\/\/docs\.google\.com\/document\/d\/([\w-]+)/);docId=m?m[1]:'';}
+    const text=String(v.videoScript||v.paragraph||'').replace(/https?:\/\/\S+/g,'').trim();
+    return {heading:c.title||'',sub:[c.type||'',c.postingDate?'Posting '+c.postingDate:''].filter(Boolean).join(' \u00B7 '),docId:docId,text:text,note:(v.refVideoNote||'').trim()};
+  });
+  const label=new Date(ym+'-01T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const sd=(b.shootDates||{})[ym];
+  const sdTxt=sd?new Date(sd+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}):'';
+  const title=b.name+' \u2013 '+label+' \u2013 Shoot Scripts';
+  try{
+    const res=await fetch(_DRIVE_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'compileScripts',payload:JSON.stringify({title:title,shootDate:sdTxt,items:items})})});
+    const r=await res.json();
+    if(r.error)throw new Error(r.error);
+    const bin=atob(r.b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=title+'.docx';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    showAIToast('\u2705 Compiled '+r.count+' script'+(r.count===1?'':'s'));
+  }catch(err){alert('Could not compile the scripts: '+(err.message||err));}
+  finally{if(btn){btn.disabled=false;btn.textContent='\uD83D\uDCC4 Download scripts (.docx)';}}
+}
 function renderShootPlanner(b,data){
   const ym=S.brandMonthFilter||localYM(new Date());
   const vids=data.contents.filter(c=>c.brandId===b.id&&c.jobKind!=='task'&&c.postingDate&&c.postingDate.startsWith(ym)&&usesShootFlow(c))
@@ -3750,7 +3785,7 @@ function renderShootPlanner(b,data){
     </div>`;}).join('');
   return `<div class="panel" style="overflow:hidden;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 14px">
-      <span style="font-size:15px;font-weight:700">🎬 Shooting Planner · ${label}</span>
+      <span style="font-size:15px;font-weight:700">🎬 Shooting Planner · ${label}</span>${S.user.role!=='client'?` <button id="shoot-doc-btn-${b.id}" class="btn btn-ac btn-sm" onclick="compileShootScripts('${b.id}','${ym}')">\uD83D\uDCC4 Download scripts (.docx)</button>`:''}
       <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">Shoot date
         ${canEdit?`<input type="date" value="${sd}" onchange="setShootDate('${b.id}','${ym}',this.value)" style="font-family:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--b1);border-radius:6px;background:var(--bg);color:var(--t1)">`:`<b style="color:var(--t1)">${sdTxt}</b>`}
       </span>
