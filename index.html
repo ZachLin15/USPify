@@ -7826,7 +7826,7 @@ function renderEditorBriefsPage(){
   }).join('');
   return `<div class="panel" style="padding:0;overflow:hidden">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px">
-      <span style="font-size:15px;font-weight:700">\u2702\uFE0F Videos in editing (${rows.length})</span>
+      <span style="font-size:15px;font-weight:700">\u2702\uFE0F Videos in editing (${rows.length})</span> <button class="btn btn-sm" onclick="ebSyncSheet(true)" style="margin-left:8px">📊 Allocation sheet</button>
       <select class="form-select" style="font-size:13px;padding:4px 8px;width:auto" onchange="ebFilter(this.value)">
         <option value="">All brands</option>
         ${brandsWith.map(id=>{const b=getBrand(data,id);return b?`<option value="${id}" ${S.ebBrand===id?'selected':''}>${_wEsc(b.name)}</option>`:'';}).join('')}
@@ -7906,6 +7906,7 @@ async function ebSyncHub(fid){
       body:new URLSearchParams({mode:'syncEditorHub',freelancerName:u.name,payload:JSON.stringify({items})})});
     const r=await res.json();
     if(r.error){console.error('Editor hub sync failed:',r.error);return {error:r.error};}
+    setTimeout(()=>ebSyncSheet(false),0);
     const d2=D();const u2=d2.users.find(x=>x.id===fid);
     if(u2){
       const changed=JSON.stringify(u2.hub||{})!==JSON.stringify(r.links);
@@ -7972,6 +7973,29 @@ async function ebSend(fid){
   const url='https://wa.me/'+num+'?text='+encodeURIComponent(msg);
   if(w)w.location.href=url;else window.open(url,'_blank');
   renderPage();
+}
+let _EBSHEET_BUSY=false;
+async function ebSyncSheet(openIt){
+  const w=openIt?window.open('about:blank','_blank'):null;
+  if(_EBSHEET_BUSY&&!openIt)return;
+  _EBSHEET_BUSY=true;
+  try{
+    const data=D();
+    const nm=id=>((data.users.find(u=>u.id===id)||{}).name||'');
+    const list=data.contents.filter(c=>c.jobKind!=='task'&&c.editorFreelancerId)
+      .sort((a,z)=>nm(a.editorFreelancerId).localeCompare(nm(z.editorFreelancerId))||(((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999')));
+    const rows=[['Freelancer','Brand','Video','Edit due','Allocation status','Sent on','Sent by','Current stage']];
+    list.forEach(c=>{
+      const b=getBrand(data,c.brandId)||{name:''};
+      rows.push([nm(c.editorFreelancerId),b.name||'',c.title||'',(c.dueDates&&c.dueDates.hualu)||'',c.editorBriefSentAt?'Sent':'Assigned \u2013 not sent',c.editorBriefSentAt||'',c.editorBriefSentBy||'',getStatus(data,c.statusId).name||c.statusId]);
+    });
+    const res=await fetch(_DRIVE_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'syncEditorSheet',payload:JSON.stringify({rows})})});
+    const r=await res.json();
+    if(r.error){if(w)w.close();alert('Could not update the allocation sheet: '+r.error);return;}
+    if(openIt){if(w)w.location.href=r.url;else window.open(r.url,'_blank');}
+  }catch(err){console.error('Allocation sheet error:',err);if(w)w.close();if(openIt)alert('Could not update the allocation sheet.');}
+  finally{_EBSHEET_BUSY=false;}
 }
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
   const data=D();
