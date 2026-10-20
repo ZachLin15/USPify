@@ -2426,7 +2426,7 @@ function getProgress(data,statusId){return getStepNumber(data,statusId);}
 function getContentStageIds(c){
   const copyLane=(c.copyStatusId==='copywriting')?(c.copyPendingReview?'senior_approval_copy':'copywriting'):null;
   if(c.statusId==='copywriting'||c.statusId==='senior_approval_copy') return [copyLane||c.statusId];
-  const ids=[c.statusId];
+  const ids=[(c.ideationPendingApproval&&['ideation','design','shoot','video_editing'].includes(c.statusId))?'senior_approval_ideation':c.statusId];
   if(copyLane&&c.statusId!=='client_approval'&&c.statusId!=='posted') ids.push(copyLane);
   return ids;
 }
@@ -2859,7 +2859,19 @@ function tryJoinCopyAndDesignTracks(data, c){
   return false;
 }
 
+function healContentStages(data){
+  let n=0;
+  data.contents.forEach(c=>{
+    if(c.jobKind!=='task'&&c.ideationPendingApproval&&['design','shoot','video_editing'].includes(c.statusId)){
+      c.statusId='senior_approval_ideation';
+      (c.workflowTasks||[]).filter(t=>t.status==='open'&&['design','shoot','video_editing'].includes(t.statusId)).forEach(t=>{t.status='done';t.closedAt=localISO(new Date());});
+      markDirty(c.id);n++;
+    }
+  });
+  if(n&&!window._healSaving){window._healSaving=true;setTimeout(()=>{try{save(data);}finally{window._healSaving=false;}},0);}
+}
 function getActiveJobsForUser(data, userId){
+  healContentStages(data);
   const u=data.users.find(x=>x.id===userId);
   if(!u) return [];
   const activeStages=ACTIVE_WORK_STAGES[u.role]||MAIN_STATUS_ORDER;
