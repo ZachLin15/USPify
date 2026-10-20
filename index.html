@@ -7783,8 +7783,9 @@ function renderEditorBriefsPage(){
   const groups=eds.map(u=>{
     const list=ebGroup(data,u.id);
     if(!list.length)return '';
-    const key=list.map(c=>c.id).join(',');
-    if(!window._ebMsg[u.id]||window._ebMsg[u.id].key!==key)window._ebMsg[u.id]={key,text:buildBulkEditorMsg(data,list,u.name),edited:false};
+    const key=list.map(c=>c.id).join(',')+'|'+JSON.stringify(u.hub||{});
+    if(!u.hub&&!_EBHUB_BUSY[u.id])setTimeout(()=>ebSyncHub(u.id),0);
+    if(!window._ebMsg[u.id]||window._ebMsg[u.id].key!==key)window._ebMsg[u.id]={key,text:buildBulkEditorMsg(data,list,u),edited:false};
     const phone=u.whatsapp||(list.find(c=>c.editorPhone)||{}).editorPhone||'';
     return `<div class="panel" style="padding:14px;margin-top:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
@@ -7853,6 +7854,100 @@ function ebSend(fid){
   save(data);
   delete window._ebMsg[fid];
   window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg),'_blank');
+  renderPage();
+}
+const _EBHUB_BUSY={};
+function _ebDueLabel(iso,withDay){const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-GB',withDay?{weekday:'short',day:'numeric',month:'short'}:{day:'numeric',month:'short'});}
+function _ebDocId(url){const m=String(url||'').match(/\/d\/([\w-]+)/);return m?m[1]:'';}
+function _ebVer(c){const vs=(typeof getIdeationVersions==='function')?getIdeationVersions(c):[];return [...vs].reverse().find(v=>v.approval&&v.approval.status==='approved')||vs[vs.length-1]||{};}
+function _ebScriptId(c){
+  if(c.scriptDocUrl)return _ebDocId(c.scriptDocUrl);
+  const v=_ebVer(c);const m=((v.paragraph||'')+' '+(v.videoScript||'')).match(/https?:\/\/docs\.google\.com\/document\/d\/([\w-]+)/);
+  return m?m[1]:'';
+}
+function _ebByDue(a,z){return ((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999');}
+async function ebSyncHub(fid){
+  if(_EBHUB_BUSY[fid])return {busy:true};
+  const data=D();const u=data.users.find(x=>x.id===fid);if(!u)return null;
+  const list=data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&c.editorFreelancerId===fid).sort(_ebByDue);
+  const items=list.map(c=>{
+    const b=getBrand(data,c.brandId)||{name:''};
+    const due=c.dueDates&&c.dueDates.hualu;
+    return {id:c.id,brandName:b.name||c.brandId,monthName:driveMonth(c),contentName:c.title||c.id,
+      label:(due?_ebDueLabel(due,false)+' \u00B7 ':'')+(c.title||c.id),
+      scriptDocId:_ebScriptId(c),refDocId:_ebDocId(c.refDocUrl),hasBroll:(c.brollItems||[]).some(it=>it.url)};
+  });
+  _EBHUB_BUSY[fid]=true;
+  try{
+    const res=await fetch(_DRIVE_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({mode:'syncEditorHub',freelancerName:u.name,payload:JSON.stringify({items})})});
+    const r=await res.json();
+    if(r.error){console.error('Editor hub sync failed:',r.error);return {error:r.error};}
+    const d2=D();const u2=d2.users.find(x=>x.id===fid);
+    if(u2){
+      const changed=JSON.stringify(u2.hub||{})!==JSON.stringify(r.links);
+      u2.hub=r.links;
+      if(changed){save(d2);if(S.page==='editor_briefs')renderPage();}
+    }
+    return r;
+  }catch(err){console.error('Editor hub error:',err);return {error:String(err)};}
+  finally{delete _EBHUB_BUSY[fid];}
+}
+function buildBulkEditorMsg(data,list,u){
+  const h=u.hub||{};
+  const link=k=>h[k]||'(link not ready)';
+  const lines=list.map(c=>{const b=getBrand(data,c.brandId)||{name:''};const due=c.dueDates&&c.dueDates.hualu;
+    return `\u2022 ${c.title} (${b.name}) \u2014 due ${due?_ebDueLabel(due,true):'TBC'}`;}).join('\n');
+  const notes=list.map(c=>{const n=(_ebVer(c).refVideoNote||'').trim();return n?`\u2022 ${c.title}: ${n}`:'';}).filter(Boolean);
+  return `Hi ${u.name||'there'}, \uD83D\uDC4B\n\nYou have ${list.length} new video${list.length===1?'':'s'} to edit:\n\n${lines}\n\n`+
+    `Open each link below and pick the video by its name (the date in the name is the due date):\n\n`+
+    `\uD83D\uDCDD *Scripts:*\n${link('scripts')}\n\n`+
+    `\uD83C\uDFA5 *Footage:*\n${link('footage')}\n\n`+
+    `\uD83C\uDF9E *B-roll:*\n${link('broll')}\n\n`+
+    `\uD83D\uDCA1 *Editing references:*\n${link('refs')}\n\n`+
+    `\uD83D\uDCE4 *Upload edited videos here:*\n${link('upload')}\n\n`+
+    (notes.length?`\uD83D\uDCA1 *Reference notes:*\n${notes.join('\n')}\n\n`:'')+
+    `Thank you! \uD83D\uDE4F\n\u2014 ${S.user.name}`;
+}
+function ebSetOne(id,val){
+  const {data,c}=_edC(id);if(!c)return;
+  const old=c.editorFreelancerId;
+  c.editorFreelancerId=val||'';c.editorMsg='';c.editorBriefSentAt='';c.editorSentTo='';
+  save(data,id);renderPage();
+  [old,val].filter(Boolean).forEach(f=>ebSyncHub(f));
+}
+function ebAssignSelected(){
+  const val=(document.getElementById('eb-bulk-ed')||{}).value;
+  if(!val){alert('Pick a freelance editor first.');return;}
+  const data=D();const ids=ebContents(data).filter(c=>window._ebSel[c.id]).map(c=>c.id);
+  if(!ids.length){alert('Tick at least one video first.');return;}
+  const olds=new Set();
+  ids.forEach(id=>{const c=data.contents.find(x=>x.id===id);if(c){if(c.editorFreelancerId)olds.add(c.editorFreelancerId);c.editorFreelancerId=val;c.editorMsg='';c.editorBriefSentAt='';c.editorSentTo='';save(data,id);}});
+  window._ebSel={};
+  renderPage();
+  showAIToast('\u2705 Assigned '+ids.length+' video'+(ids.length===1?'':'s'));
+  olds.add(val);[...olds].forEach(f=>ebSyncHub(f));
+}
+async function ebSend(fid){
+  const data0=D();const u0=data0.users.find(x=>x.id===fid);if(!u0)return;
+  let num=((document.getElementById('eb-phone-'+fid)||{}).value||'').replace(/[^\d]/g,'');
+  if(num.startsWith('0'))num='60'+num.slice(1);
+  if(!num){alert('Enter '+u0.name+'\u2019s WhatsApp number first.');return;}
+  let msg=(document.getElementById('eb-msg-'+fid)||{}).value||'';
+  const w=window.open('about:blank','_blank');
+  for(let i=0;i<40&&_EBHUB_BUSY[fid];i++)await new Promise(r=>setTimeout(r,500));
+  const r=await ebSyncHub(fid);
+  if(r&&r.error){if(w)w.close();alert('Could not update the editor folders in Drive: '+r.error);return;}
+  const data=D();const u=data.users.find(x=>x.id===fid);const list=ebGroup(data,fid);
+  if(!u||!list.length){if(w)w.close();return;}
+  if(msg.indexOf('(link not ready)')>=0)msg=buildBulkEditorMsg(data,list,u);
+  const now=new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  u.whatsapp=num;
+  list.forEach(c=>{c.editorPhone=num;c.editorSentTo=u.name;c.editorBriefSentBy=S.user.name;c.editorBriefSentAt=now;c.editorMsg='';markDirty(c.id);});
+  save(data);
+  delete window._ebMsg[fid];
+  const url='https://wa.me/'+num+'?text='+encodeURIComponent(msg);
+  if(w)w.location.href=url;else window.open(url,'_blank');
   renderPage();
 }
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
