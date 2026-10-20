@@ -2662,6 +2662,7 @@ function renderSidebar(){
     ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'approvals',label:'Approvals',icon:'<path d="M13 3l-7 7-3-3"/><circle cx="8" cy="8" r="7"/>',badge:apprCount}]:[]),
     ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'clientpost',label:'Client Post',icon:'<circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>',badge:clientPostCount>0?clientPostCount:null,badgeColor:'#1877f2'}]:[]),
     ...(!isFreelancer&&(isAdmin||S.user.role==='senior')?[{id:'responsibilities',label:'Responsibilities',icon:'<circle cx="8" cy="5" r="3"/><path d="M1 14c0-3.5 3-6 7-6s7 2.5 7 6"/><line x1="5" y1="5" x2="11" y2="5" stroke-dasharray="2"/>'}]:[]),
+        ...((isManagerUser(S.user)||S.user.role==='designer')?[{id:'editor_briefs',label:'Video Editors',icon:'<circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><path d="M6 5l8 7M6 11l8-7"/>'}]:[]),
     {id:'calendar',label:'My Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/>'},
     ...(!isFreelancer?[{id:'brand_calendar',label:'Brand Calendar',icon:'<rect x="1" y="2" width="14" height="13" rx="1.5"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5" y1="0" x2="5" y2="4"/><line x1="11" y1="0" x2="11" y2="4"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'}]:[]),
     ...(!isFreelancer?[{id:'ads',label:'Ad Reports',icon:'<polyline points="1,12 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>'}]:[]),
@@ -2755,7 +2756,7 @@ function renderTopbar(){
   }else if(S.page==='tracker'){
     title='Content Tracker';sub='';
     actions=isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openManageStatusesModal()">Statuses</button>`:'';
-    }else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).length} items waiting`;}
+  }else if(S.page==='editor_briefs'){title='Video Editors';sub='Send editing briefs to freelance editors';}else if(S.page==='approvals'){title='Approvals';sub=`${data.contents.filter(c=>needsSeniorApproval(c)||(c.statusId==='client_approval'&&!c.clientApproved)).length} items waiting`;}
   else if(S.page==='calendar'){title='My Calendar';sub='Schedule, blocks & tasks';actions=`<button class="btn btn-ghost btn-sm" onclick="openAddBlockModal(-1,-1)">+ Add block</button>`;}
   else if(S.page==='brand_calendar'){title='Brand Calendar';sub='Content schedule by brand — monthly view';}
   else if(S.page==='ads'){title='Ad Reports';sub='Monthly performance';}
@@ -2780,7 +2781,7 @@ function renderPage(){
   try{
     if(S.user.role==='client'){root.innerHTML=S.page==='client_dashboard'?renderClientDashboard():renderClientApprovals();return;}
     if(S.brand){root.innerHTML=renderBrandPage();return;}
-    const pages={dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,brand_calendar:renderBrandCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings,set_password:renderSetPassword};
+    const pages={editor_briefs:renderEditorBriefsPage,dashboard:renderDashboard,tracker:renderTracker,approvals:renderApprovals,clientpost:renderClientPost,responsibilities:renderResponsibilities,calendar:renderCalendar,brand_calendar:renderBrandCalendar,ads:renderAds,team:renderTeam,analytics:renderAnalytics,settings:renderSettings,set_password:renderSetPassword};
     const fn=pages[S.page];root.innerHTML=fn?fn():`<div class="empty-msg">Page not found</div>`;
     if(S.page==='calendar')initCalendarInteractions();
   }catch(e){
@@ -7715,6 +7716,145 @@ function resendEditorWhatsApp(id){
   renderDetailPage(id);
 }
 function editEditorBrief(id){window._edEdit[id]=true;renderDetailPage(id);}
+// ===== Video Editors page (bulk brief to freelance editors) =====
+window._ebSel=window._ebSel||{};window._ebMsg=window._ebMsg||{};
+function ebCanSee(){return !!S.user&&(isManagerUser(S.user)||S.user.role==='designer');}
+function ebContents(data){
+  return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&(!S.ebBrand||c.brandId===S.ebBrand))
+    .sort((a,z)=>((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999'));
+}
+function ebGroup(data,fid){
+  return data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing'&&c.editorFreelancerId===fid&&!c.editorBriefSentAt)
+    .sort((a,z)=>((a.dueDates&&a.dueDates.hualu)||'9999').localeCompare((z.dueDates&&z.dueDates.hualu)||'9999'));
+}
+function ebItemText(data,c,n){
+  const b=getBrand(data,c.brandId)||{name:''};
+  const vers=(typeof getIdeationVersions==='function')?getIdeationVersions(c):[];
+  const ver=[...vers].reverse().find(v=>v.approval&&v.approval.status==='approved')||vers[vers.length-1]||{};
+  const m1=((ver.paragraph||'')+' '+(ver.videoScript||'')).match(/https?:\/\/docs\.google\.com\/document\/[^\s]+/);
+  const script=c.scriptDocUrl||(m1?m1[0]:'(script link not added yet)');
+  const list=(arr,none)=>arr.length?arr.join('\n'):none;
+  const footage=list((getFootageItems(c)||[]).map(it=>it.url).filter(Boolean),'(footage link not added yet)');
+  const broll=list((c.brollItems||[]).map(it=>it.url).filter(Boolean),'(no B-roll)');
+  const ref=[c.refDocUrl,(ver.refVideoNote||'').trim()].filter(Boolean).join('\n')||'(no reference added)';
+  const upload=c.editFolderUrl||c.driveLink||'(upload link not added yet)';
+  const due=c.dueDates&&c.dueDates.hualu?fmtFull(c.dueDates.hualu):'TBC';
+  return `\uD83C\uDFAC *${n}. ${c.title}* (${b.name})\n\n`+
+    `\uD83D\uDCDD *Script:*\n${script}\n\n`+
+    `\uD83C\uDFA5 *Footage:*\n${footage}\n\n`+
+    `\uD83C\uDF9E *B-roll:*\n${broll}\n\n`+
+    `\uD83D\uDCA1 *Editing reference:*\n${ref}\n\n`+
+    `\uD83D\uDCE4 *Upload the edited video here:*\n${upload}\n\n`+
+    `\u23F0 *Deadline:* ${due}`;
+}
+function buildBulkEditorMsg(data,list,name){
+  const head=`Hi ${name||'there'}, \uD83D\uDC4B\n\nYou have ${list.length} video${list.length===1?'':'s'} to edit:\n\n`;
+  const body=list.map((c,i)=>ebItemText(data,c,i+1)).join('\n\n\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n\n');
+  return head+body+`\n\nThank you! \uD83D\uDE4F\n\u2014 ${S.user.name}`;
+}
+function renderEditorBriefsPage(){
+  if(!ebCanSee())return '<div class="empty-msg">Only Hualu, Caleb and Carmen can use this page.</div>';
+  const data=D();
+  const eds=data.users.filter(u=>u.role==='freelancer');
+  const rows=ebContents(data);
+  const today=localISO(new Date());
+  const brandsWith=[...new Set(data.contents.filter(c=>c.jobKind!=='task'&&usesShootFlow(c)&&c.statusId==='video_editing').map(c=>c.brandId))];
+  const selCount=rows.filter(c=>window._ebSel[c.id]).length;
+  const allSel=rows.length>0&&selCount===rows.length;
+  const edOpts=(sel)=>`<option value="">\u2014 Select \u2014</option>`+eds.map(u=>`<option value="${u.id}" ${sel===u.id?'selected':''}>${_wEsc(u.name)}</option>`).join('');
+  const tr=rows.map(c=>{
+    const b=getBrand(data,c.brandId)||{name:'',color:'#888'};
+    const due=c.dueDates&&c.dueDates.hualu;
+    const late=due&&due<today;
+    const hasFoot=(getFootageItems(c)||[]).some(it=>it.url);
+    const sent=c.editorBriefSentAt;
+    const st=sent?`<span style="color:var(--ac);font-weight:700">\u2705 Sent${c.editorSentTo?' to '+_wEsc(c.editorSentTo):''}</span> <span style="color:var(--t3)">${_wEsc(sent)}</span> <a href="#" onclick="ebUnsend('${c.id}');return false" style="color:var(--blu)">undo</a>`
+      :(c.editorFreelancerId?'<span style="color:var(--amb)">Assigned \u2014 not sent</span>':'<span style="color:var(--t3)">Not assigned</span>');
+    return `<tr style="border-top:1px solid var(--b1)">
+      <td style="padding:8px 10px;width:34px"><input type="checkbox" ${window._ebSel[c.id]?'checked':''} onchange="ebToggle('${c.id}')"></td>
+      <td style="padding:8px 10px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin-right:6px"></span>${_wEsc(b.name)}</td>
+      <td style="padding:8px 10px;cursor:pointer;font-weight:700" onclick="openContentDetail('${c.id}')">${_wEsc(c.title)}</td>
+      <td style="padding:8px 10px;white-space:nowrap;${late?'color:var(--red);font-weight:700':''}">${due?fmt(due):'\u2014'}${late?' \u26A0':''}</td>
+      <td style="padding:8px 10px">${hasFoot?'<span style="color:var(--ac)">\u2713</span>':'<span style="color:var(--red)">\u2717 missing</span>'}</td>
+      <td style="padding:8px 10px"><select class="form-select" style="font-size:13px;padding:4px 6px;min-width:130px" onchange="ebSetOne('${c.id}',this.value)">${edOpts(c.editorFreelancerId||'')}</select></td>
+      <td style="padding:8px 10px;font-size:12px;font-family:'DM Mono',monospace">${st}</td>
+    </tr>`;
+  }).join('');
+  const groups=eds.map(u=>{
+    const list=ebGroup(data,u.id);
+    if(!list.length)return '';
+    const key=list.map(c=>c.id).join(',');
+    if(!window._ebMsg[u.id]||window._ebMsg[u.id].key!==key)window._ebMsg[u.id]={key,text:buildBulkEditorMsg(data,list,u.name),edited:false};
+    const phone=u.whatsapp||(list.find(c=>c.editorPhone)||{}).editorPhone||'';
+    return `<div class="panel" style="padding:14px;margin-top:14px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:15px;font-weight:700">\uD83D\uDCE4 ${_wEsc(u.name)}</span>
+        <span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">${list.length} video${list.length===1?'':'s'}: ${list.map(c=>_wEsc(c.title)).join(' \u00B7 ')}</span>
+      </div>
+      <input class="form-input" id="eb-phone-${u.id}" type="tel" placeholder="WhatsApp number e.g. 60123456789" value="${_wEsc(phone)}" onchange="ebSavePhone('${u.id}',this.value)" style="font-size:14px;padding:6px 10px;margin-bottom:8px;max-width:320px">
+      <textarea class="form-textarea" id="eb-msg-${u.id}" onchange="ebSaveMsg('${u.id}',this.value)" style="min-height:260px;font-size:13px;line-height:1.5">${_wEsc(window._ebMsg[u.id].text)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="whatsapp-btn" onclick="ebSend('${u.id}')">Send ${list.length} video${list.length===1?'':'s'} via WhatsApp</button>
+        <button class="btn btn-ghost btn-sm" onclick="ebResetMsg('${u.id}')">\u21BA Reset message</button>
+      </div>
+      <div style="font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:6px">WhatsApp opens with this message ready. Press send there. These videos are then marked Sent.</div>
+    </div>`;
+  }).join('');
+  return `<div class="panel" style="padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px">
+      <span style="font-size:15px;font-weight:700">\u2702\uFE0F Videos in editing (${rows.length})</span>
+      <select class="form-select" style="font-size:13px;padding:4px 8px;width:auto" onchange="ebFilter(this.value)">
+        <option value="">All brands</option>
+        ${brandsWith.map(id=>{const b=getBrand(data,id);return b?`<option value="${id}" ${S.ebBrand===id?'selected':''}>${_wEsc(b.name)}</option>`:'';}).join('')}
+      </select>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">
+        ${selCount} selected \u00B7 assign to
+        <select id="eb-bulk-ed" class="form-select" style="font-size:13px;padding:4px 8px;width:auto">${edOpts('')}</select>
+        <button class="btn btn-ac btn-sm" onclick="ebAssignSelected()">Assign</button>
+      </span>
+    </div>
+    ${rows.length?`<div class="hscroll"><table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead><tr style="text-align:left;font-size:12px;color:var(--t3);font-family:'DM Mono',monospace;text-transform:uppercase">
+        <th style="padding:6px 10px"><input type="checkbox" ${allSel?'checked':''} onchange="ebToggleAll(this.checked)"></th>
+        <th style="padding:6px 10px">Brand</th><th style="padding:6px 10px">Video</th><th style="padding:6px 10px">Edit due</th><th style="padding:6px 10px">Footage</th><th style="padding:6px 10px">Freelancer</th><th style="padding:6px 10px">Status</th>
+      </tr></thead><tbody>${tr}</tbody></table></div>`:'<div class="empty-msg" style="padding:24px">No videos are in the Video Editing stage right now.</div>'}
+  </div>
+  ${eds.length?'':'<div class="empty-msg" style="margin-top:14px">No freelance editors found. Add them under Team first.</div>'}
+  ${groups}`;
+}
+function ebToggle(id){window._ebSel[id]=!window._ebSel[id];renderPage();}
+function ebToggleAll(on){const data=D();ebContents(data).forEach(c=>{window._ebSel[c.id]=!!on;});renderPage();}
+function ebFilter(v){S.ebBrand=v||'';renderPage();}
+function ebSetOne(id,val){const {data,c}=_edC(id);if(!c)return;c.editorFreelancerId=val||'';c.editorMsg='';c.editorBriefSentAt='';c.editorSentTo='';save(data,id);renderPage();}
+function ebAssignSelected(){
+  const val=(document.getElementById('eb-bulk-ed')||{}).value;
+  if(!val){alert('Pick a freelance editor first.');return;}
+  const data=D();const ids=ebContents(data).filter(c=>window._ebSel[c.id]).map(c=>c.id);
+  if(!ids.length){alert('Tick at least one video first.');return;}
+  ids.forEach(id=>{const c=data.contents.find(x=>x.id===id);if(c){c.editorFreelancerId=val;c.editorMsg='';c.editorBriefSentAt='';c.editorSentTo='';save(data,id);}});
+  window._ebSel={};
+  renderPage();
+  showAIToast('\u2705 Assigned '+ids.length+' video'+(ids.length===1?'':'s'));
+}
+function ebUnsend(id){const {data,c}=_edC(id);if(!c)return;c.editorBriefSentAt='';c.editorSentTo='';save(data,id);renderPage();}
+function ebSaveMsg(fid,val){if(window._ebMsg[fid]){window._ebMsg[fid].text=val;window._ebMsg[fid].edited=true;}}
+function ebResetMsg(fid){delete window._ebMsg[fid];renderPage();}
+function ebSavePhone(fid,val){const data=D();const u=data.users.find(x=>x.id===fid);if(!u)return;u.whatsapp=val.trim();save(data);}
+function ebSend(fid){
+  const data=D();const u=data.users.find(x=>x.id===fid);if(!u)return;
+  const list=ebGroup(data,fid);if(!list.length)return;
+  let num=((document.getElementById('eb-phone-'+fid)||{}).value||'').replace(/[^\d]/g,'');
+  if(num.startsWith('0'))num='60'+num.slice(1);
+  if(!num){alert('Enter '+u.name+'\u2019s WhatsApp number first.');return;}
+  const msg=(document.getElementById('eb-msg-'+fid)||{}).value||'';
+  const now=new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  u.whatsapp=num;
+  list.forEach(c=>{c.editorPhone=num;c.editorSentTo=u.name;c.editorBriefSentBy=S.user.name;c.editorBriefSentAt=now;c.editorMsg='';markDirty(c.id);});
+  save(data);
+  delete window._ebMsg[fid];
+  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg),'_blank');
+  renderPage();
+}
 function renderFlowPipeline(flow, statusHistory, currentStatusId, contentId, contentObj){
   const data=D();
   const activeIdx = getFlowCurrentIndex(flow, statusHistory, currentStatusId);
