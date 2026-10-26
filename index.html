@@ -9852,7 +9852,7 @@ function designerSubmitForReview(id, verIdx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
     if(!versions[verIdx].link){alert('Please upload a design file first.');return;}
-  if(needsDesignCover(c)&&!c.coverFileId){alert('Please upload the cover photo first.');return;}
+  if(needsDesignCover(c)&&!c.coverFileId){if(!confirm('No cover photo uploaded yet. Submit without it? You can add the cover later.'))return;}
   versions[verIdx].pendingReview=true;
   versions[verIdx].submittedBy=S.user.name;
   versions[verIdx].submittedAt=localISO(new Date());
