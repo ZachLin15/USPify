@@ -1349,7 +1349,8 @@ async function cloudLoad(retries=3, delay=1000){
         rescheduleLog:settings.rescheduleLog||[],
         __savedBy:settings.__savedBy||'',
       };
-      reapplyDefaultPasswords(data.users);
+            reapplyDefaultPasswords(data.users);
+      _syncedJson={};_syncedLoaded=true;data.contents.forEach(c=>{try{_syncedJson[c.id]=JSON.stringify(c);}catch(_){}});
     if(!data.users.length&&!data.brands.length) return null;
       setSyncStatus('live','Live ✓');
       return data;
@@ -1373,6 +1374,20 @@ async function cloudLoad(retries=3, delay=1000){
 
 // Track dirty content IDs for broadcastPing
 let _dirtyContentIds=new Set();
+let _syncedJson={};let _syncedLoaded=false;
+function _verRegressed(c,oldJson){
+  let o;try{o=JSON.parse(oldJson);}catch(_){return false;}
+  const txt=v=>((v&&v.paragraph)||'')+((v&&v.videoScript)||'');
+  const sub=v=>v&&v.approval&&['pending','approved','amendment'].includes(v.approval.status);
+  return (o.ideationVersions||[]).some(v=>{
+    if(!sub(v))return false;
+    const n=(c.ideationVersions||[]).find(x=>x.label===v.label);
+    if(!n)return true;
+    if(!sub(n))return true;
+    if(txt(v).trim()&&!txt(n).trim())return true;
+    return false;
+  });
+}
 let _lastLocalEditAt={}; // contentId -> timestamp of last local edit/save
 function markDirty(id){if(id){_dirtyContentIds.add(id);_lastLocalEditAt[id]=Date.now();}}
 
@@ -1393,7 +1408,11 @@ async function cloudSave(data){
     const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
     const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],wfReviewers:data.wfReviewers||{},rescheduleLog:data.rescheduleLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
     // ALWAYS save ALL contents — never partial saves
-    const allC=(data.contents||[]).filter(c=>c&&c.id);
+    const _snapNow={};
+    const _hasDirty=dirtyIds.size>0;
+    const _blocked=[];
+    const allC=(data.contents||[]).filter(c=>c&&c.id).filter(c=>{let j='';try{j=JSON.stringify(c);}catch(_){}_snapNow[c.id]=j;let inc=false;if(dirtyIds.has(c.id))inc=true;else if(!_syncedLoaded)inc=false;else if(!(c.id in _syncedJson))inc=true;else inc=!_hasDirty&&_syncedJson[c.id]!==j;if(inc&&_syncedJson[c.id]&&_verRegressed(c,_syncedJson[c.id])){_blocked.push(c.title||c.id);return false;}return inc;});
+    if(_blocked.length){console.error('[cloudSave] BLOCKED a save that would erase submitted versions:',_blocked);try{showAIToast('\u26A0 Blocked a save that would have erased submitted versions: '+_blocked[0]);}catch(_){}}
     const chunks=[];
     for(let i=0;i<allC.length;i+=50) chunks.push(allC.slice(i,i+50));
     const reqs=[
@@ -1408,23 +1427,26 @@ async function cloudSave(data){
       const t=await failed[0].text();
       if(failed[0].status>=500&&!data.__retried){
         data.__retried=true;
-        setTimeout(()=>{_cloudSyncing=false;cloudSave(data);},500);
+        dirtyIds.forEach(i=>_dirtyContentIds.add(i));
+        setTimeout(()=>{_cloudSyncing=false;cloudSave(D());},500);
         return;
       }
       throw new Error('HTTP '+failed[0].status+' '+t.slice(0,80));
     }
     setSyncStatus('live','Saved ✓');
+    allC.forEach(c=>{_syncedJson[c.id]=_snapNow[c.id];});
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     console.log('[cloudSave] saved OK, broadcasting as',by);
     try{broadcastPing([...dirtyIds],by);}catch(e){}
   }catch(e){
     setSyncStatus('error','Sync error');
+    dirtyIds.forEach(i=>_dirtyContentIds.add(i));
     console.error('Supabase save error:',e.message,e);
     // Show visible error so user knows exactly what went wrong
     showAIToast('⚠ Sync error: '+e.message.slice(0,80));
   }finally{
     _cloudSyncing=false;
-    if(_pendingSave){const p=_pendingSave;_pendingSave=null;cloudSave(p);}
+    if(_pendingSave){_pendingSave=null;cloudSave(D());}
   }
 }
 
@@ -1613,13 +1635,13 @@ function showTaskNotification(c, task, fromName){
           if(_now-_lastLocalEditAt[cid] < 4000){
             const _localC=_localData.contents.find(x=>x.id===cid);
             const _freshIdx=fresh.contents.findIndex(x=>x.id===cid);
-            if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC;
+            if(_localC&&_freshIdx>=0) {if(!_verRegressed(_localC,JSON.stringify(fresh.contents[_freshIdx])))fresh.contents[_freshIdx]=_localC;}
           }
         });
         if(_typing&&S.detailId){
           const _localC=_localData.contents.find(x=>x.id===S.detailId);
           const _freshIdx=fresh.contents.findIndex(x=>x.id===S.detailId);
-          if(_localC&&_freshIdx>=0) fresh.contents[_freshIdx]=_localC;
+          if(_localC&&_freshIdx>=0) {if(!_verRegressed(_localC,JSON.stringify(fresh.contents[_freshIdx])))fresh.contents[_freshIdx]=_localC;}
         }
         // ALWAYS update localStorage with fresh Supabase data
         _dataCache=null;_dataCacheKey=null;
@@ -1720,6 +1742,7 @@ function showTaskNotification(c, task, fromName){
 
       ws.onerror=()=>{
         setSyncStatus('error','Sync error');
+    dirtyIds.forEach(i=>_dirtyContentIds.add(i));
         startPolling();
       };
 
@@ -1808,7 +1831,7 @@ async function initCloudSync(){
     console.warn('initCloudSync failed:', e.message);
   }finally{
     _initSyncing=false;
-    if(_pendingSave){const p=_pendingSave;_pendingSave=null;setTimeout(()=>cloudSave(p),100);}
+    if(_pendingSave){_pendingSave=null;setTimeout(()=>cloudSave(D()),100);}
   }
 }
 
@@ -9673,7 +9696,9 @@ function addDesignVersion(id){
 function deleteDesignVersion(id, idx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getDesignVersions(c);
-  if(versions.length<=1){alert('Cannot delete the last version.');return;}
+if(versions.length<=1){alert('Cannot delete the last version.');return;}
+  if(versions[idx]&&versions[idx].approval&&['pending','approved','amendment'].includes(versions[idx].approval.status)){alert('A submitted version cannot be deleted. Add a new version for any changes.');return;}
+  if(versions[idx]&&versions[idx].approval&&['pending','approved','amendment'].includes(versions[idx].approval.status)){alert('A submitted version cannot be deleted. Add a new version for any changes.');return;}
   if(versions[idx]&&versions[idx].link){alert('This version has an uploaded file and cannot be deleted.');return;}
   if(!confirm(`Delete ${versions[idx].label}?`))return;
   versions.splice(idx,1);
@@ -10123,7 +10148,8 @@ function addIdeaVersion(id){
 function deleteIdeaVersion(id, idx){
   const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
   const versions=getIdeationVersions(c);
-  if(versions.length<=1){alert('Cannot delete the last version.');return;}
+if(versions.length<=1){alert('Cannot delete the last version.');return;}
+  if(versions[idx]&&versions[idx].approval&&['pending','approved','amendment'].includes(versions[idx].approval.status)){alert('A submitted version cannot be deleted. Add a new version for any changes.');return;}
   if(!confirm(`Delete ${versions[idx].label}? This cannot be undone.`))return;
   versions.splice(idx,1);
   // Re-label versions sequentially
@@ -10141,6 +10167,7 @@ function _saveIdeaTextFields(c, versions, idx){
   const paraEl=document.getElementById('idea-para-'+id);
     const scriptEl=document.getElementById('idea-script-'+id);
   const refVidEl=document.getElementById('idea-refvid-'+id);
+  if(versions[idx].approval&&['pending','approved','amendment'].includes(versions[idx].approval.status))return;
   if(paraEl) versions[idx].paragraph=paraEl.value;
   if(scriptEl) versions[idx].videoScript=scriptEl.value;
   if(refVidEl) versions[idx].refVideoNote=refVidEl.value;
