@@ -8378,9 +8378,9 @@ function renderDetailPage(id, forceTab){
   // --- SIDE PANEL (right) ---
   const avs=getLiveAssigneeIds(data,c).map(uid=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--b1)">${userAvatar(getUser(data,uid),26)}<span style="font-size:15px;font-weight:600">${getUser(data,uid).name}</span><span style="font-size:13px;color:var(--t3);font-family:'DM Mono',monospace;margin-left:auto">${getUser(data,uid).title||getUser(data,uid).role}</span></div>`).join('');
   const lateClass=isLate(c.postingDate)&&c.statusId!=='posted';
-  const wfActionBox=renderWorkflowActionBox(data,c);
+  const wfActionBox=renderWorkflowActionBoxForTab(data,c,defaultTab);
   document.getElementById('detail-side').innerHTML=`
-        ${wfActionBox?`<div class="side-section">${wfActionBox}</div>`:''}
+        <div class="side-section" id="wf-action-slot-${id}" style="${wfActionBox?'':'display:none'}">${wfActionBox||''}</div>
         <div id="ed-brief-wrap-${id}" style="${defaultTab==='dp-video'?'':'display:none'}">${renderEditorBriefBox(data,c,id)}</div>
 
     <div class="side-section">
@@ -9884,6 +9884,7 @@ function designerSubmitForReview(id, verIdx){
 
 function switchDTab(el, showId){
   { const w=document.querySelector('[id^="ed-brief-wrap-"]'); if(w) w.style.display=showId==='dp-video'?'':'none'; }
+  try{_wfRefreshActionSlot(showId);}catch(_){}
   document.querySelectorAll('.detail-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   ['dp-ideation','dp-shoot','dp-design','dp-video','dp-copy','dp-comments','dp-history','dp-status'].forEach(id=>{
@@ -10624,6 +10625,28 @@ function renderReviewHistory(c){
 }
 
 function renderWorkflowActionBox(data, c){
+  const _copyBox=_wfActionBoxBase(data,c,false);
+  if(!(c.copyStatusId&&c.copyStatusId!=='approved'))return _copyBox;
+  const _mainBox=_wfActionBoxBase(data,c,true);
+  if(!_mainBox||_mainBox===_copyBox)return _copyBox;
+  return _mainBox+_copyBox;
+}
+function renderWorkflowActionBoxForTab(data,c,tab){
+  const copyLive=!!(c.copyStatusId&&c.copyStatusId!=='approved');
+  if(!copyLive)return _wfActionBoxBase(data,c,false);
+  const copyBox=_wfActionBoxBase(data,c,false);
+  const mainBox=_wfActionBoxBase(data,c,true);
+  if(tab==='dp-copy')return copyBox===mainBox?'':copyBox;
+  return mainBox;
+}
+function _wfRefreshActionSlot(showId){
+  const slot=document.querySelector('[id^="wf-action-slot-"]');if(!slot)return;
+  const id=slot.id.replace('wf-action-slot-','');
+  const data=D();const c=data.contents.find(x=>x.id===id);if(!c)return;
+  const html=renderWorkflowActionBoxForTab(data,c,showId);
+  slot.innerHTML=html||'';slot.style.display=html?'':'none';
+}
+function _wfActionBoxBase(data, c, skipCopy){
   const id=c.id;
   const role=S.user.role;
   const isAdmin=role==='admin';
@@ -10703,7 +10726,7 @@ function renderWorkflowActionBox(data, c){
   // instead of waiting for them to finish. Show its own box, independent of the
   // main st, but only to the people actually involved in the copy track — anyone
   // else (e.g. the designer) falls through to the normal design/video boxes below.
-  if(c.copyStatusId && c.copyStatusId!=='approved'){
+  if(!skipCopy && c.copyStatusId && c.copyStatusId!=='approved'){
     const copyPic=getPIC(data,'copywriting',c);
     const copyVersions=getCopyVersions(c);
     const latestCopy=copyVersions[copyVersions.length-1]||{};
