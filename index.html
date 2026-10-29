@@ -1313,7 +1313,7 @@ async function cloudLoad(retries=3, delay=1000){
     try{
       setSyncStatus('loading', attempt>1?`Retrying (${attempt}/${retries})…`:'Loading...');
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(), 8000); // 8s timeout
+      const timeout=setTimeout(()=>controller.abort(), 45000); // 45s timeout
       const [uR,bR,sR]=await Promise.all([
         fetch(_sbUrl('uspify_users'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
         fetch(_sbUrl('uspify_brands'),{headers:_sbH(),cache:'no-store',signal:controller.signal}),
