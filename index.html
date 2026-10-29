@@ -1351,7 +1351,9 @@ async function cloudLoad(retries=3, delay=1000){
         __savedBy:settings.__savedBy||'',
       };
             reapplyDefaultPasswords(data.users);
-      _syncedJson={};_syncedLoaded=true;data.contents.forEach(c=>{try{_syncedJson[c.id]=JSON.stringify(c);}catch(_){}});
+      _syncedJson={};_syncedLoaded=true;
+      _syncedOther={users:{},brands:{},settings:JSON.stringify([data.statuses,data.scheduleBlocks,data.adMetrics,data.tasks,data.deletedBrandIds,data.deletionLog,data.wfReviewers,data.rescheduleLog])};
+      data.users.forEach(u=>{_syncedOther.users[u.id]=JSON.stringify(u);});data.brands.forEach(b=>{_syncedOther.brands[b.id]=JSON.stringify(b);});data.contents.forEach(c=>{try{_syncedJson[c.id]=JSON.stringify(c);}catch(_){}});
     if(!data.users.length&&!data.brands.length) return null;
       setSyncStatus('live','Live ✓');
       return data;
@@ -1376,6 +1378,7 @@ async function cloudLoad(retries=3, delay=1000){
 // Track dirty content IDs for broadcastPing
 let _dirtyContentIds=new Set();
 let _syncedJson={};let _syncedLoaded=false;
+let _syncedOther={users:{},brands:{},settings:''};
 function _verRegressed(c,oldJson){
   let o;try{o=JSON.parse(oldJson);}catch(_){return false;}
   const txt=v=>((v&&v.paragraph)||'')+((v&&v.videoScript)||'');
@@ -1405,8 +1408,10 @@ async function cloudSave(data){
   try{
     const now=new Date().toISOString();
     const by=S.user?.name||'?';
-    const uPayload=(data.users||[]).filter(u=>u&&u.id).map(u=>({id:u.id,data:u,updated_at:now}));
-    const bPayload=(data.brands||[]).filter(b=>b&&b.id).map(b=>({id:b.id,data:b,updated_at:now}));
+    const _uj={};const uPayload=(data.users||[]).filter(u=>u&&u.id).filter(u=>{_uj[u.id]=JSON.stringify(u);return !_syncedLoaded||_syncedOther.users[u.id]!==_uj[u.id];}).map(u=>({id:u.id,data:u,updated_at:now}));
+    const _bj={};const bPayload=(data.brands||[]).filter(b=>b&&b.id).filter(b=>{_bj[b.id]=JSON.stringify(b);return !_syncedLoaded||_syncedOther.brands[b.id]!==_bj[b.id];}).map(b=>({id:b.id,data:b,updated_at:now}));
+    const _sj=JSON.stringify([data.statuses,data.scheduleBlocks,data.adMetrics,data.tasks,data.deletedBrandIds,data.deletionLog,data.wfReviewers,data.rescheduleLog]);
+    const _sChanged=!_syncedLoaded||_syncedOther.settings!==_sj;
     const sPayload=[{id:'main',data:{statuses:data.statuses||[],scheduleBlocks:data.scheduleBlocks||[],adMetrics:data.adMetrics||[],tasks:data.tasks||[],deletedBrandIds:data.deletedBrandIds||[],deletionLog:data.deletionLog||[],wfReviewers:data.wfReviewers||{},rescheduleLog:data.rescheduleLog||[],__savedBy:by,__savedAt:now},updated_at:now}];
     // ALWAYS save ALL contents — never partial saves
     const _snapNow={};
@@ -1417,9 +1422,9 @@ async function cloudSave(data){
     const chunks=[];
     for(let i=0;i<allC.length;i+=50) chunks.push(allC.slice(i,i+50));
     const reqs=[
-      fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}),
-      fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}),
-      fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}),
+      (uPayload.length?fetch(_sbUrl('uspify_users'),{method:'POST',headers:_sbUH(),body:JSON.stringify(uPayload)}):Promise.resolve({ok:true})),
+      (bPayload.length?fetch(_sbUrl('uspify_brands'),{method:'POST',headers:_sbUH(),body:JSON.stringify(bPayload)}):Promise.resolve({ok:true})),
+      (_sChanged?fetch(_sbUrl('uspify_settings'),{method:'POST',headers:_sbUH(),body:JSON.stringify(sPayload)}):Promise.resolve({ok:true})),
       ...chunks.map(ch=>fetch(_sbUrl('uspify_contents'),{method:'POST',headers:_sbUH(),body:JSON.stringify(ch.map(c=>({id:c.id,brand_id:c.brandId,data:c,updated_at:now})))})),
     ];
     const results=await Promise.all(reqs);
@@ -1436,6 +1441,7 @@ async function cloudSave(data){
     }
     setSyncStatus('live','Saved ✓');
     allC.forEach(c=>{_syncedJson[c.id]=_snapNow[c.id];});
+    uPayload.forEach(x=>{_syncedOther.users[x.id]=_uj[x.id];});bPayload.forEach(x=>{_syncedOther.brands[x.id]=_bj[x.id];});if(_sChanged)_syncedOther.settings=_sj;
     setTimeout(()=>setSyncStatus('live','Live ✓'),1500);
     console.log('[cloudSave] saved OK, broadcasting as',by);
     try{broadcastPing([...dirtyIds],by);}catch(e){}
