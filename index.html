@@ -9213,14 +9213,14 @@ function removeVideoVersion(id){
   renderDetailPage(id,'dp-video');
   showAIToast('✓ Video removed — upload a new one');
 }
-function videoReadyToSubmit(c){return !!((c.videoEditLink||c.editedFileName)&&c.coverFileId);}
+function videoReadyToSubmit(c){return !!(c.videoEditLink||c.editedFileName);}
 function renderCoverBlock(c,id,canEdit){
   const has=!!c.coverFileId;
   const thumb=has?'https://drive.google.com/thumbnail?id='+c.coverFileId+'&sz=w400':'';
   return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <span style="font-size:14px;font-weight:700;color:var(--t1)">\uD83D\uDDBC\uFE0F Cover Photo</span>
-      <span style="font-size:12px;font-family:'DM Mono',monospace;color:${has?'var(--grn,#3acca0)':'var(--red)'}">${has?'uploaded':'required before review'}</span>
+      <span style="font-size:12px;font-family:'DM Mono',monospace;color:${has?'var(--grn,#3acca0)':'var(--red)'}">${has?'uploaded':'recommended before review'}</span>
     </div>
     ${has?`<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">
       <img src="${thumb}" style="width:110px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s3)" onerror="this.style.display='none'">
@@ -10864,7 +10864,7 @@ function renderWorkflowActionBox(data, c){
       <div class="wf-action-row" style="flex-wrap:wrap;gap:8px">
                 ${isDesigner?`<button class="wf-btn wf-btn-${videoReadyToSubmit(c)?'green':'ghost'}" style="${!videoReadyToSubmit(c)?'opacity:.5;cursor:not-allowed':''}" onclick="${videoReadyToSubmit(c)?`wfVideoDone('${id}')`:``}">📤 Submit for Senior Review</button>`:''}
       </div>
-            ${isDesigner&&!videoReadyToSubmit(c)?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload the edited video and the cover photo in the tab above first</div>`:''}
+            ${isDesigner&&!videoReadyToSubmit(c)?`<div style="margin-top:6px;font-size:13px;color:var(--t3);font-family:'DM Mono',monospace">⬆ Upload the edited video in the tab above first</div>`:''}
     </div>`);
   }
 
@@ -11678,7 +11678,7 @@ function wfVideoDone(id){
   const linkInp=document.getElementById('wf-video-link-'+id)||document.getElementById('video-edit-input-'+id);
   if(linkInp&&linkInp.value.trim()) c.videoEditLink=linkInp.value.trim();
     if(!c.videoEditLink&&!c.editedFileName){showAIToast('⚠ Upload your edited video first');return;}
-  if(!c.coverFileId){showAIToast('⚠ Upload the cover photo first');return;}
+  if(!c.coverFileId){if(!confirm('No cover photo uploaded yet. Submit without it? You can add the cover later.'))return;}
   c.videoReviewPending=true;
   c.seniorNotifDismissed={}; // reset so Jack sees the notification fresh
   const senior=getSenior(data,c);
