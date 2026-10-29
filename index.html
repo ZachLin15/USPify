@@ -6570,7 +6570,9 @@ function saveNewUser(){
   if(!init){alert('Please enter initials.');return;}
 
   const data=D();
-  if(data.users.find(u=>u.id===id)){alert(`Username "${id}" is already taken. Please choose a different one.`);return;}
+  const _ex=data.users.find(u=>u.id===id);
+  if(_ex&&!_ex.left){alert(`Username "${id}" is already taken. Please choose a different one.`);return;}
+  if(_ex&&_ex.left){data.users=data.users.filter(u=>u.id!==id);}
 
     const newUser={
     id,name,pass,init,color,
